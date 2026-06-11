@@ -55,6 +55,11 @@ interface GitFileEntry {
   deletions: number
 }
 
+interface GitRemoteResult {
+  success: boolean
+  summary: string
+}
+
 // ──────────────────────────────────────────────
 // Window 타입 보강
 // ──────────────────────────────────────────────
@@ -71,5 +76,9 @@ interface Window {
     stage: (repoPath: string, files: string[]) => Promise<void>
     unstage: (repoPath: string, files: string[]) => Promise<void>
     commit: (repoPath: string, message: string) => Promise<void>
+    pull: (repoPath: string) => Promise<GitRemoteResult>
+    push: (repoPath: string) => Promise<GitRemoteResult>
+    fetch: (repoPath: string) => Promise<GitRemoteResult>
+    checkout: (repoPath: string, branch: string) => Promise<void>
   }
 }

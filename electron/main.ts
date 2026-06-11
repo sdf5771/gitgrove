@@ -349,6 +349,60 @@ ipcMain.handle('git:commit', async (_event, repoPath: string, message: string): 
 })
 
 // ──────────────────────────────────────────────
+// 원격 연산 / 브랜치 체크아웃 IPC 핸들러
+// ──────────────────────────────────────────────
+
+interface GitRemoteResult {
+  success: boolean
+  summary: string
+}
+
+// git:pull — 원격에서 pull
+ipcMain.handle('git:pull', async (_event, repoPath: string): Promise<GitRemoteResult> => {
+  const git = simpleGit(repoPath)
+  try {
+    const result = await git.pull()
+    const count = result.summary.changes + result.summary.insertions + result.summary.deletions
+    return {
+      success: true,
+      summary: count > 0
+        ? `Fast-forward: ${result.summary.changes} file(s) changed`
+        : 'Already up to date',
+    }
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err))
+  }
+})
+
+// git:push — 원격으로 push
+ipcMain.handle('git:push', async (_event, repoPath: string): Promise<GitRemoteResult> => {
+  const git = simpleGit(repoPath)
+  try {
+    await git.push()
+    return { success: true, summary: 'Pushed to remote' }
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err))
+  }
+})
+
+// git:fetch — 원격에서 fetch
+ipcMain.handle('git:fetch', async (_event, repoPath: string): Promise<GitRemoteResult> => {
+  const git = simpleGit(repoPath)
+  try {
+    await git.fetch()
+    return { success: true, summary: 'Fetched from remote' }
+  } catch (err) {
+    throw new Error(err instanceof Error ? err.message : String(err))
+  }
+})
+
+// git:checkout — 브랜치 체크아웃
+ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.checkout(branch)
+})
+
+// ──────────────────────────────────────────────
 // 앱 생명주기
 // ──────────────────────────────────────────────
 
