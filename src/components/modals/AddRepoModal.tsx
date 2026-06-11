@@ -5,9 +5,10 @@ import { ModalShell, SuccessState } from './ModalShell'
 interface Props {
   onClose: () => void
   onAdd: (r: Repo) => void
+  onOpenPath?: (path: string) => void
 }
 
-export function AddRepoModal({ onClose, onAdd }: Props) {
+export function AddRepoModal({ onClose, onAdd, onOpenPath }: Props) {
   const [tab, setTab] = useState<'local' | 'clone'>('local')
   const [localPath, setLocalPath] = useState('')
   const [cloneUrl, setCloneUrl] = useState('')
@@ -17,9 +18,19 @@ export function AddRepoModal({ onClose, onAdd }: Props) {
   const [isDone, setIsDone] = useState(false)
 
   const openLocal = (path: string) => {
+    if (!path) return
     const name = path.split('/').pop() || 'new-project'
-    onAdd({ id: String(Date.now()), name, path, branch: 'main', dirty: false, ahead: 0, behind: 0 })
+    if (onOpenPath) {
+      onOpenPath(path)
+    } else {
+      onAdd({ id: String(Date.now()), name, path, branch: 'main', dirty: false, ahead: 0, behind: 0 })
+    }
     onClose()
+  }
+
+  const handleBrowse = async () => {
+    const picked = await window.gitAPI?.openDialog()
+    if (picked) setLocalPath(picked)
   }
 
   const clone = () => {
@@ -47,7 +58,7 @@ export function AddRepoModal({ onClose, onAdd }: Props) {
             <label>Repository path</label>
             <div className="repo-browse-row">
               <input className="mselect" style={{ flex: 1 }} placeholder="~/dev/my-project" value={localPath} onChange={e => setLocalPath(e.target.value)} />
-              <button className="repo-browse-btn" onClick={() => setLocalPath('~/dev/my-project')}>Browse…</button>
+              <button className="repo-browse-btn" onClick={handleBrowse}>Browse…</button>
             </div>
           </div>
           <div className="mfield">
@@ -67,7 +78,7 @@ export function AddRepoModal({ onClose, onAdd }: Props) {
           </div>
           <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
             <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
-            <button className="mbtn-ok" onClick={() => openLocal(localPath || '~/dev/new-project')}>Open Repository →</button>
+            <button className="mbtn-ok" onClick={() => openLocal(localPath)} disabled={!localPath}>Open Repository →</button>
           </div>
         </div>
       )}
