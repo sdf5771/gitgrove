@@ -50,8 +50,17 @@ interface GitBranchResult {
 }
 
 interface GitStatusResult {
-  staged: Array<{ path: string; status: string }>    // status: 'M' | 'A' | 'D'
-  unstaged: Array<{ path: string; status: string }>
+  staged: Array<{ path: string; status: string; additions: number; deletions: number }>
+  unstaged: Array<{ path: string; status: string; additions: number; deletions: number }>
+}
+
+interface GitBlameLine {
+  lineNum: number
+  hash: string        // short hash (7자)
+  author: string      // 작성자 이름
+  authorColor: string // 작성자별 고정 색상 (hash 기반 생성)
+  timeAgo: string     // 상대 시간
+  content: string     // 코드 라인 내용
 }
 
 interface GitFileEntry {
@@ -252,40 +261,80 @@ ipcMain.handle('git:branches', async (_event, repoPath: string): Promise<GitBran
   }
 })
 
-// git:status — 워킹트리 상태 조회
+// git:status — 워킹트리 상태 조회 (파일별 additions/deletions 포함)
 ipcMain.handle('git:status', async (_event, repoPath: string): Promise<GitStatusResult> => {
   const git = simpleGit(repoPath)
-  const status = await git.status()
 
-  const toStatus = (code: string): string => {
-    if (code === 'D') return 'D'
-    if (code === 'A' || code === '?') return 'A'
-    return 'M'
+  // status + numstat 병렬 조회
+  const [status, unstagedNumstatRaw, stagedNumstatRaw] = await Promise.all([
+    git.status(),
+    git.raw(['diff', '--numstat']).catch(() => ''),
+    git.raw(['diff', '--cached', '--numstat']).catch(() => ''),
+  ])
+
+  // numstat 파싱: "additions\tdeletions\tpath"
+  // binary 파일은 "-\t-\tpath" → parseInt 결과 NaN → || 0 으로 처리
+  const parseNumstat = (raw: string): Map<string, { additions: number; deletions: number }> => {
+    const m = new Map<string, { additions: number; deletions: number }>()
+    for (const line of raw.trim().split('\n')) {
+      if (!line.trim()) continue
+      const parts = line.split('\t')
+      if (parts.length < 3) continue
+      const addStr = parts[0]
+      const delStr = parts[1]
+      const filePath = parts.slice(2).join('\t')
+      if (!filePath) continue
+      m.set(filePath, {
+        additions: parseInt(addStr) || 0,
+        deletions: parseInt(delStr) || 0,
+      })
+    }
+    return m
   }
 
-  const staged: Array<{ path: string; status: string }> = []
-  const unstaged: Array<{ path: string; status: string }> = []
+  const unstagedStats = parseNumstat(unstagedNumstatRaw)
+  const stagedStats = parseNumstat(stagedNumstatRaw)
 
-  // staged: created, renamed, modified, deleted (index 기준)
-  for (const f of status.created) staged.push({ path: f, status: 'A' })
-  for (const f of status.renamed) staged.push({ path: typeof f === 'string' ? f : f.to, status: 'M' })
+  type FileStatus = { path: string; status: string; additions: number; deletions: number }
+
+  const staged: FileStatus[] = []
+  const unstaged: FileStatus[] = []
+
+  // staged: created, renamed, modified (index 기준)
+  for (const f of status.created) {
+    staged.push({ path: f, status: 'A', ...(stagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
+  }
+  for (const f of status.renamed) {
+    const p = typeof f === 'string' ? f : f.to
+    staged.push({ path: p, status: 'M', ...(stagedStats.get(p) ?? { additions: 0, deletions: 0 }) })
+  }
   for (const f of status.staged) {
     if (!status.created.includes(f) && !status.renamed.find(r => (typeof r === 'string' ? r : r.to) === f)) {
-      staged.push({ path: f, status: toStatus('M') })
+      staged.push({ path: f, status: 'M', ...(stagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
     }
   }
+  // 중복 제거
+  const stagedDeduped = staged.filter((f, i, arr) => arr.findIndex(x => x.path === f.path) === i)
 
-  // unstaged: not_added (untracked), modified, deleted
-  for (const f of status.not_added) unstaged.push({ path: f, status: 'A' })
-  for (const f of status.modified) unstaged.push({ path: f, status: 'M' })
-  for (const f of status.deleted) unstaged.push({ path: f, status: 'D' })
+  // unstaged: not_added (untracked), modified, deleted, conflicted
+  for (const f of status.not_added) {
+    unstaged.push({ path: f, status: 'A', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
+  }
+  for (const f of status.modified) {
+    unstaged.push({ path: f, status: 'M', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
+  }
+  for (const f of status.deleted) {
+    unstaged.push({ path: f, status: 'D', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
+  }
   for (const f of status.conflicted) {
     if (!unstaged.find(u => u.path === f)) {
-      unstaged.push({ path: f, status: 'M' })
+      unstaged.push({ path: f, status: 'M', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
     }
   }
+  // 중복 제거
+  const unstagedDeduped = unstaged.filter((f, i, arr) => arr.findIndex(x => x.path === f.path) === i)
 
-  return { staged, unstaged }
+  return { staged: stagedDeduped, unstaged: unstagedDeduped }
 })
 
 // git:diff — 파일 diff 조회
@@ -404,6 +453,68 @@ ipcMain.handle('git:fetch', async (_event, repoPath: string): Promise<GitRemoteR
 ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string): Promise<void> => {
   const git = simpleGit(repoPath)
   await git.checkout(branch)
+})
+
+// ──────────────────────────────────────────────
+// git:blame — 파일 라인별 blame 정보 조회
+// ──────────────────────────────────────────────
+
+// 작성자 이름 → 고정 색상 생성 (단순 hash 기반)
+function getAuthorColor(name: string): string {
+  const colors = ['#e6a536', '#5fb8e6', '#ff6b6b', '#c39ad9', '#6fcf7c', '#ffce5a', '#5fd4e6', '#e67c36']
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffffffff
+  return colors[Math.abs(h) % colors.length]
+}
+
+ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): Promise<GitBlameLine[]> => {
+  const git = simpleGit(repoPath)
+
+  let raw: string
+  try {
+    raw = await git.raw(['blame', '--porcelain', filePath])
+  } catch {
+    // 바이너리 파일 등 blame 불가 케이스 → 빈 배열 반환
+    return []
+  }
+
+  const lines: GitBlameLine[] = []
+
+  let currentHash = ''
+  let currentAuthor = ''
+  let currentTime = 0
+  let finalLine = 0
+
+  for (const line of raw.split('\n')) {
+    // 커밋 헤더 라인: "<40-char-hash> <orig-line> <final-line> [num-lines]"
+    const headerMatch = line.match(/^([0-9a-f]{40}) \d+ (\d+)/)
+    if (headerMatch) {
+      currentHash = headerMatch[1].slice(0, 7)
+      finalLine = parseInt(headerMatch[2])
+      continue
+    }
+    if (line.startsWith('author ') && !line.startsWith('author-')) {
+      currentAuthor = line.slice(7)
+      continue
+    }
+    if (line.startsWith('author-time ')) {
+      currentTime = parseInt(line.slice(12))
+      continue
+    }
+    // 코드 라인: 탭으로 시작
+    if (line.startsWith('\t')) {
+      lines.push({
+        lineNum: finalLine,
+        hash: currentHash,
+        author: currentAuthor,
+        authorColor: getAuthorColor(currentAuthor),
+        timeAgo: relativeTime(new Date(currentTime * 1000)),
+        content: line.slice(1),
+      })
+    }
+  }
+
+  return lines
 })
 
 // ──────────────────────────────────────────────

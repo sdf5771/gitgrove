@@ -44,8 +44,17 @@ interface GitBranchResult {
 }
 
 interface GitStatusResult {
-  staged: Array<{ path: string; status: string }>    // status: 'M' | 'A' | 'D'
-  unstaged: Array<{ path: string; status: string }>
+  staged: Array<{ path: string; status: string; additions: number; deletions: number }>
+  unstaged: Array<{ path: string; status: string; additions: number; deletions: number }>
+}
+
+interface GitBlameLine {
+  lineNum: number
+  hash: string        // short hash (7자)
+  author: string      // 작성자 이름
+  authorColor: string // 작성자별 고정 색상 (hash 기반 생성)
+  timeAgo: string     // 상대 시간
+  content: string     // 코드 라인 내용
 }
 
 interface GitFileEntry {
@@ -80,5 +89,6 @@ interface Window {
     push: (repoPath: string) => Promise<GitRemoteResult>
     fetch: (repoPath: string) => Promise<GitRemoteResult>
     checkout: (repoPath: string, branch: string) => Promise<void>
+    blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
   }
 }
