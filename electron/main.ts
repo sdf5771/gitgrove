@@ -70,6 +70,18 @@ interface GitFileEntry {
   deletions: number
 }
 
+interface GitConfigResult {
+  name: string
+  email: string
+  defaultBranch: string
+}
+
+interface GitStashEntry {
+  index: number
+  message: string
+  branch: string
+}
+
 // ──────────────────────────────────────────────
 // 유틸리티: 상대 시간 변환
 // ──────────────────────────────────────────────
@@ -530,6 +542,85 @@ ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): 
   }
 
   return lines
+})
+
+// ──────────────────────────────────────────────
+// git:config — git config 읽기/쓰기 (Settings 패널)
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:config-get', async (_event, repoPath: string): Promise<GitConfigResult> => {
+  const git = simpleGit(repoPath)
+  const [name, email, defaultBranch] = await Promise.all([
+    git.raw(['config', 'user.name']).catch(() => ''),
+    git.raw(['config', 'user.email']).catch(() => ''),
+    git.raw(['config', 'init.defaultBranch']).catch(() => 'main'),
+  ])
+  return {
+    name: name.trim(),
+    email: email.trim(),
+    defaultBranch: defaultBranch.trim() || 'main',
+  }
+})
+
+ipcMain.handle('git:config-set', async (_event, repoPath: string, cfg: Partial<GitConfigResult>): Promise<void> => {
+  const git = simpleGit(repoPath)
+  const ops: Promise<unknown>[] = []
+  if (cfg.name)          ops.push(git.raw(['config', 'user.name', cfg.name]))
+  if (cfg.email)         ops.push(git.raw(['config', 'user.email', cfg.email]))
+  if (cfg.defaultBranch) ops.push(git.raw(['config', 'init.defaultBranch', cfg.defaultBranch]))
+  await Promise.all(ops)
+})
+
+// ──────────────────────────────────────────────
+// git:tag-create — 태그 생성 (ContextMenu "Create tag here")
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:tag-create', async (_event, repoPath: string, tagName: string, commitHash: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.tag([tagName, commitHash])
+})
+
+// ──────────────────────────────────────────────
+// git:stash-* — Stash 패널 연산
+// ──────────────────────────────────────────────
+
+// Apply: 스태시 적용 (keep stash)
+ipcMain.handle('git:stash-apply', async (_event, repoPath: string, index: number): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['stash', 'apply', `stash@{${index}}`])
+})
+
+// Drop: 스태시 삭제
+ipcMain.handle('git:stash-drop', async (_event, repoPath: string, index: number): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['stash', 'drop', `stash@{${index}}`])
+})
+
+// List: 스태시 목록 조회
+ipcMain.handle('git:stash-list', async (_event, repoPath: string): Promise<GitStashEntry[]> => {
+  const git = simpleGit(repoPath)
+  const raw = await git.raw(['stash', 'list', '--format=%gd|%s|%D']).catch(() => '')
+  return raw.trim().split('\n').filter(Boolean).map((line, i) => {
+    const parts = line.split('|')
+    const msg = parts[1]?.replace(/^WIP on [^:]+: /, '') ?? ''
+    const refs = parts[2] ?? ''
+    const branchMatch = refs.match(/refs\/heads\/([^\s,]+)/) || msg.match(/^WIP on ([^:]+):/)
+    return {
+      index: i,
+      message: msg || `stash@{${i}}`,
+      branch: branchMatch?.[1] ?? 'unknown',
+    }
+  })
+})
+
+// Push: 새 스태시 생성
+ipcMain.handle('git:stash-push', async (_event, repoPath: string, message?: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  if (message) {
+    await git.raw(['stash', 'push', '-m', message])
+  } else {
+    await git.raw(['stash', 'push'])
+  }
 })
 
 // ──────────────────────────────────────────────

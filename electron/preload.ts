@@ -37,4 +37,11 @@ contextBridge.exposeInMainWorld('gitAPI', {
   checkout: (repoPath: string, branch: string) => ipcRenderer.invoke('git:checkout', repoPath, branch),
   blame: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:blame', repoPath, filePath),
   getRemotes: (repoPath: string) => ipcRenderer.invoke('git:remotes', repoPath),
+  getConfig: (repoPath: string) => ipcRenderer.invoke('git:config-get', repoPath),
+  setConfig: (repoPath: string, cfg: Partial<GitConfigResult>) => ipcRenderer.invoke('git:config-set', repoPath, cfg),
+  createTag: (repoPath: string, tagName: string, commitHash: string) => ipcRenderer.invoke('git:tag-create', repoPath, tagName, commitHash),
+  stashApply: (repoPath: string, index: number) => ipcRenderer.invoke('git:stash-apply', repoPath, index),
+  stashDrop: (repoPath: string, index: number) => ipcRenderer.invoke('git:stash-drop', repoPath, index),
+  stashList: (repoPath: string) => ipcRenderer.invoke('git:stash-list', repoPath),
+  stashPush: (repoPath: string, message?: string) => ipcRenderer.invoke('git:stash-push', repoPath, message),
 })
