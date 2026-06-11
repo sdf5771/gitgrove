@@ -99,6 +99,65 @@ src/
 
 ---
 
+## 작업 프로세스
+
+### 기본 흐름
+
+```
+사용자 요청
+  └─ PM (분석 + 분해)
+       ├─ Backend  → Electron main.ts / IPC 핸들러 / simple-git 연동
+       ├─ Frontend → React 컴포넌트 / UI / IPC 호출
+       └─ (병렬 완료 후)
+            ├─ QA      → 버그 탐지 / 테스트 시나리오
+            └─ Review  → 코드 품질 / 인터페이스 일치 검증
+                 └─ PM 최종 보고 → 사용자 머지
+```
+
+### 브랜치 전략
+
+| 작업 유형 | 브랜치명 | 예시 |
+|----------|---------|------|
+| 기능 개발 | `feat/<작업명>` | `feat/real-git-integration` |
+| 버그 수정 | `fix/<이슈>` | `fix/commit-graph-overflow` |
+| UI 개선 | `ui/<컴포넌트>` | `ui/branch-sidebar-filter` |
+| 테스트 | `test/<범위>` | `test/commit-graph-unit` |
+
+- **main** 브랜치는 항상 동작 가능 상태 유지
+- 에이전트는 작업 브랜치에서 PR 생성 → 사용자가 머지
+
+### 위임 규칙
+
+| 요청 | 담당 에이전트 | 선행 조건 |
+|------|------------|---------|
+| IPC 채널 추가 / git 명령 연동 | **Backend** | - |
+| UI 컴포넌트 / 인터랙션 변경 | **Frontend** | Backend IPC 스펙 먼저 |
+| 양쪽 영향 (new feature) | **Backend → Frontend 순차** | Backend IPC 먼저 정의 |
+| 기존 기능 버그 | **Frontend 또는 Backend** | 재현 조건 파악 후 |
+| 품질 검증 | **QA** | 구현 완료 후 |
+| 머지 전 검토 | **Review** | PR 생성 후 |
+
+### IPC 인터페이스 합의 원칙
+
+Backend가 IPC 채널을 먼저 정의하고 `agent-log.md`에 기록하면 Frontend가 참조.
+
+```typescript
+// 합의 형식 예시 (Backend가 작성 → Frontend가 참조)
+// channel: 'git:log'
+// invoke() 반환: Commit[]
+// channel: 'git:stage'  
+// send(files: string[]): void
+```
+
+### 다음 주요 작업 (우선순위 순)
+
+1. **real git 연동** — `simple-git` 설치, IPC 채널 설계, 실제 커밋 목록 로드
+2. **레포 열기** — 로컬 경로 선택 → git 초기화 → 커밋 그래프 표시
+3. **Stage + Commit 실제 동작** — git add / commit IPC 연결
+4. **테스트 프레임워크 세팅** — Vitest + Testing Library (QA 에이전트 착수 전)
+
+---
+
 ## 변경 이력
 
 | 날짜 | 내용 |
