@@ -177,6 +177,10 @@ export default function App() {
   const [diffContent, setDiffContent] = useState<string>('')
   const [loadingDiff, setLoadingDiff] = useState(false)
 
+  // ── CommitDetail 파일 diff 미리보기 ──
+  const [commitDiffPreview, setCommitDiffPreview] = useState<string>('')
+  const [loadingPreview, setLoadingPreview] = useState(false)
+
   // ── UI 상태 ──
   const [view, setView] = useState<View>('history')
   const [selIdx, setSelIdx] = useState(0)
@@ -471,19 +475,43 @@ export default function App() {
     }
   }, [repoPath, filteredCommits, selIdx])
 
+  // ── CommitDetail 파일 선택 시 diff 미리보기 로드 ──
+  const handleCommitFileSelect = useCallback(async (filePath: string) => {
+    const commit = filteredCommits[selIdx] ?? null
+    if (!repoPath || !commit || !filePath) return
+    setLoadingPreview(true)
+    setCommitDiffPreview('')
+    try {
+      const raw = await window.gitAPI?.getCommitFileDiff(repoPath, commit.id, filePath) ?? ''
+      setCommitDiffPreview(raw)
+    } catch (e) {
+      setCommitDiffPreview('')
+    } finally {
+      setLoadingPreview(false)
+    }
+  }, [repoPath, filteredCommits, selIdx])
+
   // ── 커밋 선택 시 파일 목록 로드 (git:files) ──
   const handleSelectCommit = useCallback(async (idx: number) => {
     setSelIdx(idx)
     const commit = filteredCommits[idx]
     if (!commit || !repoPath) return
 
+    setCommitDiffPreview('')
     setLoadingFiles(true)
     try {
       const files = await window.gitAPI?.getFiles(repoPath, commit.id) ?? []
       setCommitFiles(files)
+      if (files[0]?.path) {
+        setLoadingPreview(true)
+        const raw = await window.gitAPI?.getCommitFileDiff(repoPath, commit.id, files[0].path) ?? ''
+        setCommitDiffPreview(raw)
+        setLoadingPreview(false)
+      }
     } catch (e) {
       console.error('getFiles failed:', e)
       setCommitFiles([])
+      setLoadingPreview(false)
     } finally {
       setLoadingFiles(false)
     }
@@ -783,6 +811,9 @@ export default function App() {
                         commit={selectedCommit}
                         files={repoPath ? commitFiles : undefined}
                         loadingFiles={loadingFiles}
+                        fileDiffPreview={repoPath ? commitDiffPreview : undefined}
+                        loadingPreview={loadingPreview}
+                        onFileSelect={handleCommitFileSelect}
                         onOpenDiff={handleOpenCommitFileDiff}
                         onCherryPick={() => setShowCherryPick(true)}
                         onBlame={() => setView('blame')}

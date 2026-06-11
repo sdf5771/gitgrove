@@ -4,16 +4,23 @@ import { FilePath } from './FilePath'
 
 interface Props {
   commit: Commit | null
-  files?: GitFileEntry[]       // 실제 파일 목록 (IPC로 로드)
-  loadingFiles?: boolean       // 파일 로딩 중 여부
+  files?: GitFileEntry[]
+  loadingFiles?: boolean
+  fileDiffPreview?: string
+  loadingPreview?: boolean
   onOpenDiff: (filePath: string) => void
+  onFileSelect?: (filePath: string) => void
   onCherryPick: () => void
   onBlame: () => void
 }
 
-export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherryPick, onBlame }: Props) {
+export function CommitDetail({ commit, files, loadingFiles, fileDiffPreview, loadingPreview, onOpenDiff, onFileSelect, onCherryPick, onBlame }: Props) {
   const [selFile, setSelFile] = useState(0)
-  useEffect(() => setSelFile(0), [commit])
+  useEffect(() => {
+    setSelFile(0)
+    const firstPath = files?.[0]?.path
+    if (firstPath) onFileSelect?.(firstPath)
+  }, [commit])
 
   if (!commit) {
     return (
@@ -59,7 +66,7 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
         ) : hasRealFiles ? (
           <div className="fl">
             {(files ?? []).map((f, i) => (
-              <div key={f.path} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => setSelFile(i)}>
+              <div key={f.path} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => { setSelFile(i); onFileSelect?.(f.path) }}>
                 <span className={`fst fst-${f.status}`}>{f.status}</span>
                 <FilePath path={f.path} />
                 <span className="fstats">
@@ -75,13 +82,32 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
         ) : (
           <div className="fl">
             {commit.files.map((f, i) => (
-              <div key={f.p} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => setSelFile(i)}>
+              <div key={f.p} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => { setSelFile(i); onFileSelect?.(f.p) }}>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>
                 <FilePath path={f.p} />
                 <span className="fstats"><span className="fadd">+{f.a}</span><span className="fdel">−{f.d}</span></span>
               </div>
             ))}
           </div>
+        )}
+      </div>
+      <div className="divl" />
+      <div style={{ background: 'var(--c-bg-inset)', borderRadius: 'var(--r2)', overflow: 'hidden', border: '1px solid var(--c-border)' }}>
+        {loadingPreview ? (
+          <div style={{ padding: '10px', textAlign: 'center', color: 'var(--c-text-faint)', fontSize: 11 }}>
+            <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+          </div>
+        ) : fileDiffPreview ? (
+          fileDiffPreview.split('\n')
+            .filter(l => !l.startsWith('---') && !l.startsWith('+++') && !l.startsWith('diff ') && !l.startsWith('index '))
+            .slice(0, 10)
+            .map((line, i) => {
+              const t = line.startsWith('@@') ? 'hunk' : line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : 'ctx'
+              if (t === 'hunk') return <div key={i} style={{ padding: '3px 10px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--c-info)', borderBottom: '1px solid var(--c-divider)' }}>{line}</div>
+              return <div key={i} className={`dline ${t === 'add' ? 'dadd' : t === 'del' ? 'ddel' : ''}`} style={{ lineHeight: '18px', padding: '0 10px', fontSize: 11 }}><span className="dtxt">{line}</span></div>
+            })
+        ) : (
+          <div style={{ padding: '10px', color: 'var(--c-text-faint)', fontSize: 11, textAlign: 'center' }}>파일을 선택하세요</div>
         )}
       </div>
       <div className="divl" />
