@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
+import { computeLanes } from './utils/computeLanes'
 import { BranchSidebar } from './components/BranchSidebar'
 import { CommitGraph } from './components/CommitGraph'
 import { CommitDetail } from './components/CommitDetail'
@@ -30,7 +31,7 @@ type BranchTab = 'create' | 'rename' | 'delete'
 // 변환 함수
 // ──────────────────────────────────────────────
 
-function toAppCommit(c: GitCommit, allHashes: string[]): Commit {
+function toAppCommit(c: GitCommit, allHashes: string[], laneMap: Map<string, number>): Commit {
   const labels: CommitLabel[] = c.refs.map(ref => {
     if (ref.startsWith('HEAD ->')) return { text: ref, type: 'head' as const }
     if (ref.startsWith('origin/') || ref.startsWith('upstream/')) return { text: ref, type: 'remote' as const }
@@ -44,7 +45,7 @@ function toAppCommit(c: GitCommit, allHashes: string[]): Commit {
 
   return {
     id: c.id,
-    lane: 0,
+    lane: laneMap.get(c.id) ?? 0,
     msg: c.msg,
     author: c.author,
     time: c.time,
@@ -159,7 +160,8 @@ export default function App() {
       ])
 
       const hashes = gitCommits.map(c => c.id)
-      const appCommits = gitCommits.map(c => toAppCommit(c, hashes))
+      const laneMap = computeLanes(gitCommits)
+      const appCommits = gitCommits.map(c => toAppCommit(c, hashes, laneMap))
       const appBranches = toAppBranches(gitBranches)
 
       setRealCommits(appCommits)
