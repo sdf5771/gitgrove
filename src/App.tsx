@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
+import { LogoIcon } from './components/LogoIcon'
 
 // ──────────────────────────────────────────────
 // localStorage 키 상수
@@ -547,7 +548,7 @@ export default function App() {
           <div className="td td-y" onClick={() => window.ipcRenderer?.send('win-minimize')} />
           <div className="td td-g" onClick={() => window.ipcRenderer?.send('win-maximize')} />
         </div>
-        <span className="app-name" style={{ marginRight: 10 }}>🌿 GitGrove</span>
+        <span className="app-name" style={{ marginRight: 10, display: 'flex', alignItems: 'center', gap: 7 }}><LogoIcon size={22} />GitGrove</span>
         <div style={{ width: 1, height: 20, background: 'var(--c-border)', flexShrink: 0, marginRight: 6 }} />
         <RepoTabs
           repos={repos}

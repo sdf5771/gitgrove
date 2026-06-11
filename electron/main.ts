@@ -102,7 +102,7 @@ function createWindow() {
     minHeight: 700,
     frame: false,
     backgroundColor: '#0d1220',
-    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    icon: path.join(process.env.VITE_PUBLIC, 'gitgrove-icon.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
