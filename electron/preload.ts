@@ -35,4 +35,5 @@ contextBridge.exposeInMainWorld('gitAPI', {
   push: (repoPath: string) => ipcRenderer.invoke('git:push', repoPath),
   fetch: (repoPath: string) => ipcRenderer.invoke('git:fetch', repoPath),
   checkout: (repoPath: string, branch: string) => ipcRenderer.invoke('git:checkout', repoPath, branch),
+  blame: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:blame', repoPath, filePath),
 })
