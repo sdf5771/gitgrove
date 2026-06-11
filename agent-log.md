@@ -100,6 +100,10 @@ src/
 | `git:branches` | `getBranches(repoPath)` | `repoPath: string` | `Promise<GitBranchResult>` |
 | `git:status` | `getStatus(repoPath)` | `repoPath: string` | `Promise<GitStatusResult>` |
 | `git:diff` | `getDiff(repoPath, filePath)` | `repoPath: string, filePath: string` | `Promise<string>` |
+| `git:files` | `getFiles(repoPath, commitHash)` | `repoPath: string, commitHash: string` | `Promise<GitFileEntry[]>` |
+| `git:stage` | `stage(repoPath, files)` | `repoPath: string, files: string[]` | `Promise<void>` |
+| `git:unstage` | `unstage(repoPath, files)` | `repoPath: string, files: string[]` | `Promise<void>` |
+| `git:commit` | `commit(repoPath, message)` | `repoPath: string, message: string` | `Promise<void>` |
 
 ### 공유 타입 (electron/electron-env.d.ts에 전역 선언)
 
@@ -125,6 +129,13 @@ interface GitBranchResult {
 interface GitStatusResult {
   staged: Array<{ path: string; status: 'M' | 'A' | 'D' }>
   unstaged: Array<{ path: string; status: 'M' | 'A' | 'D' }>
+}
+
+interface GitFileEntry {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R'  // Modified / Added / Deleted / Renamed
+  additions: number
+  deletions: number
 }
 ```
 
@@ -229,4 +240,5 @@ Backend가 IPC 채널을 먼저 정의하고 `agent-log.md`에 기록하면 Fron
 | 2026-06-11 | Electron 윈도우 수정: frame:false, 1440×900, IPC 윈도우 컨트롤, 타이틀바 드래그 영역 |
 | 2026-06-11 | 2차 디자인 반영: Diff Explorer, PR 뷰, Conflict Editor, 멀티레포 탭, 알림, ⌘K 팔레트, Stash, 브랜치/Rebase 모달, Git Blame, 우클릭 컨텍스트 메뉴, 커밋 검색 |
 | 2026-06-11 | Backend: `simple-git` IPC 레이어 구현 완료 (feat/real-git-ipc) — 5개 채널 (open-dialog, log, branches, status, diff) |
+| 2026-06-11 | Backend: 쓰기 연산 IPC 채널 4개 추가 (feat/git-write-ops) — git:files, git:stage, git:unstage, git:commit |
 | 2026-06-11 | Frontend: 목업 데이터 → real IPC 연동 완료 (feat/real-git-frontend) — App.tsx loadRepo(), BranchSidebar props, StageArea props, AddRepoModal onOpenPath/Browse 연동 |
