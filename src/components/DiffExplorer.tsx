@@ -3,13 +3,57 @@ import { COMMITS, DIFF_FULL, type Commit } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
 import { sideBySide } from '../utils/sideBySide'
 
-export function DiffExplorer({ commit }: { commit?: Commit | null }) {
+interface Props {
+  commit?: Commit | null
+  repoPath?: string | null
+}
+
+export function DiffExplorer({ commit, repoPath }: Props) {
   const files = commit ? commit.files : COMMITS[0].files
   const [selFile, setSelFile] = useState(files[0]?.p || 'src/auth/jwt.ts')
-  useEffect(() => setSelFile(files[0]?.p || 'src/auth/jwt.ts'), [commit])
+  const [rawDiff, setRawDiff] = useState<string>('')
+  const [loadingDiff, setLoadingDiff] = useState(false)
 
-  const diffData = DIFF_FULL[selFile] || Object.values(DIFF_FULL)[0]
-  const rows = useMemo(() => sideBySide(diffData.lines), [diffData])
+  useEffect(() => {
+    setSelFile(files[0]?.p || 'src/auth/jwt.ts')
+  }, [commit])
+
+  useEffect(() => {
+    if (!selFile || !repoPath) {
+      setRawDiff('')
+      return
+    }
+    setLoadingDiff(true)
+    window.gitAPI?.getDiff(repoPath, selFile)
+      .then(raw => setRawDiff(raw ?? ''))
+      .catch(() => setRawDiff(''))
+      .finally(() => setLoadingDiff(false))
+  }, [selFile, repoPath])
+
+  const rows = useMemo(() => {
+    if (!rawDiff) {
+      // fallback: mock 데이터
+      const mockData = DIFF_FULL[selFile] || Object.values(DIFF_FULL)[0]
+      return mockData ? sideBySide(mockData.lines) : []
+    }
+    const lines = rawDiff.split('\n')
+      .filter(l => !l.startsWith('diff ') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ '))
+      .map(l => {
+        if (l.startsWith('@@')) return { t: 'hunk' as const, s: l }
+        if (l.startsWith('+')) return { t: 'add' as const, s: l }
+        if (l.startsWith('-')) return { t: 'del' as const, s: l }
+        return { t: 'ctx' as const, s: l }
+      })
+    return sideBySide(lines)
+  }, [rawDiff, selFile])
+
+  // diff stats 계산
+  const addCount = rawDiff
+    ? rows.filter(r => r.t === 'pair' && r.R !== null).length
+    : (DIFF_FULL[selFile] || Object.values(DIFF_FULL)[0])?.a ?? 0
+  const delCount = rawDiff
+    ? rows.filter(r => r.t === 'pair' && r.L !== null).length
+    : (DIFF_FULL[selFile] || Object.values(DIFF_FULL)[0])?.d ?? 0
 
   return (
     <div className="dex-wrap">
@@ -32,8 +76,13 @@ export function DiffExplorer({ commit }: { commit?: Commit | null }) {
         <div className="dex-fhdr">
           <span className="dfn">{selFile}</span>
           <span style={{ display: 'flex', gap: 8, fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-            <span style={{ color: 'var(--c-success)' }}>+{diffData.a}</span>
-            <span style={{ color: 'var(--c-danger)' }}>−{diffData.d}</span>
+            {loadingDiff
+              ? <span style={{ color: 'var(--c-text-faint)' }}>Loading…</span>
+              : <>
+                  <span style={{ color: 'var(--c-success)' }}>+{addCount}</span>
+                  <span style={{ color: 'var(--c-danger)' }}>−{delCount}</span>
+                </>
+            }
           </span>
         </div>
         <div className="dex-sbs">

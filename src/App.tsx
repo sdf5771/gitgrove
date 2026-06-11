@@ -1,4 +1,11 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+
+// ──────────────────────────────────────────────
+// localStorage 키
+// ──────────────────────────────────────────────
+const STORAGE_KEYS = {
+  rpanelWidth: 'gitgrove:rpanelWidth',
+} as const
 import './App.css'
 import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
 
@@ -75,12 +82,14 @@ function toAppBranches(result: GitBranchResult): Branch[] {
   }))
 }
 
-function statusToFileEntry(files: Array<{ path: string; status: string }>): FileEntry[] {
+function statusToFileEntry(
+  files: Array<{ path: string; status: string; additions: number; deletions: number }>
+): FileEntry[] {
   return files.map(f => ({
     p: f.path,
     s: f.status as 'M' | 'A' | 'D',
-    a: 0,
-    d: 0,
+    a: f.additions,
+    d: f.deletions,
   }))
 }
 
@@ -195,6 +204,40 @@ export default function App() {
 
   const { notifs, notify, dismiss } = useNotifications()
 
+  // ── 오른쪽 패널 너비 ──
+  const [rpanelWidth, setRpanelWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.rpanelWidth)
+      return saved ? parseInt(saved, 10) : 300
+    } catch { return 300 }
+  })
+  const rpanelWidthRef = useRef(rpanelWidth)
+  useEffect(() => { rpanelWidthRef.current = rpanelWidth }, [rpanelWidth])
+
+  const handleRpanelResizerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    const startX = e.clientX
+    const startWidth = rpanelWidthRef.current
+
+    const onMouseMove = (ev: MouseEvent) => {
+      // rpanel은 오른쪽 고정이므로 왼쪽으로 드래그하면 넓어짐
+      const delta = startX - ev.clientX
+      const newWidth = Math.max(220, Math.min(600, startWidth + delta))
+      setRpanelWidth(newWidth)
+    }
+    const onMouseUp = () => {
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      try { localStorage.setItem(STORAGE_KEYS.rpanelWidth, String(rpanelWidthRef.current)) } catch {}
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [])
+
   // ── 원격 연산 로딩 상태 ──
   const [remoteOp, setRemoteOp] = useState<'pull' | 'push' | 'fetch' | null>(null)
 
@@ -206,7 +249,7 @@ export default function App() {
       const [gitCommits, gitBranches, gitStatus] = await Promise.all([
         window.gitAPI?.getLog(path) ?? Promise.resolve([]),
         window.gitAPI?.getBranches(path) ?? Promise.resolve({ current: '', local: [], remote: [], tags: [] }),
-        window.gitAPI?.getStatus(path) ?? Promise.resolve({ staged: [], unstaged: [] }),
+        (window.gitAPI?.getStatus(path) as Promise<{ staged: Array<{ path: string; status: string; additions: number; deletions: number }>; unstaged: Array<{ path: string; status: string; additions: number; deletions: number }> }> | undefined) ?? Promise.resolve({ staged: [] as Array<{ path: string; status: string; additions: number; deletions: number }>, unstaged: [] as Array<{ path: string; status: string; additions: number; deletions: number }> }),
       ])
 
       const hashes = gitCommits.map(c => c.id)
@@ -611,21 +654,14 @@ export default function App() {
               <PRView onOpenConflict={() => setShowConflict(true)} />
             ) : view === 'blame' ? (
               <>
-                <BlameView onSelectCommit={i => { setSelIdx(i); setView('history') }} />
-                <div className="rpanel">
-                  <div className="pnl-hdr"><h3>Commit Detail</h3></div>
-                  <CommitDetail
-                    commit={selectedCommit}
-                    files={repoPath ? commitFiles : undefined}
-                    loadingFiles={loadingFiles}
-                    onOpenDiff={() => setView('diff')}
-                    onCherryPick={() => setShowCherryPick(true)}
-                    onBlame={() => setView('blame')}
-                  />
-                </div>
+                <BlameView
+                  onSelectCommit={i => { setSelIdx(i); setView('history') }}
+                  repoPath={repoPath}
+                  filePath={diffFile?.p || (selectedCommit?.files?.[0]?.p ?? 'src/auth/jwt.ts')}
+                />
               </>
             ) : view === 'diff' ? (
-              <DiffExplorer commit={selectedCommit} />
+              <DiffExplorer commit={selectedCommit} repoPath={repoPath} />
             ) : (
               <>
                 <div className="cpanel">
@@ -664,7 +700,21 @@ export default function App() {
                     />
                   )}
                 </div>
-                <div className="rpanel">
+                {/* 오른쪽 패널 리사이저 */}
+                <div
+                  onMouseDown={handleRpanelResizerMouseDown}
+                  style={{
+                    width: 4,
+                    flexShrink: 0,
+                    cursor: 'col-resize',
+                    background: 'transparent',
+                    transition: 'background 120ms',
+                    zIndex: 10,
+                  }}
+                  onMouseOver={e => (e.currentTarget.style.background = 'var(--c-gold-border)')}
+                  onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
+                />
+                <div className="rpanel" style={{ width: rpanelWidth }}>
                   {view === 'history' ? (
                     <>
                       <div className="pnl-hdr">
