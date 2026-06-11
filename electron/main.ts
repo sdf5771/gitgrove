@@ -1,0 +1,310 @@
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+import simpleGit from 'simple-git'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// The built directory structure
+//
+// ├─┬─┬ dist
+// │ │ └── index.html
+// │ │
+// │ ├─┬ dist-electron
+// │ │ ├── main.js
+// │ │ └── preload.mjs
+// │
+process.env.APP_ROOT = path.join(__dirname, '..')
+
+// 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
+export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
+export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
+
+process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
+
+// ──────────────────────────────────────────────
+// IPC 반환 타입 정의
+// ──────────────────────────────────────────────
+
+interface GitCommit {
+  id: string        // short hash (7자)
+  fullId: string    // full hash
+  msg: string       // commit subject
+  author: string
+  time: string      // relative time (e.g. "2m ago", "3h ago", "2d ago")
+  parents: string[] // parent hashes (short)
+  refs: string[]    // HEAD, branch names, tags (e.g. ["HEAD -> main", "origin/main"])
+  stats: { files: number; insertions: number; deletions: number }
+}
+
+interface GitBranchResult {
+  current: string
+  local: Array<{ name: string; ahead: number; behind: number }>
+  remote: string[]
+  tags: string[]
+}
+
+interface GitStatusResult {
+  staged: Array<{ path: string; status: string }>    // status: 'M' | 'A' | 'D'
+  unstaged: Array<{ path: string; status: string }>
+}
+
+// ──────────────────────────────────────────────
+// 유틸리티: 상대 시간 변환
+// ──────────────────────────────────────────────
+
+function relativeTime(date: Date): string {
+  const diffMs = Date.now() - date.getTime()
+  const diffSec = Math.floor(diffMs / 1000)
+  if (diffSec < 60) return `${diffSec}s ago`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHour = Math.floor(diffMin / 60)
+  if (diffHour < 24) return `${diffHour}h ago`
+  const diffDay = Math.floor(diffHour / 24)
+  if (diffDay < 7) return `${diffDay}d ago`
+  const diffWk = Math.floor(diffDay / 7)
+  return `${diffWk}wk ago`
+}
+
+// ──────────────────────────────────────────────
+// 윈도우
+// ──────────────────────────────────────────────
+
+let win: BrowserWindow | null
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1440,
+    height: 900,
+    minWidth: 1024,
+    minHeight: 700,
+    frame: false,
+    backgroundColor: '#0d1220',
+    icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+    },
+  })
+
+  // 윈도우 컨트롤 IPC
+  ipcMain.on('win-minimize', () => win?.minimize())
+  ipcMain.on('win-maximize', () => {
+    if (win?.isMaximized()) win.unmaximize()
+    else win?.maximize()
+  })
+  ipcMain.on('win-close', () => win?.close())
+
+  // Test active push message to Renderer-process.
+  win.webContents.on('did-finish-load', () => {
+    win?.webContents.send('main-process-message', (new Date).toLocaleString())
+  })
+
+  if (VITE_DEV_SERVER_URL) {
+    win.loadURL(VITE_DEV_SERVER_URL)
+  } else {
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+  }
+}
+
+// ──────────────────────────────────────────────
+// git IPC 핸들러
+// ──────────────────────────────────────────────
+
+// git:open-dialog — 폴더 선택 다이얼로그
+ipcMain.handle('git:open-dialog', async () => {
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory'],
+    title: 'Open Git Repository',
+  })
+  return result.canceled ? null : result.filePaths[0]
+})
+
+// git:log — 커밋 로그 조회 (최대 50개)
+ipcMain.handle('git:log', async (_event, repoPath: string): Promise<GitCommit[]> => {
+  const git = simpleGit(repoPath)
+
+  // 커밋 로그 (stat 포함)
+  const log = await git.log([
+    '--max-count=50',
+    '--stat',
+    '--decorate=full',
+  ])
+
+  // parents 별도 조회: short hash 배열 맵 (hash → parents[])
+  const parentLines = await git.raw([
+    'log',
+    '--max-count=50',
+    '--pretty=format:%h %P',
+  ])
+  const parentMap = new Map<string, string[]>()
+  for (const line of parentLines.trim().split('\n')) {
+    if (!line.trim()) continue
+    const parts = line.trim().split(/\s+/)
+    const shortHash = parts[0]
+    const parents = parts.slice(1).map(p => p.slice(0, 7))
+    parentMap.set(shortHash, parents)
+  }
+
+  return log.all.map((entry): GitCommit => {
+    const shortHash = entry.hash.slice(0, 7)
+
+    // refs 파싱 (decorate=full 결과 예: "refs/heads/main, refs/remotes/origin/main")
+    const refs: string[] = []
+    if (entry.refs) {
+      for (const raw of entry.refs.split(',')) {
+        const r = raw.trim()
+        if (!r) continue
+        if (r.startsWith('HEAD -> refs/heads/')) {
+          refs.push(`HEAD -> ${r.replace('HEAD -> refs/heads/', '')}`)
+        } else if (r === 'HEAD') {
+          refs.push('HEAD')
+        } else if (r.startsWith('refs/heads/')) {
+          refs.push(r.replace('refs/heads/', ''))
+        } else if (r.startsWith('refs/remotes/')) {
+          refs.push(r.replace('refs/remotes/', ''))
+        } else if (r.startsWith('tag: refs/tags/')) {
+          refs.push(r.replace('tag: refs/tags/', ''))
+        } else {
+          refs.push(r)
+        }
+      }
+    }
+
+    // stats 파싱 (simple-git의 diff 필드)
+    const diff = (entry as unknown as { diff?: { changed: number; insertions: number; deletions: number } }).diff
+    const stats = {
+      files: diff?.changed ?? 0,
+      insertions: diff?.insertions ?? 0,
+      deletions: diff?.deletions ?? 0,
+    }
+
+    return {
+      id: shortHash,
+      fullId: entry.hash,
+      msg: entry.message,
+      author: entry.author_name,
+      time: relativeTime(new Date(entry.date)),
+      parents: parentMap.get(shortHash) ?? [],
+      refs,
+      stats,
+    }
+  })
+})
+
+// git:branches — 브랜치 목록 조회
+ipcMain.handle('git:branches', async (_event, repoPath: string): Promise<GitBranchResult> => {
+  const git = simpleGit(repoPath)
+
+  const branchSummary = await git.branch(['--all', '--verbose'])
+
+  // 태그 조회
+  let tags: string[] = []
+  try {
+    const tagResult = await git.tags()
+    tags = tagResult.all
+  } catch {
+    tags = []
+  }
+
+  const local: Array<{ name: string; ahead: number; behind: number }> = []
+  const remote: string[] = []
+
+  for (const [name, details] of Object.entries(branchSummary.branches)) {
+    if (details.name.startsWith('remotes/')) {
+      // HEAD 포인터 제외
+      if (!details.name.includes('HEAD')) {
+        remote.push(details.name.replace(/^remotes\//, ''))
+      }
+    } else {
+      let ahead = 0
+      let behind = 0
+      try {
+        const aheadStr = await git.raw(['rev-list', '--count', `origin/${name}..${name}`])
+        ahead = parseInt(aheadStr.trim(), 10) || 0
+      } catch { ahead = 0 }
+      try {
+        const behindStr = await git.raw(['rev-list', '--count', `${name}..origin/${name}`])
+        behind = parseInt(behindStr.trim(), 10) || 0
+      } catch { behind = 0 }
+      local.push({ name, ahead, behind })
+    }
+  }
+
+  return {
+    current: branchSummary.current,
+    local,
+    remote,
+    tags,
+  }
+})
+
+// git:status — 워킹트리 상태 조회
+ipcMain.handle('git:status', async (_event, repoPath: string): Promise<GitStatusResult> => {
+  const git = simpleGit(repoPath)
+  const status = await git.status()
+
+  const toStatus = (code: string): string => {
+    if (code === 'D') return 'D'
+    if (code === 'A' || code === '?') return 'A'
+    return 'M'
+  }
+
+  const staged: Array<{ path: string; status: string }> = []
+  const unstaged: Array<{ path: string; status: string }> = []
+
+  // staged: created, renamed, modified, deleted (index 기준)
+  for (const f of status.created) staged.push({ path: f, status: 'A' })
+  for (const f of status.renamed) staged.push({ path: typeof f === 'string' ? f : f.to, status: 'M' })
+  for (const f of status.staged) {
+    if (!status.created.includes(f) && !status.renamed.find(r => (typeof r === 'string' ? r : r.to) === f)) {
+      staged.push({ path: f, status: toStatus('M') })
+    }
+  }
+
+  // unstaged: not_added (untracked), modified, deleted
+  for (const f of status.not_added) unstaged.push({ path: f, status: 'A' })
+  for (const f of status.modified) unstaged.push({ path: f, status: 'M' })
+  for (const f of status.deleted) unstaged.push({ path: f, status: 'D' })
+  for (const f of status.conflicted) {
+    if (!unstaged.find(u => u.path === f)) {
+      unstaged.push({ path: f, status: 'M' })
+    }
+  }
+
+  return { staged, unstaged }
+})
+
+// git:diff — 파일 diff 조회
+ipcMain.handle('git:diff', async (_event, repoPath: string, filePath: string): Promise<string> => {
+  const git = simpleGit(repoPath)
+
+  // staged diff 먼저 시도
+  const stagedDiff = await git.diff(['--cached', '--', filePath])
+  if (stagedDiff.trim()) return stagedDiff
+
+  // unstaged diff 시도
+  const unstagedDiff = await git.diff(['--', filePath])
+  return unstagedDiff
+})
+
+// ──────────────────────────────────────────────
+// 앱 생명주기
+// ──────────────────────────────────────────────
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
+    app.quit()
+    win = null
+  }
+})
+
+app.on('activate', () => {
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow()
+  }
+})
+
+app.whenReady().then(createWindow)
