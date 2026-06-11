@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { COMMITS, DIFF, type Commit } from '../data/mockData'
+import { DIFF, type Commit } from '../data/mockData'
 import { FilePath } from './FilePath'
 
 interface Props {
@@ -36,12 +36,12 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
       <div className="cd-msg">{commit.msg}</div>
       <div className="cd-meta">
         <div className="cd-row"><span className="cd-lbl">Author</span><span className="cd-val">{commit.author}</span></div>
-        <div className="cd-row"><span className="cd-lbl">Date</span><span className="cd-val" style={{ color: 'var(--c-text-muted)' }}>Jun 11, 2026</span></div>
+        <div className="cd-row"><span className="cd-lbl">Date</span><span className="cd-val" style={{ color: 'var(--c-text-muted)' }}>{commit.time}</span></div>
         {commit.parents.length >= 2 && (
           <div className="cd-row">
             <span className="cd-lbl">Parents</span>
             <span className="cd-val" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-              {commit.parents.map(pi => COMMITS[pi]?.id).filter(Boolean).join(', ')}
+              {commit.parents.join(', ')}
             </span>
           </div>
         )}

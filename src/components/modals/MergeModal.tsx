@@ -1,13 +1,18 @@
 import { useState } from 'react'
-import { LOCAL_BRANCHES } from '../../data/mockData'
+import { LOCAL_BRANCHES, type Branch } from '../../data/mockData'
 import { ModalShell, SuccessState } from './ModalShell'
 
-export function MergeModal({ onClose }: { onClose: () => void }) {
-  const [from, setFrom] = useState('feature/auth')
+interface Props {
+  onClose: () => void
+  branches?: Branch[]
+}
+
+export function MergeModal({ onClose, branches }: Props) {
+  const opts = (branches ?? LOCAL_BRANCHES).filter(b => !b.current)
+  const [from, setFrom] = useState(opts[0]?.name ?? '')
   const [strategy, setStrategy] = useState('merge')
   const [doing, setDoing] = useState(false)
   const [isDone, setIsDone] = useState(false)
-  const opts = LOCAL_BRANCHES.filter(b => !b.current)
 
   const execute = () => {
     setDoing(true)

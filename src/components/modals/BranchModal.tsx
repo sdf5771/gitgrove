@@ -1,23 +1,30 @@
 import { useState } from 'react'
-import { LOCAL_BRANCHES } from '../../data/mockData'
+import { LOCAL_BRANCHES, type Branch } from '../../data/mockData'
 import { ModalShell, SuccessState } from './ModalShell'
 
 type Tab = 'create' | 'rename' | 'delete'
 
-export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: Tab; onClose: () => void }) {
+interface Props {
+  initialTab?: Tab
+  onClose: () => void
+  branches?: Branch[]
+}
+
+export function BranchModal({ initialTab = 'create', onClose, branches }: Props) {
+  const allBranches = branches ?? LOCAL_BRANCHES
+  const nonCurrent = allBranches.filter(b => !b.current)
+
   const [tab, setTab] = useState<Tab>(initialTab)
   const [cName, setCName] = useState('')
-  const [cBase, setCBase] = useState('main')
+  const [cBase, setCBase] = useState(allBranches.find(b => b.current)?.name ?? allBranches[0]?.name ?? 'main')
   const [cCheckout, setCCheckout] = useState(true)
-  const [rFrom, setRFrom] = useState('feature/auth')
+  const [rFrom, setRFrom] = useState(nonCurrent[0]?.name ?? '')
   const [rNew, setRNew] = useState('')
-  const [dBranch, setDBranch] = useState('feature/auth')
+  const [dBranch, setDBranch] = useState(nonCurrent[0]?.name ?? '')
   const [dForce, setDForce] = useState(false)
   const [doing, setDoing] = useState(false)
   const [isDone, setIsDone] = useState(false)
   const [doneMsg, setDoneMsg] = useState('')
-
-  const nonCurrent = LOCAL_BRANCHES.filter(b => !b.current)
   const validateName = (n: string) => /^[a-z0-9_\-/]+$/i.test(n) && n.length > 0
   const run = (msg: string) => { setDoing(true); setTimeout(() => { setDoing(false); setIsDone(true); setDoneMsg(msg) }, 1000); setTimeout(() => onClose(), 2000) }
 
@@ -51,7 +58,7 @@ export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: T
               <div className="mfield">
                 <label>Based on</label>
                 <select className="mselect" value={cBase} onChange={e => setCBase(e.target.value)}>
-                  {LOCAL_BRANCHES.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
+                  {allBranches.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
                 </select>
               </div>
               <div className={`mcheckrow${cCheckout ? ' on' : ''}`} onClick={() => setCCheckout(v => !v)}>
@@ -73,7 +80,7 @@ export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: T
               <div className="mfield">
                 <label>Branch to rename</label>
                 <select className="mselect" value={rFrom} onChange={e => setRFrom(e.target.value)}>
-                  {LOCAL_BRANCHES.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
+                  {allBranches.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
                 </select>
               </div>
               <div className="mfield">

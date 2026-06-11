@@ -199,6 +199,23 @@ export default function App() {
 
   const { notifs, notify, dismiss } = useNotifications()
 
+  // ── Row density 설정 반영 ──
+  const [rowH, setRowH] = useState<number>(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('gitgrove:settings') ?? '{}') as Record<string, unknown>
+      return s.density === 'compact' ? 34 : 44
+    } catch { return 44 }
+  })
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { density } = (e as CustomEvent<{ density: string; fontSize: string }>).detail
+      setRowH(density === 'compact' ? 34 : 44)
+    }
+    window.addEventListener('gitgrove:settings-changed', handler)
+    return () => window.removeEventListener('gitgrove:settings-changed', handler)
+  }, [])
+
   // ── 오른쪽 패널 너비 ──
   const [rpanelWidth, setRpanelWidth] = useState<number>(() => {
     try {
@@ -510,6 +527,10 @@ export default function App() {
       navigator.clipboard?.writeText(ctxMenu.commit.id).catch(() => {})
       notify('success', 'Hash copied', ctxMenu.commit.id)
     }
+    else if (action === 'copy-msg' && ctxMenu) {
+      navigator.clipboard?.writeText(ctxMenu.commit.msg).catch(() => {})
+      notify('success', '메시지 복사됨', ctxMenu.commit.msg.slice(0, 60))
+    }
     else if (action === 'revert') notify('warning', 'Revert', 'Reverted ' + ctxMenu?.commit?.id)
     else if (action?.startsWith('reset-')) notify('warning', 'Reset', 'Repository reset (' + action.split('-')[1] + ')')
   }, [ctxMenu, notify])
@@ -676,7 +697,7 @@ export default function App() {
                         onSelect={handleSelectCommit}
                         onContextMenu={(e, c, i) => setCtxMenu({ x: e.clientX, y: e.clientY, commit: c, idx: i })}
                         showStats={true}
-                        rowH={44}
+                        rowH={rowH}
                         activeBranch={activeBranch}
                       />
                     </>
@@ -745,9 +766,9 @@ export default function App() {
         )}
 
         {/* Modals */}
-        {showMerge       && <MergeModal onClose={() => { setShowMerge(false); notify('success', 'Merge complete', 'feature/auth merged into main') }} />}
+        {showMerge       && <MergeModal onClose={() => { setShowMerge(false); notify('success', 'Merge complete', 'feature/auth merged into main') }} branches={realBranches.length > 0 ? realBranches : undefined} />}
         {showCherryPick  && selectedCommit && <CherryPickModal commit={selectedCommit} onClose={() => setShowCherryPick(false)} />}
-        {showBranch      && <BranchModal initialTab={branchTab} onClose={() => setShowBranch(false)} />}
+        {showBranch      && <BranchModal initialTab={branchTab} onClose={() => setShowBranch(false)} branches={realBranches.length > 0 ? realBranches : undefined} />}
         {showRebase      && <InteractiveRebaseModal onClose={() => { setShowRebase(false); notify('info', 'Rebase complete', '6 commits rebased onto main') }} />}
         {showStash       && <StashPanel onClose={() => setShowStash(false)} />}
         {showSettings    && <SettingsPanel onClose={() => setShowSettings(false)} />}

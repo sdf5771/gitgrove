@@ -3,6 +3,13 @@ import { useState } from 'react'
 type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github'
 
 const GITHUB_TOKEN_KEY = 'gitgrove:githubToken'
+const SETTINGS_KEY = 'gitgrove:settings'
+
+const loadSettings = () => {
+  try {
+    return JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') as Record<string, unknown>
+  } catch { return {} }
+}
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<SettingsTab>('git')
@@ -17,8 +24,27 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     try { return localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { return '' }
   })
   const [showToken, setShowToken] = useState(false)
+
+  const _saved = loadSettings()
+  const [density, setDensity] = useState<'comfortable' | 'compact'>(
+    (_saved.density === 'compact' ? 'compact' : 'comfortable')
+  )
+  const [fontSize, setFontSize] = useState<string>(
+    typeof _saved.fontSize === 'string' ? _saved.fontSize : '12'
+  )
+  const [tabWidth, setTabWidth] = useState<string>(
+    typeof _saved.tabWidth === 'string' ? _saved.tabWidth : '2'
+  )
+  const [showDiffStats, setShowDiffStats] = useState<boolean>(
+    typeof _saved.showDiffStats === 'boolean' ? _saved.showDiffStats : true
+  )
+
   const save = () => {
+    const settings = { density, fontSize, tabWidth, showDiffStats }
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch {}
     try { localStorage.setItem(GITHUB_TOKEN_KEY, githubToken) } catch {}
+    document.documentElement.style.setProperty('--editor-font-size', `${fontSize}px`)
+    window.dispatchEvent(new CustomEvent('gitgrove:settings-changed', { detail: { density, fontSize } }))
     setSaved(true)
     setTimeout(() => setSaved(false), 1600)
   }
@@ -70,14 +96,27 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               <div className="sett-section">
                 <div className="sett-sec-ttl">Graph</div>
                 <div className="sett-field"><div className="sett-lbl">Row density</div>
-                  <select className="sett-sel" defaultValue="comfortable">{['comfortable', 'compact'].map(v => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}</select>
+                  <select className="sett-sel" value={density} onChange={e => setDensity(e.target.value as 'comfortable' | 'compact')}>
+                    {(['comfortable', 'compact'] as const).map(v => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
+                  </select>
                 </div>
-                <div className="sett-toggle"><div className="sett-toggle-info"><div className="sett-toggle-lbl">Show diff stats per row</div><div className="sett-toggle-sub">+adds / −dels on each commit row</div></div><button className="sett-sw on" /></div>
+                <div className="sett-toggle" onClick={() => setShowDiffStats(v => !v)}>
+                  <div className="sett-toggle-info"><div className="sett-toggle-lbl">Show diff stats per row</div><div className="sett-toggle-sub">+adds / −dels on each commit row</div></div>
+                  <button className={`sett-sw ${showDiffStats ? 'on' : 'off'}`} />
+                </div>
               </div>
               <div className="sett-section">
                 <div className="sett-sec-ttl">Editor</div>
-                <div className="sett-field"><div className="sett-lbl">Font size</div><select className="sett-sel" defaultValue="12">{['11','12','13','14'].map(v => <option key={v} value={v}>{v}px</option>)}</select></div>
-                <div className="sett-field"><div className="sett-lbl">Tab width</div><select className="sett-sel" defaultValue="2">{['2','4','8'].map(v => <option key={v} value={v}>{v} spaces</option>)}</select></div>
+                <div className="sett-field"><div className="sett-lbl">Font size</div>
+                  <select className="sett-sel" value={fontSize} onChange={e => setFontSize(e.target.value)}>
+                    {['11','12','13','14'].map(v => <option key={v} value={v}>{v}px</option>)}
+                  </select>
+                </div>
+                <div className="sett-field"><div className="sett-lbl">Tab width</div>
+                  <select className="sett-sel" value={tabWidth} onChange={e => setTabWidth(e.target.value)}>
+                    {['2','4','8'].map(v => <option key={v} value={v}>{v} spaces</option>)}
+                  </select>
+                </div>
               </div>
             </>
           )}
