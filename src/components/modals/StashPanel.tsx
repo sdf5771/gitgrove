@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { ConfirmModal } from './ConfirmModal'
 
 interface StashItem {
   index: number
@@ -18,6 +19,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
   const [msg, setMsg] = useState('')
   const [toast, setToast] = useState('')
   const [loading, setLoading] = useState(false)
+  const [dropConfirm, setDropConfirm] = useState<number | null>(null)
 
   const showToast = (t: string) => { setToast(t); setTimeout(() => setToast(''), 1800) }
 
@@ -127,7 +129,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
               <div className="stash-actions">
                 <button className="stash-act pop" onClick={() => pop(s.index)}>↑ Pop</button>
                 <button className="stash-act" onClick={() => apply(s.index)}>Apply</button>
-                <button className="stash-act drop" onClick={() => drop(s.index)}>Drop</button>
+                <button className="stash-act drop" onClick={() => setDropConfirm(s.index)}>Drop</button>
               </div>
             </div>
           ))}
@@ -136,6 +138,16 @@ export function StashPanel({ onClose, repoPath }: Props) {
           <div style={{ position: 'absolute', bottom: 12, left: 12, right: 12, padding: '7px 12px', background: 'var(--c-bg-elevated)', border: '1px solid var(--c-gold-border)', borderRadius: 'var(--r2)', fontSize: 12, color: 'var(--c-text-strong)', textAlign: 'center', animation: 'mslide 200ms ease', boxShadow: '0 4px 16px rgba(0,0,0,.5)' }}>{toast}</div>
         )}
       </div>
+      {dropConfirm !== null && (
+        <ConfirmModal
+          title="Stash 삭제"
+          message={`stash@{${dropConfirm}}을 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다.`}
+          confirmLabel="Drop"
+          danger={true}
+          onConfirm={() => { drop(dropConfirm); setDropConfirm(null) }}
+          onCancel={() => setDropConfirm(null)}
+        />
+      )}
     </div>
   )
 }

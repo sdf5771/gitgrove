@@ -28,6 +28,7 @@ export function BranchModal({ initialTab = 'create', onClose, onSuccess, branche
   const [isDone, setIsDone] = useState(false)
   const [doneMsg, setDoneMsg] = useState('')
   const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const validateName = (n: string) => /^[a-z0-9_\-/]+$/i.test(n) && n.length > 0
 
@@ -146,7 +147,7 @@ export function BranchModal({ initialTab = 'create', onClose, onSuccess, branche
             <div className="modal-body">
               <div className="mfield">
                 <label>Branch to delete</label>
-                <select className="mselect" value={dBranch} onChange={e => setDBranch(e.target.value)}>
+                <select className="mselect" value={dBranch} onChange={e => { setDBranch(e.target.value); setConfirmDelete(false) }}>
                   {nonCurrent.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
                 </select>
               </div>
@@ -158,10 +159,20 @@ export function BranchModal({ initialTab = 'create', onClose, onSuccess, branche
                   <div className="mcheck-sub"><code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>-D</code> — allows deleting unmerged branches</div>
                 </div>
               </div>
-              <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
-                <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
-                <button className="mbtn-danger" onClick={del} disabled={doing}>{doing ? 'Deleting…' : 'Delete Branch'}</button>
-              </div>
+              {confirmDelete ? (
+                <div style={{ marginTop: 8, padding: '10px 12px', background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)', borderRadius: 'var(--r2)', fontSize: 12, color: 'var(--c-text)' }}>
+                  <div style={{ marginBottom: 8 }}>정말로 <strong>{dBranch}</strong>를 삭제하시겠습니까?</div>
+                  <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none' }}>
+                    <button className="mbtn-cancel" onClick={() => setConfirmDelete(false)}>아니오</button>
+                    <button className="mbtn-danger" onClick={del} disabled={doing}>{doing ? 'Deleting…' : '예, 삭제합니다'}</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
+                  <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
+                  <button className="mbtn-danger" onClick={() => setConfirmDelete(true)} disabled={doing}>Delete Branch</button>
+                </div>
+              )}
             </div>
           )}
         </>

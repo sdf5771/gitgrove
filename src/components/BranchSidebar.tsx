@@ -5,15 +5,21 @@ type BranchAction = 'create' | 'rename' | 'delete'
 
 interface Props {
   activeBranch: string
-  onBranch: (name: string) => void
+  onBranch?: (name: string) => void
   onBranchAction: (mode: BranchAction, name?: string) => void
+  onBranchContextMenu?: (
+    e: React.MouseEvent,
+    name: string,
+    type: 'local' | 'remote' | 'tag',
+    isCurrent: boolean,
+  ) => void
   localBranches?: Branch[]
   remoteBranches?: string[]
   tags?: string[]
   style?: React.CSSProperties
 }
 
-export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBranches, remoteBranches, tags, style }: Props) {
+export function BranchSidebar({ activeBranch, onBranch: _onBranch, onBranchAction, onBranchContextMenu, localBranches, remoteBranches, tags, style }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [query, setQuery] = useState('')
   const toggle = (k: string) => setCollapsed(p => ({ ...p, [k]: !p[k] }))
@@ -46,8 +52,10 @@ export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBra
         {!collapsed.local && filteredLocal.map(b => (
           <div key={b.name}
             className={`bitem${b.name === activeBranch ? ' cur' : ''}`}
-            onClick={() => onBranch(b.name)}
-            onContextMenu={e => { e.preventDefault(); onBranchAction('rename', b.name) }}>
+            onContextMenu={e => {
+              e.preventDefault()
+              onBranchContextMenu?.(e, b.name, 'local', b.name === activeBranch)
+            }}>
             <span className="bdot" style={{ background: LANE_COLORS[b.lane % LANE_COLORS.length] }} />
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
             {b.current && <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', color: 'var(--c-gold-300)', background: 'var(--c-gold-bg)', border: '1px solid var(--c-gold-border)', padding: '1px 5px', borderRadius: 999, letterSpacing: '.06em', textTransform: 'uppercase' }}>HEAD</span>}
@@ -60,7 +68,11 @@ export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBra
           <button onClick={() => toggle('remote')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px' }}>{collapsed.remote ? '›' : '⌄'}</button>
         </div>
         {!collapsed.remote && filteredRemote.map(name => (
-          <div key={name} className="bitem">
+          <div key={name} className="bitem"
+            onContextMenu={e => {
+              e.preventDefault()
+              onBranchContextMenu?.(e, name, 'remote', false)
+            }}>
             <span className="bdot bdot-r" />
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--c-text-muted)' }}>{name}</span>
           </div>
@@ -71,7 +83,11 @@ export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBra
           <button onClick={() => toggle('tags')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px' }}>{collapsed.tags ? '›' : '⌄'}</button>
         </div>
         {!collapsed.tags && filteredTags.map(name => (
-          <div key={name} className="bitem">
+          <div key={name} className="bitem"
+            onContextMenu={e => {
+              e.preventDefault()
+              onBranchContextMenu?.(e, name, 'tag', false)
+            }}>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6fcf7c" strokeWidth="2.5" style={{ flexShrink: 0 }}>
               <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
               <line x1="7" y1="7" x2="7.01" y2="7"/>

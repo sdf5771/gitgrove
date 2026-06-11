@@ -6,29 +6,62 @@ import { sideBySide } from '../utils/sideBySide'
 interface Props {
   commit?: Commit | null
   repoPath?: string | null
+  commitFiles?: GitFileEntry[]
 }
 
-export function DiffExplorer({ commit, repoPath }: Props) {
-  const files = commit ? commit.files : COMMITS[0].files
-  const [selFile, setSelFile] = useState(files[0]?.p || '')
+const getFilePath = (f: unknown): string => {
+  const e = f as Record<string, unknown>
+  return (e.path as string) ?? (e.p as string) ?? ''
+}
+const getFileStatus = (f: unknown): string => {
+  const e = f as Record<string, unknown>
+  return (e.status as string) ?? (e.s as string) ?? 'M'
+}
+const getFileAdd = (f: unknown): number => {
+  const e = f as Record<string, unknown>
+  return (e.additions as number) ?? (e.a as number) ?? 0
+}
+const getFileDel = (f: unknown): number => {
+  const e = f as Record<string, unknown>
+  return (e.deletions as number) ?? (e.d as number) ?? 0
+}
+
+export function DiffExplorer({ commit, repoPath, commitFiles }: Props) {
+  const files: unknown[] = commitFiles ?? (commit ? commit.files : COMMITS[0].files)
+
+  const firstPath = files.length > 0 ? getFilePath(files[0]) : ''
+  const [selFile, setSelFile] = useState(firstPath)
   const [rawDiff, setRawDiff] = useState<string>('')
   const [loadingDiff, setLoadingDiff] = useState(false)
 
   useEffect(() => {
-    setSelFile(files[0]?.p || '')
-  }, [commit])
+    const list: unknown[] = commitFiles ?? (commit ? commit.files : COMMITS[0].files)
+    setSelFile(list.length > 0 ? getFilePath(list[0]) : '')
+  }, [commit, commitFiles])
 
   useEffect(() => {
-    if (!selFile || !repoPath) {
-      setRawDiff('')
+    if (!selFile) { setRawDiff(''); return }
+
+    if (repoPath && commit) {
+      setLoadingDiff(true)
+      window.gitAPI?.getCommitFileDiff(repoPath, commit.id, selFile)
+        .then(raw => setRawDiff(raw ?? ''))
+        .catch(() => setRawDiff(''))
+        .finally(() => setLoadingDiff(false))
       return
     }
-    setLoadingDiff(true)
-    window.gitAPI?.getDiff(repoPath, selFile)
-      .then(raw => setRawDiff(raw ?? ''))
-      .catch(() => setRawDiff(''))
-      .finally(() => setLoadingDiff(false))
-  }, [selFile, repoPath])
+
+    if (repoPath) {
+      setLoadingDiff(true)
+      window.gitAPI?.getDiff(repoPath, selFile)
+        .then(raw => setRawDiff(raw ?? ''))
+        .catch(() => setRawDiff(''))
+        .finally(() => setLoadingDiff(false))
+      return
+    }
+
+    setRawDiff('')
+  }, [selFile, repoPath, commit])
 
   const rows = useMemo(() => {
     if (!rawDiff) return []
@@ -43,7 +76,6 @@ export function DiffExplorer({ commit, repoPath }: Props) {
     return sideBySide(lines)
   }, [rawDiff])
 
-  // diff stats 계산
   const addCount = rows.filter(r => r.t === 'pair' && r.R !== null).length
   const delCount = rows.filter(r => r.t === 'pair' && r.L !== null).length
 
@@ -55,13 +87,19 @@ export function DiffExplorer({ commit, repoPath }: Props) {
           <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>{files.length}f</span>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
-          {files.map(f => (
-            <div key={f.p} className={`dex-fitem${selFile === f.p ? ' on' : ''}`} onClick={() => setSelFile(f.p)}>
-              <span className={`fst fst-${f.s}`}>{f.s}</span>
-              <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: selFile === f.p ? 'var(--c-text-strong)' : 'var(--c-text)' }}>{f.p.split('/').pop()}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, display: 'flex', gap: 3 }}><span className="fadd">+{f.a}</span><span className="fdel">−{f.d}</span></span>
-            </div>
-          ))}
+          {files.map((f, i) => {
+            const fp = getFilePath(f)
+            const fs = getFileStatus(f)
+            const fa = getFileAdd(f)
+            const fd = getFileDel(f)
+            return (
+              <div key={fp || i} className={`dex-fitem${selFile === fp ? ' on' : ''}`} onClick={() => setSelFile(fp)}>
+                <span className={`fst fst-${fs}`}>{fs}</span>
+                <span style={{ flex: 1, fontFamily: 'var(--font-mono)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: selFile === fp ? 'var(--c-text-strong)' : 'var(--c-text)' }}>{fp.split('/').pop()}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, display: 'flex', gap: 3 }}><span className="fadd">+{fa}</span><span className="fdel">−{fd}</span></span>
+              </div>
+            )
+          })}
         </div>
       </div>
       <div className="dex-main">

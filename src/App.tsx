@@ -24,6 +24,7 @@ import { PRView } from './components/PRView'
 import { StatusBar } from './components/StatusBar'
 import { NotificationStack } from './components/NotificationStack'
 import { ContextMenu } from './components/ContextMenu'
+import { BranchContextMenu, type BranchMenuAction } from './components/BranchContextMenu'
 import { CommandPalette } from './components/CommandPalette'
 import { MergeModal } from './components/modals/MergeModal'
 import { CherryPickModal } from './components/modals/CherryPickModal'
@@ -200,6 +201,7 @@ export default function App() {
   const [showConflict,   setShowConflict]   = useState(false)
   const [showCmd,        setShowCmd]        = useState(false)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; commit: Commit; idx: number } | null>(null)
+  const [branchCtxMenu, setBranchCtxMenu] = useState<{ x: number; y: number; name: string; type: 'local' | 'remote' | 'tag'; isCurrent: boolean } | null>(null)
 
   const { notifs, notify, dismiss } = useNotifications()
 
@@ -601,6 +603,29 @@ export default function App() {
 
   const handleBranchAction = useCallback((mode: BranchTab) => { setBranchTab(mode); setShowBranch(true) }, [])
 
+  const handleBranchCtxAction = useCallback((action: BranchMenuAction, name: string) => {
+    if (action === 'checkout') { handleBranchSwitch(name) }
+    else if (action === 'new-branch-from') { setBranchTab('create'); setShowBranch(true) }
+    else if (action === 'merge-into-current') { setShowMerge(true) }
+    else if (action === 'rebase-onto') { setShowMerge(true) }
+    else if (action === 'rename') { setBranchTab('rename'); setShowBranch(true) }
+    else if (action === 'delete') { setBranchTab('delete'); setShowBranch(true) }
+    else if (action === 'copy-name') {
+      navigator.clipboard?.writeText(name).catch(() => {})
+      notify('success', '복사됨', name)
+    }
+    else if (action === 'push' && repoPath) {
+      window.gitAPI?.push(repoPath)
+        .then(() => notify('success', 'Push 완료', name))
+        .catch(e => notify('error', 'Push 실패', e instanceof Error ? e.message : String(e)))
+    }
+    else if (action === 'pull' && repoPath) {
+      window.gitAPI?.pull(repoPath)
+        .then(() => { notify('success', 'Pull 완료', name); loadRepo(repoPath) })
+        .catch(e => notify('error', 'Pull 실패', e instanceof Error ? e.message : String(e)))
+    }
+  }, [handleBranchSwitch, repoPath, notify, loadRepo])
+
   const repo = repos[activeRepo] || null
   const displayBranch = repo?.branch || activeBranch
 
@@ -706,8 +731,11 @@ export default function App() {
           <>
             <BranchSidebar
               activeBranch={activeBranch}
-              onBranch={handleBranchSwitch}
               onBranchAction={handleBranchAction}
+              onBranchContextMenu={(e, name, type, isCurrent) => {
+                e.preventDefault()
+                setBranchCtxMenu({ x: e.clientX, y: e.clientY, name, type, isCurrent })
+              }}
               localBranches={realBranches.length > 0 ? realBranches : undefined}
               remoteBranches={realRemotes.length > 0 ? realRemotes : undefined}
               tags={realTags.length > 0 ? realTags : undefined}
@@ -888,6 +916,18 @@ export default function App() {
       />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}
+
+      {branchCtxMenu && (
+        <BranchContextMenu
+          x={branchCtxMenu.x}
+          y={branchCtxMenu.y}
+          branchName={branchCtxMenu.name}
+          branchType={branchCtxMenu.type}
+          isCurrent={branchCtxMenu.isCurrent}
+          onClose={() => setBranchCtxMenu(null)}
+          onAction={(action, name) => { handleBranchCtxAction(action, name); setBranchCtxMenu(null) }}
+        />
+      )}
 
       {showCmd && <CommandPalette onClose={() => setShowCmd(false)} onAction={handleCommand} />}
     </div>
