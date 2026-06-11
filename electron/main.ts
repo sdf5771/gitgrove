@@ -50,6 +50,13 @@ interface GitStatusResult {
   unstaged: Array<{ path: string; status: string }>
 }
 
+interface GitFileEntry {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R'  // Modified / Added / Deleted / Renamed
+  additions: number
+  deletions: number
+}
+
 // ──────────────────────────────────────────────
 // 유틸리티: 상대 시간 변환
 // ──────────────────────────────────────────────
@@ -288,6 +295,57 @@ ipcMain.handle('git:diff', async (_event, repoPath: string, filePath: string): P
   // unstaged diff 시도
   const unstagedDiff = await git.diff(['--', filePath])
   return unstagedDiff
+})
+
+// git:files — 특정 커밋의 변경 파일 목록 조회
+ipcMain.handle('git:files', async (_event, repoPath: string, commitHash: string): Promise<GitFileEntry[]> => {
+  const git = simpleGit(repoPath)
+
+  const [numstatRaw, namestatRaw] = await Promise.all([
+    git.raw(['diff-tree', '--no-commit-id', '-r', '--numstat', commitHash]),
+    git.raw(['diff-tree', '--no-commit-id', '-r', '--name-status', commitHash]),
+  ])
+
+  // path → status 맵 구성
+  const statusMap = new Map<string, 'M' | 'A' | 'D' | 'R'>()
+  namestatRaw.trim().split('\n').filter(l => l.trim()).forEach(line => {
+    const parts = line.split('\t')
+    const statusChar = parts[0]?.[0] ?? 'M'
+    const filePath = parts[1] || ''
+    const s: 'M' | 'A' | 'D' | 'R' =
+      statusChar === 'A' ? 'A' :
+      statusChar === 'D' ? 'D' :
+      statusChar === 'R' ? 'R' : 'M'
+    statusMap.set(filePath, s)
+  })
+
+  return numstatRaw.trim().split('\n').filter(l => l.trim()).map(line => {
+    const [addStr, delStr, filePath] = line.split('\t')
+    return {
+      path: filePath || '',
+      status: statusMap.get(filePath || '') ?? 'M',
+      additions: parseInt(addStr) || 0,
+      deletions: parseInt(delStr) || 0,
+    }
+  })
+})
+
+// git:stage — 파일 staged 처리 (git add)
+ipcMain.handle('git:stage', async (_event, repoPath: string, files: string[]): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.add(files)
+})
+
+// git:unstage — 파일 unstaged 처리 (git restore --staged)
+ipcMain.handle('git:unstage', async (_event, repoPath: string, files: string[]): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['restore', '--staged', ...files])
+})
+
+// git:commit — 커밋 생성 (git commit -m)
+ipcMain.handle('git:commit', async (_event, repoPath: string, message: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.commit(message)
 })
 
 // ──────────────────────────────────────────────

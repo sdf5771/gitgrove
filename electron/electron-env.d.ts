@@ -48,6 +48,13 @@ interface GitStatusResult {
   unstaged: Array<{ path: string; status: string }>
 }
 
+interface GitFileEntry {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R'  // Modified / Added / Deleted / Renamed
+  additions: number
+  deletions: number
+}
+
 // ──────────────────────────────────────────────
 // Window 타입 보강
 // ──────────────────────────────────────────────
@@ -60,5 +67,9 @@ interface Window {
     getBranches: (repoPath: string) => Promise<GitBranchResult>
     getStatus: (repoPath: string) => Promise<GitStatusResult>
     getDiff: (repoPath: string, filePath: string) => Promise<string>
+    getFiles: (repoPath: string, commitHash: string) => Promise<GitFileEntry[]>
+    stage: (repoPath: string, files: string[]) => Promise<void>
+    unstage: (repoPath: string, files: string[]) => Promise<void>
+    commit: (repoPath: string, message: string) => Promise<void>
   }
 }

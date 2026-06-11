@@ -27,4 +27,8 @@ contextBridge.exposeInMainWorld('gitAPI', {
   getBranches: (repoPath: string) => ipcRenderer.invoke('git:branches', repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke('git:status', repoPath),
   getDiff: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:diff', repoPath, filePath),
+  getFiles: (repoPath: string, commitHash: string) => ipcRenderer.invoke('git:files', repoPath, commitHash),
+  stage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:stage', repoPath, files),
+  unstage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:unstage', repoPath, files),
+  commit: (repoPath: string, message: string) => ipcRenderer.invoke('git:commit', repoPath, message),
 })

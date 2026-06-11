@@ -4,11 +4,13 @@ import { FilePath } from './FilePath'
 
 interface Props {
   onSelDiffFile: (f: FileEntry) => void
+  initialUnstaged?: FileEntry[]
+  initialStaged?: FileEntry[]
 }
 
-export function StageArea({ onSelDiffFile }: Props) {
-  const [unstaged, setUnstaged] = useState<FileEntry[]>(INIT_UNSTAGED)
-  const [staged, setStaged] = useState<FileEntry[]>(INIT_STAGED)
+export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged }: Props) {
+  const [unstaged, setUnstaged] = useState<FileEntry[]>(initialUnstaged ?? INIT_UNSTAGED)
+  const [staged, setStaged] = useState<FileEntry[]>(initialStaged ?? INIT_STAGED)
   const [selU, setSelU] = useState<number | null>(null)
   const [selS, setSelS] = useState<number>(0)
   const [msg, setMsg] = useState('')
