@@ -20,7 +20,7 @@ function CommitGraphSVG({ commits, selectedIdx, rowH, activeBranch }: { commits:
         if (rpi >= commits.length) return
         const p = commits[rpi]
         if (!p) return
-        const color = LANE_COLORS[Math.max(c.lane, p.lane)]
+        const color = LANE_COLORS[Math.max(c.lane, p.lane) % LANE_COLORS.length]
         const x1 = cx(c.lane), y1 = ri * rowH + rowH / 2 + DR + 1
         const x2 = cx(p.lane), y2 = rpi * rowH + rowH / 2 - DR - 1
         let d: string
@@ -39,7 +39,7 @@ function CommitGraphSVG({ commits, selectedIdx, rowH, activeBranch }: { commits:
           opacity={laneOp(l1, l2)} style={{ transition: 'opacity 280ms ease' }} />
       ))}
       {commits.map((c, i) => {
-        const sel = i === selectedIdx, lc = LANE_COLORS[c.lane], isMerge = c.parents.length >= 2
+        const sel = i === selectedIdx, lc = LANE_COLORS[c.lane % LANE_COLORS.length], isMerge = c.parents.length >= 2
         const cxv = cx(c.lane), cyv = i * rowH + rowH / 2
         return (
           <g key={c.id} style={{ opacity: dotOp(c.lane), transition: 'opacity 280ms ease' }}>
