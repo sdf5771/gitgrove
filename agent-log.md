@@ -242,3 +242,4 @@ Backend가 IPC 채널을 먼저 정의하고 `agent-log.md`에 기록하면 Fron
 | 2026-06-11 | Backend: `simple-git` IPC 레이어 구현 완료 (feat/real-git-ipc) — 5개 채널 (open-dialog, log, branches, status, diff) |
 | 2026-06-11 | Backend: 쓰기 연산 IPC 채널 4개 추가 (feat/git-write-ops) — git:files, git:stage, git:unstage, git:commit |
 | 2026-06-11 | Frontend: 목업 데이터 → real IPC 연동 완료 (feat/real-git-frontend) — App.tsx loadRepo(), BranchSidebar props, StageArea props, AddRepoModal onOpenPath/Browse 연동 |
+| 2026-06-11 | Frontend: IPC 와이어링 3곳 완료 (feat/ipc-wiring) — CommitDetail 파일 목록(git:files), StageArea stage/unstage/commit IPC 연결, DiffPanel raw diff 파싱 및 표시 |

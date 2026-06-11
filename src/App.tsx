@@ -126,6 +126,14 @@ export default function App() {
   const [realUnstaged, setRealUnstaged] = useState<FileEntry[]>([])
   const [realStaged, setRealStaged] = useState<FileEntry[]>([])
 
+  // ── 커밋 파일 목록 (git:files IPC) ──
+  const [commitFiles, setCommitFiles] = useState<GitFileEntry[]>([])
+  const [loadingFiles, setLoadingFiles] = useState(false)
+
+  // ── diff 내용 (git:diff IPC) ──
+  const [diffContent, setDiffContent] = useState<string>('')
+  const [loadingDiff, setLoadingDiff] = useState(false)
+
   // ── UI 상태 ──
   const [view, setView] = useState<View>('history')
   const [selIdx, setSelIdx] = useState(0)
@@ -209,6 +217,22 @@ export default function App() {
     if (picked) await loadRepo(picked)
   }, [loadRepo])
 
+  // ── 파일 선택 시 diff 로드 (git:diff) ──
+  const handleSelDiffFile = useCallback(async (f: FileEntry) => {
+    setDiffFile(f)
+    if (!repoPath) return
+    setLoadingDiff(true)
+    try {
+      const raw = await window.gitAPI?.getDiff(repoPath, f.p) ?? ''
+      setDiffContent(raw)
+    } catch (e) {
+      console.error('getDiff failed:', e)
+      setDiffContent('')
+    } finally {
+      setLoadingDiff(false)
+    }
+  }, [repoPath])
+
   // ── 표시할 커밋 목록 결정 ──
   const baseCommits = repoPath ? realCommits : COMMITS
 
@@ -220,6 +244,24 @@ export default function App() {
       c.id.toLowerCase().includes(q) || c.files.some(f => f.p.toLowerCase().includes(q))
     ).map(c => ({ ...c, _q: searchQuery }))
   }, [searchQuery, baseCommits])
+
+  // ── 커밋 선택 시 파일 목록 로드 (git:files) ──
+  const handleSelectCommit = useCallback(async (idx: number) => {
+    setSelIdx(idx)
+    const commit = filteredCommits[idx]
+    if (!commit || !repoPath) return
+
+    setLoadingFiles(true)
+    try {
+      const files = await window.gitAPI?.getFiles(repoPath, commit.id) ?? []
+      setCommitFiles(files)
+    } catch (e) {
+      console.error('getFiles failed:', e)
+      setCommitFiles([])
+    } finally {
+      setLoadingFiles(false)
+    }
+  }, [filteredCommits, repoPath])
 
   useEffect(() => { if (selIdx >= filteredCommits.length) setSelIdx(Math.max(0, filteredCommits.length - 1)) }, [filteredCommits, selIdx])
   const selectedCommit = filteredCommits[selIdx] ?? null
@@ -391,7 +433,14 @@ export default function App() {
                 <BlameView onSelectCommit={i => { setSelIdx(i); setView('history') }} />
                 <div className="rpanel">
                   <div className="pnl-hdr"><h3>Commit Detail</h3></div>
-                  <CommitDetail commit={selectedCommit} onOpenDiff={() => setView('diff')} onCherryPick={() => setShowCherryPick(true)} onBlame={() => setView('blame')} />
+                  <CommitDetail
+                    commit={selectedCommit}
+                    files={repoPath ? commitFiles : undefined}
+                    loadingFiles={loadingFiles}
+                    onOpenDiff={() => setView('diff')}
+                    onCherryPick={() => setShowCherryPick(true)}
+                    onBlame={() => setView('blame')}
+                  />
                 </div>
               </>
             ) : view === 'diff' ? (
@@ -412,7 +461,7 @@ export default function App() {
                       <CommitGraph
                         commits={filteredCommits}
                         selectedIdx={selIdx}
-                        onSelect={setSelIdx}
+                        onSelect={handleSelectCommit}
                         onContextMenu={(e, c, i) => setCtxMenu({ x: e.clientX, y: e.clientY, commit: c, idx: i })}
                         showStats={true}
                         rowH={44}
@@ -421,9 +470,16 @@ export default function App() {
                     </>
                   ) : (
                     <StageArea
-                      onSelDiffFile={setDiffFile}
+                      onSelDiffFile={handleSelDiffFile}
                       initialUnstaged={realUnstaged.length > 0 || realStaged.length > 0 ? realUnstaged : undefined}
                       initialStaged={realUnstaged.length > 0 || realStaged.length > 0 ? realStaged : undefined}
+                      repoPath={repoPath}
+                      onCommitDone={async () => {
+                        if (repoPath) {
+                          await loadRepo(repoPath)
+                          notify('success', 'Committed', '변경사항이 커밋되었습니다')
+                        }
+                      }}
                     />
                   )}
                 </div>
@@ -440,10 +496,21 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                      <CommitDetail commit={selectedCommit} onOpenDiff={() => setView('diff')} onCherryPick={() => setShowCherryPick(true)} onBlame={() => setView('blame')} />
+                      <CommitDetail
+                        commit={selectedCommit}
+                        files={repoPath ? commitFiles : undefined}
+                        loadingFiles={loadingFiles}
+                        onOpenDiff={() => setView('diff')}
+                        onCherryPick={() => setShowCherryPick(true)}
+                        onBlame={() => setView('blame')}
+                      />
                     </>
                   ) : (
-                    <DiffPanel file={diffFile} />
+                    <DiffPanel
+                      file={diffFile}
+                      rawDiff={repoPath ? diffContent : undefined}
+                      loading={loadingDiff}
+                    />
                   )}
                 </div>
               </>

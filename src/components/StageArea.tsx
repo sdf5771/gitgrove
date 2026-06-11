@@ -6,26 +6,89 @@ interface Props {
   onSelDiffFile: (f: FileEntry) => void
   initialUnstaged?: FileEntry[]
   initialStaged?: FileEntry[]
+  repoPath?: string | null      // 실제 IPC 호출에 사용
+  onCommitDone?: () => void     // 커밋 완료 후 콜백 (상태 새로고침)
 }
 
-export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged }: Props) {
+export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoPath, onCommitDone }: Props) {
   const [unstaged, setUnstaged] = useState<FileEntry[]>(initialUnstaged ?? INIT_UNSTAGED)
   const [staged, setStaged] = useState<FileEntry[]>(initialStaged ?? INIT_STAGED)
   const [selU, setSelU] = useState<number | null>(null)
   const [selS, setSelS] = useState<number>(0)
   const [msg, setMsg] = useState('')
+  const [committing, setCommitting] = useState(false)
 
-  const stageFile = (f: FileEntry) => {
+  const stageFile = async (f: FileEntry) => {
+    if (repoPath) {
+      try {
+        await window.gitAPI?.stage(repoPath, [f.p])
+      } catch (e) {
+        console.error('stage failed:', e)
+        return
+      }
+    }
     setUnstaged(p => p.filter(x => x.p !== f.p))
     setStaged(p => [...p, f])
     setSelS(staged.length)
     onSelDiffFile(f)
   }
 
-  const unstageFile = (f: FileEntry) => {
+  const unstageFile = async (f: FileEntry) => {
+    if (repoPath) {
+      try {
+        await window.gitAPI?.unstage(repoPath, [f.p])
+      } catch (e) {
+        console.error('unstage failed:', e)
+        return
+      }
+    }
     setStaged(p => p.filter(x => x.p !== f.p))
     setUnstaged(p => [...p, f])
     onSelDiffFile(f)
+  }
+
+  const stageAll = async () => {
+    if (repoPath && unstaged.length > 0) {
+      try {
+        await window.gitAPI?.stage(repoPath, unstaged.map(f => f.p))
+      } catch (e) {
+        console.error('stage all failed:', e)
+        return
+      }
+    }
+    setStaged(p => [...p, ...unstaged])
+    setUnstaged([])
+  }
+
+  const unstageAll = async () => {
+    if (repoPath && staged.length > 0) {
+      try {
+        await window.gitAPI?.unstage(repoPath, staged.map(f => f.p))
+      } catch (e) {
+        console.error('unstage all failed:', e)
+        return
+      }
+    }
+    setUnstaged(p => [...p, ...staged])
+    setStaged([])
+  }
+
+  const handleCommit = async () => {
+    if (!msg.trim() || staged.length === 0) return
+    setCommitting(true)
+    try {
+      if (repoPath) {
+        await window.gitAPI?.commit(repoPath, msg)
+      }
+      setMsg('')
+      setStaged([])
+      setUnstaged([])
+      onCommitDone?.()
+    } catch (e) {
+      console.error('commit failed:', e)
+    } finally {
+      setCommitting(false)
+    }
   }
 
   return (
@@ -36,7 +99,7 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged }: Pro
           <div className="scol-hdr">
             <span className="scol-ttl">Unstaged</span>
             <span className="scnt">{unstaged.length}</span>
-            <button className="sallbtn" onClick={() => { setStaged(p => [...p, ...unstaged]); setUnstaged([]) }}>
+            <button className="sallbtn" onClick={stageAll}>
               Stage All
             </button>
           </div>
@@ -69,7 +132,7 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged }: Pro
           <div className="scol-hdr">
             <span className="scol-ttl">Staged</span>
             <span className="scnt">{staged.length}</span>
-            <button className="sallbtn" onClick={() => { setUnstaged(p => [...p, ...staged]); setStaged([]) }}>
+            <button className="sallbtn" onClick={unstageAll}>
               Unstage All
             </button>
           </div>
@@ -111,9 +174,12 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged }: Pro
           <button className="amnd">↩ Amend</button>
           <button
             className="cmt-btn"
-            disabled={staged.length === 0 || !msg.trim()}
+            disabled={staged.length === 0 || !msg.trim() || committing}
+            onClick={handleCommit}
           >
-            Commit {staged.length} {staged.length === 1 ? 'file' : 'files'} →
+            {committing
+              ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Committing…</span>
+              : `Commit ${staged.length} ${staged.length === 1 ? 'file' : 'files'} →`}
           </button>
         </div>
       </div>

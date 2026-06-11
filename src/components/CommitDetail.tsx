@@ -4,12 +4,14 @@ import { FilePath } from './FilePath'
 
 interface Props {
   commit: Commit | null
+  files?: GitFileEntry[]       // 실제 파일 목록 (IPC로 로드)
+  loadingFiles?: boolean       // 파일 로딩 중 여부
   onOpenDiff: () => void
   onCherryPick: () => void
   onBlame: () => void
 }
 
-export function CommitDetail({ commit, onOpenDiff, onCherryPick, onBlame }: Props) {
+export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherryPick, onBlame }: Props) {
   const [selFile, setSelFile] = useState(0)
   useEffect(() => setSelFile(0), [commit])
 
@@ -21,6 +23,10 @@ export function CommitDetail({ commit, onOpenDiff, onCherryPick, onBlame }: Prop
       </div>
     )
   }
+
+  // 실제 파일 목록이 있으면 사용, 없으면 mock 데이터 (commit.files) 사용
+  const hasRealFiles = files !== undefined
+  const fileCount = hasRealFiles ? (files?.length ?? 0) : commit.stats.f
 
   const btnStyle: React.CSSProperties = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '5px 6px', background: 'var(--c-bg-elevated)', border: '1px solid var(--c-border)', borderRadius: 'var(--r2)', color: 'var(--c-text)', fontSize: 11, fontFamily: 'var(--font-body)', cursor: 'pointer', transition: 'border-color 120ms,color 120ms' }
 
@@ -43,18 +49,40 @@ export function CommitDetail({ commit, onOpenDiff, onCherryPick, onBlame }: Prop
       <div className="divl" />
       <div>
         <div className="flhdr">
-          <span>Changes · {commit.stats.f}f</span>
+          <span>Changes · {fileCount}f</span>
           <span><span className="fadd">+{commit.stats.a}</span>&nbsp;<span className="fdel">−{commit.stats.d}</span></span>
         </div>
-        <div className="fl">
-          {commit.files.map((f, i) => (
-            <div key={f.p} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => setSelFile(i)}>
-              <span className={`fst fst-${f.s}`}>{f.s}</span>
-              <FilePath path={f.p} />
-              <span className="fstats"><span className="fadd">+{f.a}</span><span className="fdel">−{f.d}</span></span>
-            </div>
-          ))}
-        </div>
+        {loadingFiles ? (
+          <div style={{ color: 'var(--c-text-faint)', fontSize: 12, textAlign: 'center', padding: '12px 0' }}>
+            <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+          </div>
+        ) : hasRealFiles ? (
+          <div className="fl">
+            {(files ?? []).map((f, i) => (
+              <div key={f.path} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => setSelFile(i)}>
+                <span className={`fst fst-${f.status}`}>{f.status}</span>
+                <FilePath path={f.path} />
+                <span className="fstats">
+                  <span className="fadd">+{f.additions}</span>
+                  <span className="fdel">−{f.deletions}</span>
+                </span>
+              </div>
+            ))}
+            {(files?.length ?? 0) === 0 && !loadingFiles && (
+              <div style={{ color: 'var(--c-text-faint)', fontSize: 11, padding: '8px 0' }}>파일 없음</div>
+            )}
+          </div>
+        ) : (
+          <div className="fl">
+            {commit.files.map((f, i) => (
+              <div key={f.p} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => setSelFile(i)}>
+                <span className={`fst fst-${f.s}`}>{f.s}</span>
+                <FilePath path={f.p} />
+                <span className="fstats"><span className="fadd">+{f.a}</span><span className="fdel">−{f.d}</span></span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div className="divl" />
       <div style={{ display: 'flex', gap: 5 }}>
