@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import simpleGit from 'simple-git'
 
+// macOS GPU 프로세스 크래시 억제
+app.commandLine.appendSwitch('disable-gpu-sandbox')
+app.commandLine.appendSwitch('no-sandbox')
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // The built directory structure
