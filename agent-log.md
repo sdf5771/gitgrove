@@ -104,10 +104,19 @@ src/
 | `git:stage` | `stage(repoPath, files)` | `repoPath: string, files: string[]` | `Promise<void>` |
 | `git:unstage` | `unstage(repoPath, files)` | `repoPath: string, files: string[]` | `Promise<void>` |
 | `git:commit` | `commit(repoPath, message)` | `repoPath: string, message: string` | `Promise<void>` |
+| `git:pull` | `pull(repoPath)` | `repoPath: string` | `Promise<GitRemoteResult>` |
+| `git:push` | `push(repoPath)` | `repoPath: string` | `Promise<GitRemoteResult>` |
+| `git:fetch` | `fetch(repoPath)` | `repoPath: string` | `Promise<GitRemoteResult>` |
+| `git:checkout` | `checkout(repoPath, branch)` | `repoPath: string, branch: string` | `Promise<void>` |
 
 ### 공유 타입 (electron/electron-env.d.ts에 전역 선언)
 
 ```typescript
+interface GitRemoteResult {
+  success: boolean
+  summary: string  // "Fast-forward: N file(s) changed" | "Already up to date" | "Pushed to remote" | "Fetched from remote"
+}
+
 interface GitCommit {
   id: string        // short hash (7자)
   fullId: string    // full hash
@@ -243,3 +252,4 @@ Backend가 IPC 채널을 먼저 정의하고 `agent-log.md`에 기록하면 Fron
 | 2026-06-11 | Backend: 쓰기 연산 IPC 채널 4개 추가 (feat/git-write-ops) — git:files, git:stage, git:unstage, git:commit |
 | 2026-06-11 | Frontend: 목업 데이터 → real IPC 연동 완료 (feat/real-git-frontend) — App.tsx loadRepo(), BranchSidebar props, StageArea props, AddRepoModal onOpenPath/Browse 연동 |
 | 2026-06-11 | Frontend: IPC 와이어링 3곳 완료 (feat/ipc-wiring) — CommitDetail 파일 목록(git:files), StageArea stage/unstage/commit IPC 연결, DiffPanel raw diff 파싱 및 표시 |
+| 2026-06-11 | Backend: 원격 연산 + 브랜치 체크아웃 IPC 채널 4개 추가 (feat/remote-ops, PR #6) — git:pull, git:push, git:fetch, git:checkout |
