@@ -253,3 +253,4 @@ Backend가 IPC 채널을 먼저 정의하고 `agent-log.md`에 기록하면 Fron
 | 2026-06-11 | Frontend: 목업 데이터 → real IPC 연동 완료 (feat/real-git-frontend) — App.tsx loadRepo(), BranchSidebar props, StageArea props, AddRepoModal onOpenPath/Browse 연동 |
 | 2026-06-11 | Frontend: IPC 와이어링 3곳 완료 (feat/ipc-wiring) — CommitDetail 파일 목록(git:files), StageArea stage/unstage/commit IPC 연결, DiffPanel raw diff 파싱 및 표시 |
 | 2026-06-11 | Backend: 원격 연산 + 브랜치 체크아웃 IPC 채널 4개 추가 (feat/remote-ops, PR #6) — git:pull, git:push, git:fetch, git:checkout |
+| 2026-06-11 | Frontend: 툴바 Pull/Push/Fetch IPC 연결, 브랜치 체크아웃 IPC 연결, 윈도우 포커스 자동 새로고침 추가 (feat/frontend-remote-ops) |

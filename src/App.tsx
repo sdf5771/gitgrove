@@ -156,9 +156,12 @@ export default function App() {
 
   const { notifs, notify, dismiss } = useNotifications()
 
+  // ── 원격 연산 로딩 상태 ──
+  const [remoteOp, setRemoteOp] = useState<'pull' | 'push' | 'fetch' | null>(null)
+
   // ── git 데이터 로드 ──
-  const loadRepo = useCallback(async (path: string) => {
-    setIsLoading(true)
+  const loadRepo = useCallback(async (path: string, silent = false) => {
+    if (!silent) setIsLoading(true)
     setLoadError(null)
     try {
       const [gitCommits, gitBranches, gitStatus] = await Promise.all([
@@ -208,7 +211,7 @@ export default function App() {
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
-      setIsLoading(false)
+      if (!silent) setIsLoading(false)
     }
   }, [repos])
 
@@ -216,6 +219,70 @@ export default function App() {
     const picked = await window.gitAPI?.openDialog()
     if (picked) await loadRepo(picked)
   }, [loadRepo])
+
+  // ── 원격 연산 핸들러 ──
+  const handlePull = useCallback(async () => {
+    if (!repoPath || remoteOp) return
+    setRemoteOp('pull')
+    try {
+      const result = await window.gitAPI?.pull(repoPath)
+      notify('success', 'Pull 완료', result?.summary ?? '')
+      await loadRepo(repoPath)
+    } catch (err) {
+      notify('error', 'Pull 실패', err instanceof Error ? err.message : String(err))
+    } finally {
+      setRemoteOp(null)
+    }
+  }, [repoPath, remoteOp, loadRepo, notify])
+
+  const handlePush = useCallback(async () => {
+    if (!repoPath || remoteOp) return
+    setRemoteOp('push')
+    try {
+      const result = await window.gitAPI?.push(repoPath)
+      notify('success', 'Push 완료', result?.summary ?? '')
+    } catch (err) {
+      notify('error', 'Push 실패', err instanceof Error ? err.message : String(err))
+    } finally {
+      setRemoteOp(null)
+    }
+  }, [repoPath, remoteOp, notify])
+
+  const handleFetch = useCallback(async () => {
+    if (!repoPath || remoteOp) return
+    setRemoteOp('fetch')
+    try {
+      const result = await window.gitAPI?.fetch(repoPath)
+      notify('info', 'Fetch 완료', result?.summary ?? '')
+      await loadRepo(repoPath)
+    } catch (err) {
+      notify('error', 'Fetch 실패', err instanceof Error ? err.message : String(err))
+    } finally {
+      setRemoteOp(null)
+    }
+  }, [repoPath, remoteOp, loadRepo, notify])
+
+  // ── 브랜치 체크아웃 핸들러 ──
+  const handleBranchSwitch = useCallback(async (name: string) => {
+    if (!repoPath || name === activeBranch) return
+    try {
+      await window.gitAPI?.checkout(repoPath, name)
+      setActiveBranch(name)
+      await loadRepo(repoPath)
+      notify('success', `Switched to ${name}`, '')
+    } catch (err) {
+      notify('error', 'Checkout 실패', err instanceof Error ? err.message : String(err))
+    }
+  }, [repoPath, activeBranch, loadRepo, notify])
+
+  // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
+  useEffect(() => {
+    const handleFocus = () => {
+      if (repoPath) loadRepo(repoPath, true)
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [repoPath, loadRepo])
 
   // ── 파일 선택 시 diff 로드 (git:diff) ──
   const handleSelDiffFile = useCallback(async (f: FileEntry) => {
@@ -293,9 +360,9 @@ export default function App() {
 
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
-      'pull':          () => notify('success', 'Pulled successfully', 'Fast-forward: 3 new commits from origin/main'),
-      'push':          () => notify('success', 'Pushed to origin/main', '2 commits pushed'),
-      'fetch':         () => notify('info', 'Fetching…', 'Checking all remotes'),
+      'pull':          () => void handlePull(),
+      'push':          () => void handlePush(),
+      'fetch':         () => void handleFetch(),
       'merge':         () => setShowMerge(true),
       'stash':         () => setShowStash(true),
       'cherry':        () => setShowCherryPick(true),
@@ -310,7 +377,7 @@ export default function App() {
       'settings':      () => setShowSettings(true),
     }
     M[id]?.()
-  }, [notify])
+  }, [notify, handlePull, handlePush, handleFetch])
 
   const handleCtxAction = useCallback((action: string) => {
     if (action === 'cherry-pick') setShowCherryPick(true)
@@ -377,9 +444,21 @@ export default function App() {
 
       {/* Action bar */}
       <div className="action-bar">
-        <button className="abt" onClick={() => notify('success', 'Pulled', 'Fast-forward: 3 new commits')}><span style={{ fontSize: 14, lineHeight: 1 }}>↓</span>Pull</button>
-        <button className="abt" onClick={() => notify('success', 'Pushed', '2 commits → origin/main')}><span style={{ fontSize: 14, lineHeight: 1 }}>↑</span>Push</button>
-        <button className="abt" onClick={() => notify('info', 'Fetching…', 'Checking origin, upstream')}><span style={{ fontSize: 14, lineHeight: 1 }}>⟳</span>Fetch</button>
+        <button className="abt" onClick={handlePull} disabled={!repoPath || !!remoteOp} style={remoteOp === 'pull' ? { opacity: .6 } : {}}>
+          {remoteOp === 'pull'
+            ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+            : <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span>}Pull
+        </button>
+        <button className="abt" onClick={handlePush} disabled={!repoPath || !!remoteOp} style={remoteOp === 'push' ? { opacity: .6 } : {}}>
+          {remoteOp === 'push'
+            ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+            : <span style={{ fontSize: 14, lineHeight: 1 }}>↑</span>}Push
+        </button>
+        <button className="abt" onClick={handleFetch} disabled={!repoPath || !!remoteOp} style={remoteOp === 'fetch' ? { opacity: .6 } : {}}>
+          {remoteOp === 'fetch'
+            ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+            : <span style={{ fontSize: 14, lineHeight: 1 }}>⟳</span>}Fetch
+        </button>
         <div className="abt-sep" />
         <button className="abt" onClick={() => { setBranchTab('create'); setShowBranch(true) }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>Branch
@@ -419,7 +498,7 @@ export default function App() {
           <>
             <BranchSidebar
               activeBranch={activeBranch}
-              onBranch={setActiveBranch}
+              onBranch={handleBranchSwitch}
               onBranchAction={handleBranchAction}
               localBranches={realBranches.length > 0 ? realBranches : undefined}
               remoteBranches={realRemotes.length > 0 ? realRemotes : undefined}
