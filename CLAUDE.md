@@ -1,1 +1,0 @@
-/Users/gimseob-u/Documents/GitHub/my-agents/CLAUDE.md
