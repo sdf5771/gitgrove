@@ -74,6 +74,18 @@ interface GitRemoteInfo {
   url: string    // "git@github.com:user/repo.git" 또는 "https://github.com/user/repo.git"
 }
 
+interface GitConfigResult {
+  name: string
+  email: string
+  defaultBranch: string
+}
+
+interface GitStashEntry {
+  index: number
+  message: string
+  branch: string
+}
+
 // ──────────────────────────────────────────────
 // Window 타입 보강
 // ──────────────────────────────────────────────
@@ -96,5 +108,12 @@ interface Window {
     checkout: (repoPath: string, branch: string) => Promise<void>
     blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
     getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>
+    getConfig: (repoPath: string) => Promise<GitConfigResult>
+    setConfig: (repoPath: string, cfg: Partial<GitConfigResult>) => Promise<void>
+    createTag: (repoPath: string, tagName: string, commitHash: string) => Promise<void>
+    stashApply: (repoPath: string, index: number) => Promise<void>
+    stashDrop: (repoPath: string, index: number) => Promise<void>
+    stashList: (repoPath: string) => Promise<GitStashEntry[]>
+    stashPush: (repoPath: string, message?: string) => Promise<void>
   }
 }
