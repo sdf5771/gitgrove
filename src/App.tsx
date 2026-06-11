@@ -1,11 +1,4 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-
-// ──────────────────────────────────────────────
-// localStorage 키
-// ──────────────────────────────────────────────
-const STORAGE_KEYS = {
-  rpanelWidth: 'gitgrove:rpanelWidth',
-} as const
 import './App.css'
 import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
 
@@ -13,6 +6,7 @@ import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type
 // localStorage 키 상수
 // ──────────────────────────────────────────────
 const STORAGE_KEYS = {
+  rpanelWidth: 'gitgrove:rpanelWidth',
   repos: 'gitgrove:repos',
   lastRepoPath: 'gitgrove:lastRepoPath',
   sidebarWidth: 'gitgrove:sidebarWidth',
@@ -651,7 +645,7 @@ export default function App() {
             />
 
             {view === 'pr' ? (
-              <PRView onOpenConflict={() => setShowConflict(true)} />
+              <PRView onOpenConflict={() => setShowConflict(true)} repoPath={repoPath} />
             ) : view === 'blame' ? (
               <>
                 <BlameView

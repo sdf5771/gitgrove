@@ -1,6 +1,8 @@
 import { useState } from 'react'
 
-type SettingsTab = 'git' | 'appearance' | 'remotes'
+type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github'
+
+const GITHUB_TOKEN_KEY = 'gitgrove:githubToken'
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<SettingsTab>('git')
@@ -11,7 +13,15 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
   ])
   const [newRemote, setNewRemote] = useState({ n: '', url: '' })
   const [saved, setSaved] = useState(false)
-  const save = () => { setSaved(true); setTimeout(() => setSaved(false), 1600) }
+  const [githubToken, setGithubToken] = useState(() => {
+    try { return localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { return '' }
+  })
+  const [showToken, setShowToken] = useState(false)
+  const save = () => {
+    try { localStorage.setItem(GITHUB_TOKEN_KEY, githubToken) } catch {}
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1600)
+  }
   const upCfg = (k: keyof typeof cfg) => (v: string | boolean) => setCfg(p => ({ ...p, [k]: v }))
 
   return (
@@ -24,7 +34,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           <button className="modal-close" style={{ marginLeft: 'auto' }} onClick={onClose}>×</button>
         </div>
         <div className="sett-tabs">
-          {([['git', 'Git Config'], ['appearance', 'Appearance'], ['remotes', 'Remotes']] as const).map(([id, label]) => (
+          {([['git', 'Git Config'], ['appearance', 'Appearance'], ['remotes', 'Remotes'], ['github', 'GitHub']] as const).map(([id, label]) => (
             <button key={id} className={`sett-tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)}>{label}</button>
           ))}
         </div>
@@ -93,6 +103,43 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
                 </button>
               </div>
             </>
+          )}
+          {tab === 'github' && (
+            <div className="sett-section">
+              <div className="sett-sec-ttl">Personal Access Token</div>
+              <div className="sett-field">
+                <div className="sett-lbl">Token</div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="sett-inp"
+                    type={showToken ? 'text' : 'password'}
+                    value={githubToken}
+                    onChange={e => setGithubToken(e.target.value)}
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    style={{ fontFamily: 'var(--font-mono)', paddingRight: 36 }}
+                  />
+                  <button
+                    onClick={() => setShowToken(v => !v)}
+                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: 13, padding: 0 }}
+                  >
+                    {showToken ? '🙈' : '👁'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.4 }}>
+                  PR 뷰에서 실제 Pull Request를 조회하는 데 사용됩니다.
+                  <br />
+                  <span style={{ color: 'var(--c-info)' }}>repo</span> 권한이 필요합니다.
+                </div>
+              </div>
+              <div className="sett-section">
+                <div className="sett-sec-ttl">토큰 생성 방법</div>
+                <div style={{ fontSize: 11, color: 'var(--c-text-muted)', lineHeight: 1.6 }}>
+                  1. GitHub → Settings → Developer settings<br />
+                  2. Personal access tokens → Tokens (classic)<br />
+                  3. Generate new token → <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--c-bg-inset)', padding: '1px 4px', borderRadius: 2 }}>repo</code> 권한 선택
+                </div>
+              </div>
+            </div>
           )}
         </div>
         <div className="sett-footer">
