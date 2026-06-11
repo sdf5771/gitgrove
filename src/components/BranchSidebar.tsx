@@ -10,9 +10,10 @@ interface Props {
   localBranches?: Branch[]
   remoteBranches?: string[]
   tags?: string[]
+  style?: React.CSSProperties
 }
 
-export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBranches, remoteBranches, tags }: Props) {
+export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBranches, remoteBranches, tags, style }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const toggle = (k: string) => setCollapsed(p => ({ ...p, [k]: !p[k] }))
 
@@ -21,7 +22,7 @@ export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBra
   const tagList = tags ?? ['v1.0.0', 'v0.9.2']
 
   return (
-    <div className="bsidebar">
+    <div className="bsidebar" style={style}>
       <div className="bsearch"><input placeholder="Filter branches…" /></div>
       <div className="blist">
         <div className="bsec-hd">

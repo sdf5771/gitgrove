@@ -108,7 +108,8 @@ body { display: flex; align-items: center; justify-content: center; }
 
 /* ── Branch sidebar ── */
 .bsidebar {
-  width: 220px; flex-shrink: 0; background: var(--c-bg-surface);
+  /* width은 App.tsx style prop으로 동적 제어 (기본값 220px) */
+  flex-shrink: 0; background: var(--c-bg-surface);
   border-right: 1px solid var(--c-border); display: flex; flex-direction: column; overflow: hidden;
 }
 .bsearch { padding: 8px 10px 7px; flex-shrink: 0; border-bottom: 1px solid var(--c-divider); }
