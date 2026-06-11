@@ -6,9 +6,10 @@ interface Props {
   onClose: () => void
   onAdd: (r: Repo) => void
   onOpenPath?: (path: string) => void
+  recentPaths?: Array<{ name: string; path: string }>
 }
 
-export function AddRepoModal({ onClose, onAdd, onOpenPath }: Props) {
+export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props) {
   const [tab, setTab] = useState<'local' | 'clone'>('local')
   const [localPath, setLocalPath] = useState('')
   const [cloneUrl, setCloneUrl] = useState('')
@@ -64,14 +65,17 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath }: Props) {
           <div className="mfield">
             <label>Recent repositories</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              {RECENT_REPOS.map(r => (
+              {(recentPaths && recentPaths.length > 0
+                ? recentPaths.map(r => ({ name: r.name, path: r.path, lastOpened: '' }))
+                : RECENT_REPOS
+              ).map(r => (
                 <div key={r.path} className="repo-recent" onClick={() => openLocal(r.path)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
                   <div className="repo-recent-info">
                     <div className="repo-recent-name">{r.name}</div>
                     <div className="repo-recent-path">{r.path}</div>
                   </div>
-                  <span style={{ fontSize: 10, color: 'var(--c-text-faint)', flexShrink: 0 }}>{r.lastOpened}</span>
+                  {'lastOpened' in r && r.lastOpened && <span style={{ fontSize: 10, color: 'var(--c-text-faint)', flexShrink: 0 }}>{r.lastOpened}</span>}
                 </div>
               ))}
             </div>

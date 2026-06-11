@@ -1,6 +1,15 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
+
+// ──────────────────────────────────────────────
+// localStorage 키 상수
+// ──────────────────────────────────────────────
+const STORAGE_KEYS = {
+  repos: 'gitgrove:repos',
+  lastRepoPath: 'gitgrove:lastRepoPath',
+  sidebarWidth: 'gitgrove:sidebarWidth',
+} as const
 import { computeLanes } from './utils/computeLanes'
 import { BranchSidebar } from './components/BranchSidebar'
 import { CommitGraph } from './components/CommitGraph'
@@ -108,16 +117,46 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
 // ──────────────────────────────────────────────
 
 export default function App() {
-  // ── 레포 목록 (탭) ──
-  const [repos, setRepos] = useState<Repo[]>([])
+  // ── 레포 목록 (탭) — localStorage에서 초기값 로드 ──
+  const [repos, setRepos] = useState<Repo[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.repos)
+      return saved ? (JSON.parse(saved) as Repo[]) : []
+    } catch {
+      return []
+    }
+  })
   const [activeRepo, setActiveRepo] = useState(0)
   const addRepo = useCallback((r: Repo) => setRepos(p => [...p, r]), [])
-  const closeRepo = useCallback((i: number) => setRepos(p => p.filter((_, j) => j !== i)), [])
+
+  // ── 사이드바 너비 ──
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.sidebarWidth)
+      return saved ? parseInt(saved, 10) : 220
+    } catch {
+      return 220
+    }
+  })
+  const sidebarWidthRef = useRef(sidebarWidth)
+  useEffect(() => { sidebarWidthRef.current = sidebarWidth }, [sidebarWidth])
+  const isResizing = useRef(false)
 
   // ── real git 상태 ──
   const [repoPath, setRepoPath] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  // ── 레포 탭 닫기 (repoPath 선언 이후에 정의) ──
+  const closeRepo = useCallback((i: number) => {
+    setRepos(p => {
+      const next = p.filter((_, j) => j !== i)
+      if (p[i]?.path === repoPath) {
+        try { localStorage.removeItem(STORAGE_KEYS.lastRepoPath) } catch { /* ignore */ }
+      }
+      return next
+    })
+  }, [repoPath])
 
   const [realCommits, setRealCommits] = useState<Commit[]>([])
   const [realBranches, setRealBranches] = useState<Branch[]>([])
@@ -182,6 +221,7 @@ export default function App() {
       setRealUnstaged(statusToFileEntry(gitStatus.unstaged))
       setRealStaged(statusToFileEntry(gitStatus.staged))
       setRepoPath(path)
+      try { localStorage.setItem(STORAGE_KEYS.lastRepoPath, path) } catch { /* ignore */ }
 
       const currentBranch = gitBranches.current || 'main'
       setActiveBranch(currentBranch)
@@ -275,6 +315,22 @@ export default function App() {
     }
   }, [repoPath, activeBranch, loadRepo, notify])
 
+  // ── repos 변경 시 localStorage 자동 저장 ──
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEYS.repos, JSON.stringify(repos)) } catch { /* ignore */ }
+  }, [repos])
+
+  // ── 앱 시작 시 마지막 레포 자동 복원 ──
+  useEffect(() => {
+    const lastPath = localStorage.getItem(STORAGE_KEYS.lastRepoPath)
+    if (lastPath) {
+      loadRepo(lastPath, true).catch(() => {
+        try { localStorage.removeItem(STORAGE_KEYS.lastRepoPath) } catch { /* ignore */ }
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // 마운트 시 1회만
+
   // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
   useEffect(() => {
     const handleFocus = () => {
@@ -283,6 +339,35 @@ export default function App() {
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
   }, [repoPath, loadRepo])
+
+  // ── 사이드바 리사이저 핸들러 ──
+  const handleResizerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizing.current = true
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+
+    const startX = e.clientX
+    const startWidth = sidebarWidthRef.current
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return
+      const newWidth = Math.max(160, Math.min(400, startWidth + (ev.clientX - startX)))
+      setSidebarWidth(newWidth)
+    }
+
+    const onMouseUp = () => {
+      isResizing.current = false
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      try { localStorage.setItem(STORAGE_KEYS.sidebarWidth, String(sidebarWidthRef.current)) } catch { /* ignore */ }
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [])
 
   // ── 파일 선택 시 diff 로드 (git:diff) ──
   const handleSelDiffFile = useCallback(async (f: FileEntry) => {
@@ -503,6 +588,23 @@ export default function App() {
               localBranches={realBranches.length > 0 ? realBranches : undefined}
               remoteBranches={realRemotes.length > 0 ? realRemotes : undefined}
               tags={realTags.length > 0 ? realTags : undefined}
+              style={{ width: sidebarWidth }}
+            />
+
+            {/* 사이드바 리사이저 핸들 */}
+            <div
+              onMouseDown={handleResizerMouseDown}
+              style={{
+                width: 4,
+                flexShrink: 0,
+                cursor: 'col-resize',
+                background: 'transparent',
+                transition: 'background 120ms',
+                position: 'relative',
+                zIndex: 10,
+              }}
+              onMouseOver={e => { e.currentTarget.style.background = 'var(--c-gold-border)' }}
+              onMouseOut={e => { e.currentTarget.style.background = 'transparent' }}
             />
 
             {view === 'pr' ? (
@@ -612,6 +714,7 @@ export default function App() {
               setShowAddRepo(false)
               await loadRepo(path)
             }}
+            recentPaths={repos.map(r => ({ name: r.name, path: r.path }))}
           />
         )}
         {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify('success', 'Conflicts resolved', 'Merge can now be completed')} />}
