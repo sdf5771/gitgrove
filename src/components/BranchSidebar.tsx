@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LOCAL_BRANCHES, REMOTE_BRANCHES, LANE_COLORS } from '../data/mockData'
+import { LOCAL_BRANCHES, REMOTE_BRANCHES, LANE_COLORS, type Branch } from '../data/mockData'
 
 type BranchAction = 'create' | 'rename' | 'delete'
 
@@ -7,11 +7,18 @@ interface Props {
   activeBranch: string
   onBranch: (name: string) => void
   onBranchAction: (mode: BranchAction, name?: string) => void
+  localBranches?: Branch[]
+  remoteBranches?: string[]
+  tags?: string[]
 }
 
-export function BranchSidebar({ activeBranch, onBranch, onBranchAction }: Props) {
+export function BranchSidebar({ activeBranch, onBranch, onBranchAction, localBranches, remoteBranches, tags }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const toggle = (k: string) => setCollapsed(p => ({ ...p, [k]: !p[k] }))
+
+  const localList = localBranches ?? LOCAL_BRANCHES
+  const remoteList = remoteBranches ?? REMOTE_BRANCHES.map(b => b.name)
+  const tagList = tags ?? ['v1.0.0', 'v0.9.2']
 
   return (
     <div className="bsidebar">
@@ -24,12 +31,12 @@ export function BranchSidebar({ activeBranch, onBranch, onBranchAction }: Props)
             <button onClick={() => toggle('local')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px', borderRadius: 3, lineHeight: 1 }}>{collapsed.local ? '›' : '⌄'}</button>
           </div>
         </div>
-        {!collapsed.local && LOCAL_BRANCHES.map(b => (
+        {!collapsed.local && localList.map(b => (
           <div key={b.name}
             className={`bitem${b.name === activeBranch ? ' cur' : ''}`}
             onClick={() => onBranch(b.name)}
             onContextMenu={e => { e.preventDefault(); onBranchAction('rename', b.name) }}>
-            <span className="bdot" style={{ background: LANE_COLORS[b.lane] }} />
+            <span className="bdot" style={{ background: LANE_COLORS[b.lane % LANE_COLORS.length] }} />
             <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
             {b.current && <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', color: 'var(--c-gold-300)', background: 'var(--c-gold-bg)', border: '1px solid var(--c-gold-border)', padding: '1px 5px', borderRadius: 999, letterSpacing: '.06em', textTransform: 'uppercase' }}>HEAD</span>}
             {b.ahead != null && b.ahead > 0 && <span className="bab"><span className="bab-a">↑{b.ahead}</span></span>}
@@ -40,10 +47,10 @@ export function BranchSidebar({ activeBranch, onBranch, onBranchAction }: Props)
           <span>Remote</span>
           <button onClick={() => toggle('remote')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px' }}>{collapsed.remote ? '›' : '⌄'}</button>
         </div>
-        {!collapsed.remote && REMOTE_BRANCHES.map(b => (
-          <div key={b.name} className="bitem">
+        {!collapsed.remote && remoteList.map(name => (
+          <div key={name} className="bitem">
             <span className="bdot bdot-r" />
-            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--c-text-muted)' }}>{b.name}</span>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--c-text-muted)' }}>{name}</span>
           </div>
         ))}
 
@@ -51,13 +58,13 @@ export function BranchSidebar({ activeBranch, onBranch, onBranchAction }: Props)
           <span>Tags</span>
           <button onClick={() => toggle('tags')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px' }}>{collapsed.tags ? '›' : '⌄'}</button>
         </div>
-        {!collapsed.tags && [{ name: 'v1.0.0' }, { name: 'v0.9.2' }].map(t => (
-          <div key={t.name} className="bitem">
+        {!collapsed.tags && tagList.map(name => (
+          <div key={name} className="bitem">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6fcf7c" strokeWidth="2.5" style={{ flexShrink: 0 }}>
               <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
               <line x1="7" y1="7" x2="7.01" y2="7"/>
             </svg>
-            <span style={{ flex: 1, color: 'var(--c-success)' }}>{t.name}</span>
+            <span style={{ flex: 1, color: 'var(--c-success)' }}>{name}</span>
           </div>
         ))}
       </div>
