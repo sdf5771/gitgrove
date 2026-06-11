@@ -1,16 +1,143 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PR_DATA } from '../data/mockData'
+import type { PullRequest } from '../data/mockData'
 import { FilePath } from './FilePath'
 
-export function PRView({ onOpenConflict }: { onOpenConflict?: () => void }) {
+const GITHUB_TOKEN_KEY = 'gitgrove:githubToken'
+
+// "git@github.com:owner/repo.git" 또는 "https://github.com/owner/repo.git" → { owner, repo }
+function parseGitHubRepo(url: string): { owner: string; repo: string } | null {
+  // SSH 형식
+  const sshMatch = url.match(/git@github\.com:([^/]+)\/([^.]+)(?:\.git)?$/)
+  if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] }
+  // HTTPS 형식
+  const httpsMatch = url.match(/https?:\/\/github\.com\/([^/]+)\/([^/.]+)(?:\.git)?$/)
+  if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] }
+  return null
+}
+
+interface GHPullRequest {
+  number: number
+  title: string
+  state: 'open' | 'closed'
+  merged_at: string | null
+  user: { login: string }
+  head: { ref: string }
+  base: { ref: string }
+  body: string | null
+  created_at: string
+  comments: number
+  labels: Array<{ name: string }>
+}
+
+async function fetchGitHubPRs(owner: string, repo: string, token: string): Promise<GHPullRequest[]> {
+  const res = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/pulls?state=all&per_page=20`,
+    { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+  )
+  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`)
+  return res.json() as Promise<GHPullRequest[]>
+}
+
+interface Props {
+  onOpenConflict?: () => void
+  repoPath?: string | null
+}
+
+export function PRView({ onOpenConflict, repoPath }: Props) {
   const [filter, setFilter] = useState<'open' | 'merged' | 'all'>('open')
   const [selId, setSelId] = useState(42)
   const [dtab, setDtab] = useState<'overview' | 'files' | 'comments' | 'checks'>('overview')
   const [approved, setApproved] = useState(false)
   const [requested, setRequested] = useState(false)
 
-  const filtered = PR_DATA.filter(p => filter === 'all' || p.status === filter || (filter === 'open' && p.status === 'open'))
-  const sel = PR_DATA.find(p => p.id === selId) || PR_DATA[0]
+  const [realPRs, setRealPRs] = useState<PullRequest[] | null>(null)
+  const [prLoading, setPRLoading] = useState(false)
+  const [prError, setPRError] = useState<string | null>(null)
+  const [ghInfo, setGhInfo] = useState<{ owner: string; repo: string } | null>(null)
+
+  useEffect(() => {
+    if (!repoPath) return
+    const token = localStorage.getItem(GITHUB_TOKEN_KEY) ?? ''
+    if (!token) return
+
+    window.gitAPI?.getRemotes(repoPath)
+      .then(remotes => {
+        const origin = remotes.find(r => r.name === 'origin')
+        if (!origin) return
+        const info = parseGitHubRepo(origin.url)
+        if (!info) return
+        setGhInfo(info)
+
+        setPRLoading(true)
+        return fetchGitHubPRs(info.owner, info.repo, token)
+          .then(prs => {
+            setRealPRs(prs.map(pr => ({
+              id: pr.number,
+              title: pr.title,
+              author: pr.user.login,
+              initials: pr.user.login.slice(0, 2).toUpperCase(),
+              ac: '#5fb8e6',
+              from: pr.head.ref,
+              to: pr.base.ref,
+              status: pr.merged_at ? 'merged' : pr.state === 'closed' ? 'closed' : 'open',
+              created: new Date(pr.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
+              comments: pr.comments,
+              additions: 0,
+              deletions: 0,
+              labels: pr.labels.map(l => l.name),
+              body: pr.body ?? '',
+              reviewers: [],
+              checks: [],
+              files: [],
+              threads: [],
+            } as PullRequest)))
+            setPRError(null)
+          })
+          .catch(err => setPRError((err as Error).message))
+          .finally(() => setPRLoading(false))
+      })
+      .catch(() => {})
+  }, [repoPath])
+
+  const token = localStorage.getItem(GITHUB_TOKEN_KEY) ?? ''
+
+  if (prLoading) {
+    return (
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--c-text-muted)' }}>
+        <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite', fontSize: 16 }}>⟳</span>
+        GitHub PR 불러오는 중…
+      </div>
+    )
+  }
+
+  if (!token) {
+    return (
+      <div className="pr-empty">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ color: 'var(--c-text)', marginBottom: 6 }}>GitHub 토큰이 설정되지 않았습니다</div>
+          <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>Settings → GitHub 탭에서 토큰을 입력해주세요</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (prError) {
+    return (
+      <div className="pr-empty">
+        <div style={{ color: 'var(--c-danger)' }}>⚠ {prError}</div>
+      </div>
+    )
+  }
+
+  const prData = realPRs ?? PR_DATA
+
+  // ghInfo가 로드됐지만 PR이 없는 경우 (빈 배열)
+  const openCount = prData.filter(p => p.status === 'open').length
+
+  const filtered = prData.filter(p => filter === 'all' || p.status === filter || (filter === 'open' && p.status === 'open'))
+  const sel = prData.find(p => p.id === selId) || prData[0]
 
   const statusIcon = { pass: '✓', fail: '✗', pend: '…' } as const
   const statusCls = { pass: 'pass', fail: 'fail', pend: 'pend' } as const
@@ -18,11 +145,17 @@ export function PRView({ onOpenConflict }: { onOpenConflict?: () => void }) {
   return (
     <div className="pr-wrap">
       <div className="pr-list-pane">
+        {ghInfo && realPRs && (
+          <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--c-text-faint)', borderBottom: '1px solid var(--c-border)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            {ghInfo.owner}/{ghInfo.repo}
+          </div>
+        )}
         <div className="pr-filters">
           {(['open', 'merged', 'all'] as const).map(f => (
             <button key={f} className={`pr-filter${filter === f ? ' on' : ''}`} onClick={() => setFilter(f)}>
               {f.charAt(0).toUpperCase() + f.slice(1)}
-              {f === 'open' && <span style={{ marginLeft: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>({PR_DATA.filter(p => p.status === 'open').length})</span>}
+              {f === 'open' && <span style={{ marginLeft: 4, fontFamily: 'var(--font-mono)', fontSize: 9 }}>({openCount})</span>}
             </button>
           ))}
         </div>
@@ -58,8 +191,8 @@ export function PRView({ onOpenConflict }: { onOpenConflict?: () => void }) {
                   <span className="pr-branch-pill pr-to-pill">{sel.to}</span>
                 </div>
                 <span style={{ color: 'var(--c-text-faint)' }}>by <strong style={{ color: 'var(--c-text)' }}>{sel.author}</strong> · {sel.created}</span>
-                <span style={{ color: 'var(--c-success)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>+{sel.additions}</span>
-                <span style={{ color: 'var(--c-danger)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>−{sel.deletions}</span>
+                {sel.additions > 0 && <span style={{ color: 'var(--c-success)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>+{sel.additions}</span>}
+                {sel.deletions > 0 && <span style={{ color: 'var(--c-danger)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>−{sel.deletions}</span>}
               </div>
             </div>
             <div className="pr-dtabs">
@@ -82,6 +215,9 @@ export function PRView({ onOpenConflict }: { onOpenConflict?: () => void }) {
                         <span className="pr-rv-status" style={{ color: r.status === 'approved' ? 'var(--c-success)' : 'var(--c-text-faint)' }}>{r.status === 'approved' ? '✓ Approved' : '⏳ Pending'}</span>
                       </div>
                     ))}
+                    {sel.reviewers.length === 0 && (
+                      <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>리뷰어가 없습니다</div>
+                    )}
                   </div>
                   {sel.status === 'open' && sel.checks.some(c => c.s === 'fail') && (
                     <div style={{ padding: '8px 12px', background: 'rgba(255,107,107,.08)', border: '1px solid rgba(255,107,107,.3)', borderRadius: 'var(--r2)', fontSize: 12, color: 'var(--c-danger)', display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -93,6 +229,9 @@ export function PRView({ onOpenConflict }: { onOpenConflict?: () => void }) {
               )}
               {dtab === 'files' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {sel.files.length === 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '12px 0' }}>파일 목록을 불러오려면 개별 PR을 조회해야 합니다</div>
+                  )}
                   {sel.files.map(f => (
                     <div key={f.p} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 10px', background: 'var(--c-bg-elevated)', border: '1px solid var(--c-border)', borderRadius: 'var(--r2)', cursor: 'pointer', transition: 'border-color 80ms' }}>
                       <span className={`fst fst-${f.s}`}>{f.s}</span>
@@ -120,6 +259,9 @@ export function PRView({ onOpenConflict }: { onOpenConflict?: () => void }) {
               )}
               {dtab === 'checks' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {sel.checks.length === 0 && (
+                    <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '12px 0' }}>CI 체크 정보가 없습니다</div>
+                  )}
                   {sel.checks.map((c, i) => (
                     <div key={i} className="pr-check">
                       <div className={`pr-check-dot ${statusCls[c.s]}`}>{statusIcon[c.s]}</div>
