@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import './App.css'
-import { COMMITS, REPOS, type Commit, type Repo, type FileEntry } from './data/mockData'
+import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
 import { BranchSidebar } from './components/BranchSidebar'
 import { CommitGraph } from './components/CommitGraph'
 import { CommitDetail } from './components/CommitDetail'
@@ -26,6 +26,58 @@ import { useNotifications } from './hooks/useNotifications'
 type View = 'history' | 'commit' | 'diff' | 'blame' | 'pr'
 type BranchTab = 'create' | 'rename' | 'delete'
 
+// ──────────────────────────────────────────────
+// 변환 함수
+// ──────────────────────────────────────────────
+
+function toAppCommit(c: GitCommit, allHashes: string[]): Commit {
+  const labels: CommitLabel[] = c.refs.map(ref => {
+    if (ref.startsWith('HEAD ->')) return { text: ref, type: 'head' as const }
+    if (ref.startsWith('origin/') || ref.startsWith('upstream/')) return { text: ref, type: 'remote' as const }
+    if (ref.match(/^v\d/)) return { text: ref, type: 'tag' as const }
+    return { text: ref, type: 'branch' as const }
+  })
+
+  const parentIndices = c.parents
+    .map(ph => allHashes.findIndex(h => h === ph))
+    .filter(i => i >= 0)
+
+  return {
+    id: c.id,
+    lane: 0,
+    msg: c.msg,
+    author: c.author,
+    time: c.time,
+    parents: parentIndices,
+    labels,
+    stats: { f: c.stats.files, a: c.stats.insertions, d: c.stats.deletions },
+    files: [],
+  }
+}
+
+function toAppBranches(result: GitBranchResult): Branch[] {
+  return result.local.map((b, i) => ({
+    name: b.name,
+    lane: i,
+    current: b.name === result.current,
+    ahead: b.ahead,
+    behind: b.behind,
+  }))
+}
+
+function statusToFileEntry(files: Array<{ path: string; status: string }>): FileEntry[] {
+  return files.map(f => ({
+    p: f.path,
+    s: f.status as 'M' | 'A' | 'D',
+    a: 0,
+    d: 0,
+  }))
+}
+
+// ──────────────────────────────────────────────
+// RepoTabs 컴포넌트
+// ──────────────────────────────────────────────
+
 function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
   repos: Repo[]; active: number
   onSelect: (i: number) => void
@@ -50,12 +102,30 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
   )
 }
 
+// ──────────────────────────────────────────────
+// 메인 App
+// ──────────────────────────────────────────────
+
 export default function App() {
-  const [repos, setRepos] = useState<Repo[]>(REPOS)
+  // ── 레포 목록 (탭) ──
+  const [repos, setRepos] = useState<Repo[]>([])
   const [activeRepo, setActiveRepo] = useState(0)
   const addRepo = useCallback((r: Repo) => setRepos(p => [...p, r]), [])
   const closeRepo = useCallback((i: number) => setRepos(p => p.filter((_, j) => j !== i)), [])
 
+  // ── real git 상태 ──
+  const [repoPath, setRepoPath] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  const [realCommits, setRealCommits] = useState<Commit[]>([])
+  const [realBranches, setRealBranches] = useState<Branch[]>([])
+  const [realRemotes, setRealRemotes] = useState<string[]>([])
+  const [realTags, setRealTags] = useState<string[]>([])
+  const [realUnstaged, setRealUnstaged] = useState<FileEntry[]>([])
+  const [realStaged, setRealStaged] = useState<FileEntry[]>([])
+
+  // ── UI 상태 ──
   const [view, setView] = useState<View>('history')
   const [selIdx, setSelIdx] = useState(0)
   const [activeBranch, setActiveBranch] = useState('main')
@@ -63,32 +133,96 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const srchRef = useRef<HTMLInputElement>(null)
 
-  const [showMerge,     setShowMerge]     = useState(false)
-  const [showCherryPick,setShowCherryPick]= useState(false)
-  const [showStash,     setShowStash]     = useState(false)
-  const [showBranch,    setShowBranch]    = useState(false)
-  const [branchTab,     setBranchTab]     = useState<BranchTab>('create')
-  const [showRebase,    setShowRebase]    = useState(false)
-  const [showSettings,  setShowSettings]  = useState(false)
-  const [showAddRepo,   setShowAddRepo]   = useState(false)
-  const [showConflict,  setShowConflict]  = useState(false)
-  const [showCmd,       setShowCmd]       = useState(false)
-  const [ctxMenu,       setCtxMenu]       = useState<{ x: number; y: number; commit: Commit; idx: number } | null>(null)
+  const [showMerge,      setShowMerge]      = useState(false)
+  const [showCherryPick, setShowCherryPick] = useState(false)
+  const [showStash,      setShowStash]      = useState(false)
+  const [showBranch,     setShowBranch]     = useState(false)
+  const [branchTab,      setBranchTab]      = useState<BranchTab>('create')
+  const [showRebase,     setShowRebase]     = useState(false)
+  const [showSettings,   setShowSettings]   = useState(false)
+  const [showAddRepo,    setShowAddRepo]    = useState(false)
+  const [showConflict,   setShowConflict]   = useState(false)
+  const [showCmd,        setShowCmd]        = useState(false)
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; commit: Commit; idx: number } | null>(null)
 
   const { notifs, notify, dismiss } = useNotifications()
 
+  // ── git 데이터 로드 ──
+  const loadRepo = useCallback(async (path: string) => {
+    setIsLoading(true)
+    setLoadError(null)
+    try {
+      const [gitCommits, gitBranches, gitStatus] = await Promise.all([
+        window.gitAPI?.getLog(path) ?? Promise.resolve([]),
+        window.gitAPI?.getBranches(path) ?? Promise.resolve({ current: '', local: [], remote: [], tags: [] }),
+        window.gitAPI?.getStatus(path) ?? Promise.resolve({ staged: [], unstaged: [] }),
+      ])
+
+      const hashes = gitCommits.map(c => c.id)
+      const appCommits = gitCommits.map(c => toAppCommit(c, hashes))
+      const appBranches = toAppBranches(gitBranches)
+
+      setRealCommits(appCommits)
+      setRealBranches(appBranches)
+      setRealRemotes(gitBranches.remote)
+      setRealTags(gitBranches.tags)
+      setRealUnstaged(statusToFileEntry(gitStatus.unstaged))
+      setRealStaged(statusToFileEntry(gitStatus.staged))
+      setRepoPath(path)
+
+      const currentBranch = gitBranches.current || 'main'
+      setActiveBranch(currentBranch)
+
+      // 탭에 레포 추가
+      const name = path.split('/').pop() || path
+      const newRepo: Repo = {
+        id: String(Date.now()),
+        name,
+        path,
+        branch: currentBranch,
+        dirty: gitStatus.staged.length > 0 || gitStatus.unstaged.length > 0,
+        ahead: appBranches.find(b => b.current)?.ahead ?? 0,
+        behind: appBranches.find(b => b.current)?.behind ?? 0,
+      }
+      setRepos(prev => {
+        const existing = prev.findIndex(r => r.path === path)
+        if (existing >= 0) {
+          const next = [...prev]
+          next[existing] = newRepo
+          return next
+        }
+        return [...prev, newRepo]
+      })
+      const existingIdx = repos.findIndex(r => r.path === path)
+      setActiveRepo(existingIdx >= 0 ? existingIdx : repos.length)
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsLoading(false)
+    }
+  }, [repos])
+
+  const handleOpenRepo = useCallback(async () => {
+    const picked = await window.gitAPI?.openDialog()
+    if (picked) await loadRepo(picked)
+  }, [loadRepo])
+
+  // ── 표시할 커밋 목록 결정 ──
+  const baseCommits = repoPath ? realCommits : COMMITS
+
   const filteredCommits = useMemo(() => {
-    if (!searchQuery.trim()) return COMMITS
+    if (!searchQuery.trim()) return baseCommits
     const q = searchQuery.toLowerCase()
-    return COMMITS.filter(c =>
+    return baseCommits.filter(c =>
       c.msg.toLowerCase().includes(q) || c.author.toLowerCase().includes(q) ||
       c.id.toLowerCase().includes(q) || c.files.some(f => f.p.toLowerCase().includes(q))
     ).map(c => ({ ...c, _q: searchQuery }))
-  }, [searchQuery])
+  }, [searchQuery, baseCommits])
 
   useEffect(() => { if (selIdx >= filteredCommits.length) setSelIdx(Math.max(0, filteredCommits.length - 1)) }, [filteredCommits, selIdx])
   const selectedCommit = filteredCommits[selIdx] ?? null
 
+  // ── 키보드 단축키 ──
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowCmd(v => !v) }
@@ -148,7 +282,28 @@ export default function App() {
 
   const handleBranchAction = useCallback((mode: BranchTab) => { setBranchTab(mode); setShowBranch(true) }, [])
 
-  const repo = repos[activeRepo] || repos[0]
+  const repo = repos[activeRepo] || null
+  const displayBranch = repo?.branch || activeBranch
+
+  // ── 빈 화면 (레포 미선택, 로딩 중이 아님) ──
+  const renderEmptyState = () => (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--c-text-faint)' }}>
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" style={{ opacity: 0.35 }}>
+        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
+      </svg>
+      <div style={{ fontSize: 15, color: 'var(--c-text)' }}>레포지토리를 열어주세요</div>
+      {loadError && <div style={{ fontSize: 12, color: 'var(--c-danger)', maxWidth: 320, textAlign: 'center' }}>{loadError}</div>}
+      <button className="mbtn-ok" onClick={handleOpenRepo}>폴더 열기</button>
+    </div>
+  )
+
+  // ── 로딩 화면 ──
+  const renderLoading = () => (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--c-text-muted)' }}>
+      <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite', fontSize: 18 }}>⟳</span>
+      <span>Loading repository…</span>
+    </div>
+  )
 
   return (
     <div className="git-window">
@@ -161,12 +316,18 @@ export default function App() {
         </div>
         <span className="app-name" style={{ marginRight: 10 }}>🌿 GitGrove</span>
         <div style={{ width: 1, height: 20, background: 'var(--c-border)', flexShrink: 0, marginRight: 6 }} />
-        <RepoTabs repos={repos} active={activeRepo} onSelect={setActiveRepo} onAdd={() => setShowAddRepo(true)}
-          onClose={i => { closeRepo(i); if (activeRepo >= i) setActiveRepo(Math.max(0, activeRepo - 1)) }} />
+        <RepoTabs
+          repos={repos}
+          active={activeRepo}
+          onSelect={setActiveRepo}
+          onAdd={() => setShowAddRepo(true)}
+          onClose={i => { closeRepo(i); if (activeRepo >= i) setActiveRepo(Math.max(0, activeRepo - 1)) }}
+        />
         <div className="sep" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>
-          <span style={{ color: 'var(--c-gold-300)' }}>⎇</span>{repo?.branch || activeBranch}
-          <span style={{ color: 'var(--c-success)' }}>↑2</span><span>↓0</span>
+          <span style={{ color: 'var(--c-gold-300)' }}>⎇</span>{displayBranch}
+          {repo && repo.ahead > 0 && <span style={{ color: 'var(--c-success)' }}>↑{repo.ahead}</span>}
+          {repo && repo.behind > 0 && <span>↓{repo.behind}</span>}
         </div>
       </div>
 
@@ -209,66 +370,82 @@ export default function App() {
 
       {/* App body */}
       <div className="app-body" style={{ position: 'relative' }}>
-        <BranchSidebar activeBranch={activeBranch} onBranch={setActiveBranch} onBranchAction={handleBranchAction} />
 
-        {view === 'pr' ? (
-          <PRView onOpenConflict={() => setShowConflict(true)} />
-        ) : view === 'blame' ? (
+        {isLoading ? renderLoading() : !repoPath ? renderEmptyState() : (
           <>
-            <BlameView onSelectCommit={i => { setSelIdx(i); setView('history') }} />
-            <div className="rpanel">
-              <div className="pnl-hdr"><h3>Commit Detail</h3></div>
-              <CommitDetail commit={selectedCommit} onOpenDiff={() => setView('diff')} onCherryPick={() => setShowCherryPick(true)} onBlame={() => setView('blame')} />
-            </div>
-          </>
-        ) : view === 'diff' ? (
-          <DiffExplorer commit={selectedCommit} />
-        ) : (
-          <>
-            <div className="cpanel">
-              {view === 'history' ? (
-                <>
-                  <div className="graph-hdr">
-                    <span className="ghm">
-                      Message
-                      {searchQuery && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--c-gold-300)', fontFamily: 'var(--font-display)' }}>{filteredCommits.length} result{filteredCommits.length !== 1 ? 's' : ''}</span>}
-                    </span>
-                    <span className="gha">Author</span>
-                    <span className="ght">Time</span>
-                  </div>
-                  <CommitGraph
-                    commits={filteredCommits}
-                    selectedIdx={selIdx}
-                    onSelect={setSelIdx}
-                    onContextMenu={(e, c, i) => setCtxMenu({ x: e.clientX, y: e.clientY, commit: c, idx: i })}
-                    showStats={true}
-                    rowH={44}
-                    activeBranch={activeBranch}
-                  />
-                </>
-              ) : (
-                <StageArea onSelDiffFile={setDiffFile} />
-              )}
-            </div>
-            <div className="rpanel">
-              {view === 'history' ? (
-                <>
-                  <div className="pnl-hdr">
-                    <h3>Commit Detail</h3>
-                    {selectedCommit && (
-                      <div style={{ marginLeft: 'auto', display: 'flex', gap: 5 }}>
-                        <span style={{ fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>{selectedCommit.stats.f}f</span>
-                        <span style={{ fontSize: 11, color: 'var(--c-success)', fontFamily: 'var(--font-mono)' }}>+{selectedCommit.stats.a}</span>
-                        <span style={{ fontSize: 11, color: 'var(--c-danger)', fontFamily: 'var(--font-mono)' }}>−{selectedCommit.stats.d}</span>
-                      </div>
-                    )}
-                  </div>
+            <BranchSidebar
+              activeBranch={activeBranch}
+              onBranch={setActiveBranch}
+              onBranchAction={handleBranchAction}
+              localBranches={realBranches.length > 0 ? realBranches : undefined}
+              remoteBranches={realRemotes.length > 0 ? realRemotes : undefined}
+              tags={realTags.length > 0 ? realTags : undefined}
+            />
+
+            {view === 'pr' ? (
+              <PRView onOpenConflict={() => setShowConflict(true)} />
+            ) : view === 'blame' ? (
+              <>
+                <BlameView onSelectCommit={i => { setSelIdx(i); setView('history') }} />
+                <div className="rpanel">
+                  <div className="pnl-hdr"><h3>Commit Detail</h3></div>
                   <CommitDetail commit={selectedCommit} onOpenDiff={() => setView('diff')} onCherryPick={() => setShowCherryPick(true)} onBlame={() => setView('blame')} />
-                </>
-              ) : (
-                <DiffPanel file={diffFile} />
-              )}
-            </div>
+                </div>
+              </>
+            ) : view === 'diff' ? (
+              <DiffExplorer commit={selectedCommit} />
+            ) : (
+              <>
+                <div className="cpanel">
+                  {view === 'history' ? (
+                    <>
+                      <div className="graph-hdr">
+                        <span className="ghm">
+                          Message
+                          {searchQuery && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--c-gold-300)', fontFamily: 'var(--font-display)' }}>{filteredCommits.length} result{filteredCommits.length !== 1 ? 's' : ''}</span>}
+                        </span>
+                        <span className="gha">Author</span>
+                        <span className="ght">Time</span>
+                      </div>
+                      <CommitGraph
+                        commits={filteredCommits}
+                        selectedIdx={selIdx}
+                        onSelect={setSelIdx}
+                        onContextMenu={(e, c, i) => setCtxMenu({ x: e.clientX, y: e.clientY, commit: c, idx: i })}
+                        showStats={true}
+                        rowH={44}
+                        activeBranch={activeBranch}
+                      />
+                    </>
+                  ) : (
+                    <StageArea
+                      onSelDiffFile={setDiffFile}
+                      initialUnstaged={realUnstaged.length > 0 || realStaged.length > 0 ? realUnstaged : undefined}
+                      initialStaged={realUnstaged.length > 0 || realStaged.length > 0 ? realStaged : undefined}
+                    />
+                  )}
+                </div>
+                <div className="rpanel">
+                  {view === 'history' ? (
+                    <>
+                      <div className="pnl-hdr">
+                        <h3>Commit Detail</h3>
+                        {selectedCommit && (
+                          <div style={{ marginLeft: 'auto', display: 'flex', gap: 5 }}>
+                            <span style={{ fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>{selectedCommit.stats.f}f</span>
+                            <span style={{ fontSize: 11, color: 'var(--c-success)', fontFamily: 'var(--font-mono)' }}>+{selectedCommit.stats.a}</span>
+                            <span style={{ fontSize: 11, color: 'var(--c-danger)', fontFamily: 'var(--font-mono)' }}>−{selectedCommit.stats.d}</span>
+                          </div>
+                        )}
+                      </div>
+                      <CommitDetail commit={selectedCommit} onOpenDiff={() => setView('diff')} onCherryPick={() => setShowCherryPick(true)} onBlame={() => setView('blame')} />
+                    </>
+                  ) : (
+                    <DiffPanel file={diffFile} />
+                  )}
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -279,13 +456,22 @@ export default function App() {
         {showRebase      && <InteractiveRebaseModal onClose={() => { setShowRebase(false); notify('info', 'Rebase complete', '6 commits rebased onto main') }} />}
         {showStash       && <StashPanel onClose={() => setShowStash(false)} />}
         {showSettings    && <SettingsPanel onClose={() => setShowSettings(false)} />}
-        {showAddRepo     && <AddRepoModal onClose={() => setShowAddRepo(false)} onAdd={r => { addRepo(r); notify('success', 'Repository added', r.name) }} />}
+        {showAddRepo     && (
+          <AddRepoModal
+            onClose={() => setShowAddRepo(false)}
+            onAdd={r => { addRepo(r); notify('success', 'Repository added', r.name) }}
+            onOpenPath={async (path) => {
+              setShowAddRepo(false)
+              await loadRepo(path)
+            }}
+          />
+        )}
         {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify('success', 'Conflicts resolved', 'Merge can now be completed')} />}
 
         <NotificationStack notifs={notifs} onDismiss={dismiss} />
       </div>
 
-      <StatusBar branch={repo?.branch || activeBranch} onSettings={() => setShowSettings(true)} />
+      <StatusBar branch={displayBranch} onSettings={() => setShowSettings(true)} />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}
 

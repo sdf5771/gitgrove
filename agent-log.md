@@ -229,3 +229,4 @@ Backend가 IPC 채널을 먼저 정의하고 `agent-log.md`에 기록하면 Fron
 | 2026-06-11 | Electron 윈도우 수정: frame:false, 1440×900, IPC 윈도우 컨트롤, 타이틀바 드래그 영역 |
 | 2026-06-11 | 2차 디자인 반영: Diff Explorer, PR 뷰, Conflict Editor, 멀티레포 탭, 알림, ⌘K 팔레트, Stash, 브랜치/Rebase 모달, Git Blame, 우클릭 컨텍스트 메뉴, 커밋 검색 |
 | 2026-06-11 | Backend: `simple-git` IPC 레이어 구현 완료 (feat/real-git-ipc) — 5개 채널 (open-dialog, log, branches, status, diff) |
+| 2026-06-11 | Frontend: 목업 데이터 → real IPC 연동 완료 (feat/real-git-frontend) — App.tsx loadRepo(), BranchSidebar props, StageArea props, AddRepoModal onOpenPath/Browse 연동 |
