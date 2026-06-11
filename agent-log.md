@@ -32,8 +32,8 @@
 - `vite` ^5.1.6
 - `typescript` ^5.2.2
 
-### 추가 예정 (미설치)
-- `simple-git` — Electron main process에서 git 조작
+### 추가됨
+- `simple-git` ^3.x — Electron main process에서 git 조작 (설치 완료)
 - 브랜치 그래프 시각화 라이브러리 (미확정 — `d3`, `@gitgraph/js` 후보)
 - 상태 관리: Zustand (Frontend 에이전트 선호, 충돌 시 재논의)
 - 스타일링: CSS Modules (Frontend 에이전트 선호)
@@ -89,7 +89,69 @@ src/
 
 ## Frontend ↔ Backend (Main Process) 합의 인터페이스
 
-> 현재 목업 데이터 기반. real git 연동 시 IPC 채널명 및 타입을 여기에 기록.
+> 2026-06-11: `feat/real-git-ipc` 브랜치에서 구현 완료. `window.gitAPI`로 접근.
+
+### IPC 채널 스펙 (electron/main.ts → preload.ts → window.gitAPI)
+
+| 채널 | window.gitAPI 메서드 | 파라미터 | 반환 타입 |
+|------|---------------------|---------|----------|
+| `git:open-dialog` | `openDialog()` | 없음 | `Promise<string \| null>` |
+| `git:log` | `getLog(repoPath)` | `repoPath: string` | `Promise<GitCommit[]>` |
+| `git:branches` | `getBranches(repoPath)` | `repoPath: string` | `Promise<GitBranchResult>` |
+| `git:status` | `getStatus(repoPath)` | `repoPath: string` | `Promise<GitStatusResult>` |
+| `git:diff` | `getDiff(repoPath, filePath)` | `repoPath: string, filePath: string` | `Promise<string>` |
+
+### 공유 타입 (electron/electron-env.d.ts에 전역 선언)
+
+```typescript
+interface GitCommit {
+  id: string        // short hash (7자)
+  fullId: string    // full hash
+  msg: string       // commit subject
+  author: string
+  time: string      // "2m ago", "3h ago", "2d ago", "1wk ago" 형식
+  parents: string[] // parent hashes (short, 7자)
+  refs: string[]    // ["HEAD -> main", "origin/main", "v1.0.0"] 형식
+  stats: { files: number; insertions: number; deletions: number }
+}
+
+interface GitBranchResult {
+  current: string
+  local: Array<{ name: string; ahead: number; behind: number }>
+  remote: string[]   // "origin/main" 형식
+  tags: string[]
+}
+
+interface GitStatusResult {
+  staged: Array<{ path: string; status: 'M' | 'A' | 'D' }>
+  unstaged: Array<{ path: string; status: 'M' | 'A' | 'D' }>
+}
+```
+
+### Frontend 사용 예시
+
+```typescript
+// 레포 열기
+const repoPath = await window.gitAPI.openDialog()  // null이면 취소
+
+// 커밋 로그
+const commits = await window.gitAPI.getLog(repoPath)
+
+// 브랜치 목록
+const branches = await window.gitAPI.getBranches(repoPath)
+
+// 워킹트리 상태
+const status = await window.gitAPI.getStatus(repoPath)
+
+// 파일 diff (raw text 반환, staged 우선)
+const diff = await window.gitAPI.getDiff(repoPath, 'src/auth/jwt.ts')
+```
+
+### 주의사항
+
+- 에러 발생 시 IPC handler가 throw → Renderer에서 try/catch로 처리 필요
+- `git:log` 는 최대 50개 커밋 반환
+- `git:diff` 는 staged diff를 먼저 시도하고, 없으면 unstaged diff 반환 (raw unified diff 텍스트)
 
 ---
 
@@ -166,3 +228,4 @@ Backend가 IPC 채널을 먼저 정의하고 `agent-log.md`에 기록하면 Fron
 | 2026-06-11 | Claude Design 산출물 기반 전체 UI 구현 완료 (History + Stage 뷰) |
 | 2026-06-11 | Electron 윈도우 수정: frame:false, 1440×900, IPC 윈도우 컨트롤, 타이틀바 드래그 영역 |
 | 2026-06-11 | 2차 디자인 반영: Diff Explorer, PR 뷰, Conflict Editor, 멀티레포 탭, 알림, ⌘K 팔레트, Stash, 브랜치/Rebase 모달, Git Blame, 우클릭 컨텍스트 메뉴, 커밋 검색 |
+| 2026-06-11 | Backend: `simple-git` IPC 레이어 구현 완료 (feat/real-git-ipc) — 5개 채널 (open-dialog, log, branches, status, diff) |

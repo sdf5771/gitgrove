@@ -1,6 +1,6 @@
 import { ipcRenderer, contextBridge } from 'electron'
 
-// --------- Expose some API to the Renderer process ---------
+// --------- Expose ipcRenderer to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(...args: Parameters<typeof ipcRenderer.on>) {
     const [channel, listener] = args
@@ -18,7 +18,13 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
     const [channel, ...omit] = args
     return ipcRenderer.invoke(channel, ...omit)
   },
+})
 
-  // You can expose other APTs you need here.
-  // ...
+// --------- Expose gitAPI to the Renderer process ---------
+contextBridge.exposeInMainWorld('gitAPI', {
+  openDialog: () => ipcRenderer.invoke('git:open-dialog'),
+  getLog: (repoPath: string) => ipcRenderer.invoke('git:log', repoPath),
+  getBranches: (repoPath: string) => ipcRenderer.invoke('git:branches', repoPath),
+  getStatus: (repoPath: string) => ipcRenderer.invoke('git:status', repoPath),
+  getDiff: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:diff', repoPath, filePath),
 })
