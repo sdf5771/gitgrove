@@ -455,6 +455,21 @@ ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string):
   await git.checkout(branch)
 })
 
+// git:remotes — 원격 목록 조회
+interface GitRemoteInfo {
+  name: string
+  url: string
+}
+
+ipcMain.handle('git:remotes', async (_event, repoPath: string): Promise<GitRemoteInfo[]> => {
+  const git = simpleGit(repoPath)
+  const remotes = await git.getRemotes(true)  // verbose=true → URLs 포함
+  return remotes.map(r => ({
+    name: r.name,
+    url: r.refs.fetch || r.refs.push || '',
+  }))
+})
+
 // ──────────────────────────────────────────────
 // git:blame — 파일 라인별 blame 정보 조회
 // ──────────────────────────────────────────────

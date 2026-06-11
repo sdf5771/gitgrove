@@ -69,6 +69,11 @@ interface GitRemoteResult {
   summary: string
 }
 
+interface GitRemoteInfo {
+  name: string   // "origin", "upstream" 등
+  url: string    // "git@github.com:user/repo.git" 또는 "https://github.com/user/repo.git"
+}
+
 // ──────────────────────────────────────────────
 // Window 타입 보강
 // ──────────────────────────────────────────────
@@ -90,5 +95,6 @@ interface Window {
     fetch: (repoPath: string) => Promise<GitRemoteResult>
     checkout: (repoPath: string, branch: string) => Promise<void>
     blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
+    getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>
   }
 }
