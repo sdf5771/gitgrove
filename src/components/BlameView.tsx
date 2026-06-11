@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { BLAME_LINES, COMMITS, type BlameLine } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
 
@@ -72,7 +72,17 @@ export function BlameView({ onSelectCommit, repoPath, filePath }: Props) {
     ? blameLines.map(fromRealBlameLine)
     : BLAME_LINES.map(fromMockBlameLine)
 
-  const displayFilePath = filePath ?? 'src/auth/jwt.ts'
+  const displayFilePath = filePath ?? ''
+
+  // 실제 데이터에서 고유 작성자 추출 (최대 4명)
+  const authors = useMemo(() => {
+    const seen = new Map<string, string>()
+    for (const l of displayLines) {
+      if (!seen.has(l.author)) seen.set(l.author, l.ac)
+      if (seen.size >= 4) break
+    }
+    return Array.from(seen.entries()).map(([name, color]) => ({ name, color }))
+  }, [displayLines])
 
   const handleClick = (lineNum: number, hash: string) => {
     setSelLine(lineNum)
@@ -92,8 +102,11 @@ export function BlameView({ onSelectCommit, repoPath, filePath }: Props) {
           </span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, fontSize: 10, color: 'var(--c-text-faint)' }}>
-          <span style={{ background: 'var(--c-gold-bg)', border: '1px solid var(--c-gold-border)', borderRadius: 2, padding: '1px 6px', color: 'var(--c-gold-300)', fontFamily: 'var(--font-display)' }}>SK</span>
-          <span style={{ background: 'rgba(95,184,230,.12)', border: '1px solid rgba(95,184,230,.35)', borderRadius: 2, padding: '1px 6px', color: '#5fb8e6', fontFamily: 'var(--font-display)' }}>JP</span>
+          {authors.map(({ name, color }) => (
+            <span key={name} title={name} style={{ background: color + '22', border: `1px solid ${color}44`, borderRadius: 2, padding: '1px 6px', color, fontFamily: 'var(--font-display)' }}>
+              {name.slice(0, 2).toUpperCase()}
+            </span>
+          ))}
         </div>
       </div>
       <div className="blame-scroll">

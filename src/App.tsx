@@ -452,6 +452,25 @@ export default function App() {
     ).map(c => ({ ...c, _q: searchQuery }))
   }, [searchQuery, baseCommits])
 
+  // ── CommitDetail Diff 버튼: 커밋 특정 파일 diff 로드 (git:commit-file-diff) ──
+  const handleOpenCommitFileDiff = useCallback(async (filePath: string) => {
+    const commit = filteredCommits[selIdx] ?? null
+    if (!repoPath || !commit || !filePath) return
+    setLoadingDiff(true)
+    setDiffContent('')
+    setView('diff')
+    try {
+      const raw = await window.gitAPI?.getCommitFileDiff(repoPath, commit.id, filePath) ?? ''
+      setDiffContent(raw)
+      setDiffFile({ p: filePath, s: 'M', a: 0, d: 0 } as FileEntry)
+    } catch (e) {
+      console.error('getCommitFileDiff failed:', e)
+      setDiffContent('')
+    } finally {
+      setLoadingDiff(false)
+    }
+  }, [repoPath, filteredCommits, selIdx])
+
   // ── 커밋 선택 시 파일 목록 로드 (git:files) ──
   const handleSelectCommit = useCallback(async (idx: number) => {
     setSelIdx(idx)
@@ -531,8 +550,25 @@ export default function App() {
       navigator.clipboard?.writeText(ctxMenu.commit.msg).catch(() => {})
       notify('success', '메시지 복사됨', ctxMenu.commit.msg.slice(0, 60))
     }
-    else if (action === 'revert') notify('warning', 'Revert', 'Reverted ' + ctxMenu?.commit?.id)
-    else if (action?.startsWith('reset-')) notify('warning', 'Reset', 'Repository reset (' + action.split('-')[1] + ')')
+    else if (action === 'revert' && ctxMenu && repoPath) {
+      window.gitAPI?.revert(repoPath, ctxMenu.commit.id)
+        .then(() => { notify('success', 'Reverted', `Changes from ${ctxMenu.commit.id} staged for revert`); return loadRepo(repoPath, true) })
+        .catch(err => notify('error', 'Revert 실패', err instanceof Error ? err.message : String(err)))
+    }
+    else if (action?.startsWith('reset-') && ctxMenu && repoPath) {
+      const mode = action.split('-')[1] as 'soft' | 'mixed' | 'hard'
+      window.gitAPI?.reset(repoPath, mode, ctxMenu.commit.id)
+        .then(() => { notify('warning', `Reset (${mode})`, `HEAD reset to ${ctxMenu.commit.id}`); return loadRepo(repoPath, true) })
+        .catch(err => notify('error', 'Reset 실패', err instanceof Error ? err.message : String(err)))
+    }
+    else if (action === 'tag-here' && ctxMenu && repoPath) {
+      const tagName = prompt('Tag name:')
+      if (tagName?.trim()) {
+        window.gitAPI?.createTag(repoPath, tagName.trim(), ctxMenu.commit.id)
+          .then(() => { notify('success', 'Tag created', `'${tagName}' → ${ctxMenu.commit.id}`); return loadRepo(repoPath, true) })
+          .catch(err => notify('error', 'Tag 실패', err instanceof Error ? err.message : String(err)))
+      }
+    }
   }, [ctxMenu, notify])
 
   const handleBranchAction = useCallback((mode: BranchTab) => { setBranchTab(mode); setShowBranch(true) }, [])
@@ -747,7 +783,7 @@ export default function App() {
                         commit={selectedCommit}
                         files={repoPath ? commitFiles : undefined}
                         loadingFiles={loadingFiles}
-                        onOpenDiff={() => setView('diff')}
+                        onOpenDiff={handleOpenCommitFileDiff}
                         onCherryPick={() => setShowCherryPick(true)}
                         onBlame={() => setView('blame')}
                       />
@@ -766,12 +802,36 @@ export default function App() {
         )}
 
         {/* Modals */}
-        {showMerge       && <MergeModal onClose={() => { setShowMerge(false); notify('success', 'Merge complete', 'feature/auth merged into main') }} branches={realBranches.length > 0 ? realBranches : undefined} />}
-        {showCherryPick  && selectedCommit && <CherryPickModal commit={selectedCommit} onClose={() => setShowCherryPick(false)} />}
-        {showBranch      && <BranchModal initialTab={branchTab} onClose={() => setShowBranch(false)} branches={realBranches.length > 0 ? realBranches : undefined} />}
-        {showRebase      && <InteractiveRebaseModal onClose={() => { setShowRebase(false); notify('info', 'Rebase complete', '6 commits rebased onto main') }} />}
-        {showStash       && <StashPanel onClose={() => setShowStash(false)} />}
-        {showSettings    && <SettingsPanel onClose={() => setShowSettings(false)} />}
+        {showMerge       && <MergeModal
+          onClose={() => setShowMerge(false)}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, true); notify('success', 'Merge complete', '') } }}
+          branches={realBranches.length > 0 ? realBranches : undefined}
+          repoPath={repoPath}
+          currentBranch={activeBranch}
+        />}
+        {showCherryPick  && selectedCommit && <CherryPickModal
+          commit={selectedCommit}
+          onClose={() => setShowCherryPick(false)}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, true); notify('success', 'Cherry-pick applied', selectedCommit.id) } }}
+          repoPath={repoPath}
+          currentBranch={activeBranch}
+        />}
+        {showBranch      && <BranchModal
+          initialTab={branchTab}
+          onClose={() => setShowBranch(false)}
+          onSuccess={() => { if (repoPath) loadRepo(repoPath, true) }}
+          branches={realBranches.length > 0 ? realBranches : undefined}
+          repoPath={repoPath}
+        />}
+        {showRebase      && <InteractiveRebaseModal
+          onClose={() => setShowRebase(false)}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, true); notify('info', 'Rebase complete', '') } }}
+          repoPath={repoPath}
+          commits={realCommits.length > 0 ? realCommits : undefined}
+          currentBranch={activeBranch}
+        />}
+        {showStash       && <StashPanel onClose={() => setShowStash(false)} repoPath={repoPath} currentBranch={activeBranch} />}
+        {showSettings    && <SettingsPanel onClose={() => setShowSettings(false)} repoPath={repoPath} />}
         {showAddRepo     && (
           <AddRepoModal
             onClose={() => setShowAddRepo(false)}
@@ -788,7 +848,13 @@ export default function App() {
         <NotificationStack notifs={notifs} onDismiss={dismiss} />
       </div>
 
-      <StatusBar branch={displayBranch} onSettings={() => setShowSettings(true)} />
+      <StatusBar
+        branch={displayBranch}
+        ahead={repo?.ahead}
+        behind={repo?.behind}
+        remote={repo ? `origin/${repo.branch}` : undefined}
+        onSettings={() => setShowSettings(true)}
+      />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}
 

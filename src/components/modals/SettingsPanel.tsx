@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github'
 
@@ -11,15 +11,18 @@ const loadSettings = () => {
   } catch { return {} }
 }
 
-export function SettingsPanel({ onClose }: { onClose: () => void }) {
+interface Props {
+  onClose: () => void
+  repoPath?: string | null
+}
+
+export function SettingsPanel({ onClose, repoPath }: Props) {
   const [tab, setTab] = useState<SettingsTab>('git')
-  const [cfg, setCfg] = useState({ name: 'Sarah Kim', email: 'sarah@example.com', defaultBranch: 'main', gpg: false })
-  const [remotes, setRemotes] = useState([
-    { n: 'origin', url: 'git@github.com:example/gitgrove-project.git' },
-    { n: 'upstream', url: 'git@github.com:org/gitgrove-project.git' },
-  ])
+  const [cfg, setCfg] = useState({ name: '', email: '', defaultBranch: 'main', gpg: false })
+  const [remotes, setRemotes] = useState<Array<{ n: string; url: string }>>([])
   const [newRemote, setNewRemote] = useState({ n: '', url: '' })
   const [saved, setSaved] = useState(false)
+  const [cfgLoading, setCfgLoading] = useState(false)
   const [githubToken, setGithubToken] = useState(() => {
     try { return localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { return '' }
   })
@@ -39,15 +42,39 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     typeof _saved.showDiffStats === 'boolean' ? _saved.showDiffStats : true
   )
 
-  const save = () => {
+  useEffect(() => {
+    if (!repoPath) return
+    setCfgLoading(true)
+    Promise.all([
+      window.gitAPI?.getConfig(repoPath),
+      window.gitAPI?.getRemotes(repoPath),
+    ]).then(([gitCfg, gitRemotes]) => {
+      if (gitCfg) {
+        setCfg(p => ({ ...p, name: gitCfg.name, email: gitCfg.email, defaultBranch: gitCfg.defaultBranch }))
+      }
+      if (gitRemotes) {
+        setRemotes(gitRemotes.map(r => ({ n: r.name, url: r.url })))
+      }
+    }).catch(() => {}).finally(() => setCfgLoading(false))
+  }, [repoPath])
+
+  const save = async () => {
     const settings = { density, fontSize, tabWidth, showDiffStats }
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch {}
     try { localStorage.setItem(GITHUB_TOKEN_KEY, githubToken) } catch {}
     document.documentElement.style.setProperty('--editor-font-size', `${fontSize}px`)
     window.dispatchEvent(new CustomEvent('gitgrove:settings-changed', { detail: { density, fontSize } }))
+
+    if (repoPath) {
+      try {
+        await window.gitAPI?.setConfig(repoPath, { name: cfg.name, email: cfg.email, defaultBranch: cfg.defaultBranch })
+      } catch { /* ignore */ }
+    }
+
     setSaved(true)
     setTimeout(() => setSaved(false), 1600)
   }
+
   const upCfg = (k: keyof typeof cfg) => (v: string | boolean) => setCfg(p => ({ ...p, [k]: v }))
 
   return (
@@ -67,10 +94,11 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         <div className="sett-body">
           {tab === 'git' && (
             <>
+              {cfgLoading && <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--c-text-faint)' }}>Loading git config…</div>}
               <div className="sett-section">
                 <div className="sett-sec-ttl">Identity</div>
-                <div className="sett-field"><div className="sett-lbl">Display name</div><input className="sett-inp" value={cfg.name} onChange={e => upCfg('name')(e.target.value)} /></div>
-                <div className="sett-field"><div className="sett-lbl">Email</div><input className="sett-inp" value={cfg.email} onChange={e => upCfg('email')(e.target.value)} /></div>
+                <div className="sett-field"><div className="sett-lbl">Display name</div><input className="sett-inp" value={cfg.name} onChange={e => upCfg('name')(e.target.value)} placeholder="Your Name" /></div>
+                <div className="sett-field"><div className="sett-lbl">Email</div><input className="sett-inp" value={cfg.email} onChange={e => upCfg('email')(e.target.value)} placeholder="you@example.com" /></div>
               </div>
               <div className="sett-section">
                 <div className="sett-sec-ttl">Repository</div>
@@ -124,6 +152,9 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
             <>
               <div className="sett-section">
                 <div className="sett-sec-ttl">Configured remotes</div>
+                {remotes.length === 0 && !cfgLoading && (
+                  <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '4px 0' }}>No remotes configured</div>
+                )}
                 {remotes.map(r => (
                   <div key={r.n} className="sett-remote">
                     <span className="sett-remote-name">{r.n}</span>

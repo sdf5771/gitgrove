@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { COMMITS, DIFF_FULL, type Commit } from '../data/mockData'
+import { COMMITS, type Commit } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
 import { sideBySide } from '../utils/sideBySide'
 
@@ -10,12 +10,12 @@ interface Props {
 
 export function DiffExplorer({ commit, repoPath }: Props) {
   const files = commit ? commit.files : COMMITS[0].files
-  const [selFile, setSelFile] = useState(files[0]?.p || 'src/auth/jwt.ts')
+  const [selFile, setSelFile] = useState(files[0]?.p || '')
   const [rawDiff, setRawDiff] = useState<string>('')
   const [loadingDiff, setLoadingDiff] = useState(false)
 
   useEffect(() => {
-    setSelFile(files[0]?.p || 'src/auth/jwt.ts')
+    setSelFile(files[0]?.p || '')
   }, [commit])
 
   useEffect(() => {
@@ -31,11 +31,7 @@ export function DiffExplorer({ commit, repoPath }: Props) {
   }, [selFile, repoPath])
 
   const rows = useMemo(() => {
-    if (!rawDiff) {
-      // fallback: mock 데이터
-      const mockData = DIFF_FULL[selFile] || Object.values(DIFF_FULL)[0]
-      return mockData ? sideBySide(mockData.lines) : []
-    }
+    if (!rawDiff) return []
     const lines = rawDiff.split('\n')
       .filter(l => !l.startsWith('diff ') && !l.startsWith('index ') && !l.startsWith('--- ') && !l.startsWith('+++ '))
       .map(l => {
@@ -45,15 +41,11 @@ export function DiffExplorer({ commit, repoPath }: Props) {
         return { t: 'ctx' as const, s: l }
       })
     return sideBySide(lines)
-  }, [rawDiff, selFile])
+  }, [rawDiff])
 
   // diff stats 계산
-  const addCount = rawDiff
-    ? rows.filter(r => r.t === 'pair' && r.R !== null).length
-    : (DIFF_FULL[selFile] || Object.values(DIFF_FULL)[0])?.a ?? 0
-  const delCount = rawDiff
-    ? rows.filter(r => r.t === 'pair' && r.L !== null).length
-    : (DIFF_FULL[selFile] || Object.values(DIFF_FULL)[0])?.d ?? 0
+  const addCount = rows.filter(r => r.t === 'pair' && r.R !== null).length
+  const delCount = rows.filter(r => r.t === 'pair' && r.L !== null).length
 
   return (
     <div className="dex-wrap">

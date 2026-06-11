@@ -7,10 +7,12 @@ type Tab = 'create' | 'rename' | 'delete'
 interface Props {
   initialTab?: Tab
   onClose: () => void
+  onSuccess?: () => void
   branches?: Branch[]
+  repoPath?: string | null
 }
 
-export function BranchModal({ initialTab = 'create', onClose, branches }: Props) {
+export function BranchModal({ initialTab = 'create', onClose, onSuccess, branches, repoPath }: Props) {
   const allBranches = branches ?? LOCAL_BRANCHES
   const nonCurrent = allBranches.filter(b => !b.current)
 
@@ -25,12 +27,50 @@ export function BranchModal({ initialTab = 'create', onClose, branches }: Props)
   const [doing, setDoing] = useState(false)
   const [isDone, setIsDone] = useState(false)
   const [doneMsg, setDoneMsg] = useState('')
-  const validateName = (n: string) => /^[a-z0-9_\-/]+$/i.test(n) && n.length > 0
-  const run = (msg: string) => { setDoing(true); setTimeout(() => { setDoing(false); setIsDone(true); setDoneMsg(msg) }, 1000); setTimeout(() => onClose(), 2000) }
+  const [error, setError] = useState('')
 
-  const create = () => validateName(cName) && run(`Branch '${cName}' created${cCheckout ? ' and checked out' : ''}`)
-  const rename = () => validateName(rNew) && run(`Renamed '${rFrom}' → '${rNew}'`)
-  const del = () => run(`Branch '${dBranch}' deleted`)
+  const validateName = (n: string) => /^[a-z0-9_\-/]+$/i.test(n) && n.length > 0
+
+  const run = async (fn: () => Promise<void>, msg: string) => {
+    setError('')
+    setDoing(true)
+    try {
+      if (repoPath) {
+        await fn()
+      } else {
+        await new Promise(r => setTimeout(r, 1000))
+      }
+      setDoneMsg(msg)
+      setIsDone(true)
+      onSuccess?.()
+      setTimeout(() => onClose(), 2000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDoing(false)
+    }
+  }
+
+  const create = () => {
+    if (!validateName(cName)) return
+    run(
+      () => window.gitAPI!.branchCreate(repoPath!, cName, cBase, cCheckout),
+      `Branch '${cName}' created${cCheckout ? ' and checked out' : ''}`
+    )
+  }
+  const rename = () => {
+    if (!validateName(rNew)) return
+    run(
+      () => window.gitAPI!.branchRename(repoPath!, rFrom, rNew),
+      `Renamed '${rFrom}' → '${rNew}'`
+    )
+  }
+  const del = () => {
+    run(
+      () => window.gitAPI!.branchDelete(repoPath!, dBranch, dForce),
+      `Branch '${dBranch}' deleted`
+    )
+  }
 
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
 
@@ -45,6 +85,12 @@ export function BranchModal({ initialTab = 'create', onClose, branches }: Props)
               </button>
             ))}
           </div>
+
+          {error && (
+            <div style={{ margin: '8px 16px 0', padding: '8px 12px', background: 'rgba(255,107,107,.1)', border: '1px solid rgba(255,107,107,.35)', borderRadius: 'var(--r2)', fontSize: 11, color: 'var(--c-danger)' }}>
+              {error}
+            </div>
+          )}
 
           {tab === 'create' && (
             <div className="modal-body">

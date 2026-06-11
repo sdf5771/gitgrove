@@ -84,6 +84,7 @@ interface GitStashEntry {
   index: number
   message: string
   branch: string
+  time: string
 }
 
 // ──────────────────────────────────────────────
@@ -99,6 +100,7 @@ interface Window {
     getStatus: (repoPath: string) => Promise<GitStatusResult>
     getDiff: (repoPath: string, filePath: string) => Promise<string>
     getFiles: (repoPath: string, commitHash: string) => Promise<GitFileEntry[]>
+    getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string) => Promise<string>
     stage: (repoPath: string, files: string[]) => Promise<void>
     unstage: (repoPath: string, files: string[]) => Promise<void>
     commit: (repoPath: string, message: string) => Promise<void>
@@ -115,5 +117,15 @@ interface Window {
     stashDrop: (repoPath: string, index: number) => Promise<void>
     stashList: (repoPath: string) => Promise<GitStashEntry[]>
     stashPush: (repoPath: string, message?: string) => Promise<void>
+    stashPop: (repoPath: string, index: number) => Promise<void>
+    branchCreate: (repoPath: string, name: string, base: string, checkout: boolean) => Promise<void>
+    branchRename: (repoPath: string, from: string, to: string) => Promise<void>
+    branchDelete: (repoPath: string, name: string, force: boolean) => Promise<void>
+    cherryPick: (repoPath: string, hash: string, noCommit: boolean) => Promise<void>
+    merge: (repoPath: string, branch: string, strategy: 'merge' | 'rebase' | 'squash') => Promise<void>
+    commitAmend: (repoPath: string, message?: string) => Promise<void>
+    revert: (repoPath: string, hash: string) => Promise<void>
+    reset: (repoPath: string, mode: 'soft' | 'mixed' | 'hard', hash: string) => Promise<void>
+    rebaseInteractive: (repoPath: string, items: Array<{ hash: string; action: string; msg: string }>) => Promise<void>
   }
 }

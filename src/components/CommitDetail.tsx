@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { DIFF, type Commit } from '../data/mockData'
+import type { Commit } from '../data/mockData'
 import { FilePath } from './FilePath'
 
 interface Props {
   commit: Commit | null
   files?: GitFileEntry[]       // 실제 파일 목록 (IPC로 로드)
   loadingFiles?: boolean       // 파일 로딩 중 여부
-  onOpenDiff: () => void
+  onOpenDiff: (filePath: string) => void
   onCherryPick: () => void
   onBlame: () => void
 }
@@ -86,7 +86,12 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
       </div>
       <div className="divl" />
       <div style={{ display: 'flex', gap: 5 }}>
-        <button style={btnStyle} onClick={onOpenDiff}>
+        <button style={btnStyle} onClick={() => {
+          const filePath = hasRealFiles
+            ? (files?.[selFile]?.path ?? '')
+            : (commit.files[selFile]?.p ?? '')
+          onOpenDiff(filePath)
+        }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>Diff
         </button>
         <button style={btnStyle} onClick={onCherryPick}>
@@ -95,13 +100,6 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
         <button style={btnStyle} onClick={onBlame}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Blame
         </button>
-      </div>
-      <div style={{ background: 'var(--c-bg-inset)', borderRadius: 'var(--r2)', overflow: 'hidden', border: '1px solid var(--c-border)' }}>
-        <div style={{ padding: '5px 10px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--c-info)', borderBottom: '1px solid var(--c-divider)' }}>@@ −18,8 +18,16 @@</div>
-        {DIFF.slice(1, 9).map((line, i) => {
-          if (line.t === 'hunk') return null
-          return <div key={i} className={`dline ${line.t === 'add' ? 'dadd' : line.t === 'del' ? 'ddel' : ''}`} style={{ lineHeight: '18px', padding: '0 10px', fontSize: 11 }}><span className="dtxt">{line.s}</span></div>
-        })}
       </div>
     </div>
   )

@@ -2,21 +2,47 @@ import { useState } from 'react'
 import type { Commit } from '../../data/mockData'
 import { ModalShell, SuccessState } from './ModalShell'
 
-export function CherryPickModal({ commit, onClose }: { commit: Commit; onClose: () => void }) {
+interface Props {
+  commit: Commit
+  onClose: () => void
+  onSuccess?: () => void
+  repoPath?: string | null
+  currentBranch?: string
+}
+
+export function CherryPickModal({ commit, onClose, onSuccess, repoPath, currentBranch }: Props) {
   const [noCommit, setNoCommit] = useState(false)
   const [doing, setDoing] = useState(false)
   const [isDone, setIsDone] = useState(false)
   const [conflict, setConflict] = useState(false)
+  const [error, setError] = useState('')
 
-  const execute = () => {
+  const execute = async () => {
+    setError('')
     setDoing(true)
-    setTimeout(() => {
+    try {
+      if (repoPath) {
+        await window.gitAPI!.cherryPick(repoPath, commit.id, noCommit)
+      } else {
+        await new Promise(r => setTimeout(r, 1200))
+        if (commit.parents.length >= 2) { setConflict(true); setDoing(false); return }
+      }
+      setIsDone(true)
+      onSuccess?.()
+      setTimeout(() => onClose(), 1800)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      if (msg.toLowerCase().includes('conflict') || msg.toLowerCase().includes('cherry-pick')) {
+        setConflict(true)
+      } else {
+        setError(msg)
+      }
+    } finally {
       setDoing(false)
-      if (commit.parents.length >= 2) setConflict(true)
-      else { setIsDone(true); setTimeout(() => onClose(), 1800) }
-    }, 1200)
+    }
   }
 
+  const branch = currentBranch ?? 'current'
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><polyline points="9,11 12,14 22,4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
 
   return (
@@ -34,10 +60,15 @@ export function CherryPickModal({ commit, onClose }: { commit: Commit; onClose: 
         </div>
       ) : isDone ? (
         <SuccessState msg="Cherry-pick applied"
-          sub={<>Commit <strong style={{ color: 'var(--c-gold-300)', fontFamily: 'var(--font-mono)' }}>{commit.id}</strong> → main</>} />
+          sub={<>Commit <strong style={{ color: 'var(--c-gold-300)', fontFamily: 'var(--font-mono)' }}>{commit.id}</strong> → {branch}</>} />
       ) : (
         <>
           <div className="modal-body">
+            {error && (
+              <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(255,107,107,.1)', border: '1px solid rgba(255,107,107,.35)', borderRadius: 'var(--r2)', fontSize: 11, color: 'var(--c-danger)' }}>
+                {error}
+              </div>
+            )}
             <div className="mfield">
               <label>Commit to apply</label>
               <div className="cp-commit-card">
@@ -48,7 +79,7 @@ export function CherryPickModal({ commit, onClose }: { commit: Commit; onClose: 
             </div>
             <div className="mfield">
               <label>Apply onto</label>
-              <div className="mval"><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e6a536', flexShrink: 0, display: 'inline-block' }} />main (current)</div>
+              <div className="mval"><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e6a536', flexShrink: 0, display: 'inline-block' }} />{branch} (current)</div>
             </div>
             <div className="mfield">
               <label>Options</label>

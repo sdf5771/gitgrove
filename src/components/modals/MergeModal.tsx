@@ -4,20 +4,39 @@ import { ModalShell, SuccessState } from './ModalShell'
 
 interface Props {
   onClose: () => void
+  onSuccess?: () => void
   branches?: Branch[]
+  repoPath?: string | null
+  currentBranch?: string
 }
 
-export function MergeModal({ onClose, branches }: Props) {
+export function MergeModal({ onClose, onSuccess, branches, repoPath, currentBranch }: Props) {
   const opts = (branches ?? LOCAL_BRANCHES).filter(b => !b.current)
   const [from, setFrom] = useState(opts[0]?.name ?? '')
-  const [strategy, setStrategy] = useState('merge')
+  const [strategy, setStrategy] = useState<'merge' | 'rebase' | 'squash'>('merge')
   const [doing, setDoing] = useState(false)
   const [isDone, setIsDone] = useState(false)
+  const [error, setError] = useState('')
 
-  const execute = () => {
+  const target = currentBranch ?? 'current'
+
+  const execute = async () => {
+    setError('')
     setDoing(true)
-    setTimeout(() => { setDoing(false); setIsDone(true) }, 1300)
-    setTimeout(() => onClose(), 2100)
+    try {
+      if (repoPath) {
+        await window.gitAPI!.merge(repoPath, from, strategy)
+      } else {
+        await new Promise(r => setTimeout(r, 1300))
+      }
+      setIsDone(true)
+      onSuccess?.()
+      setTimeout(() => onClose(), 2100)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDoing(false)
+    }
   }
 
   const strategies = [
@@ -32,13 +51,18 @@ export function MergeModal({ onClose, branches }: Props) {
     <ModalShell title="Merge / Rebase" width={440} onClose={onClose} icon={icon}>
       {isDone ? (
         <SuccessState msg={`${strategy.charAt(0).toUpperCase() + strategy.slice(1)} complete`}
-          sub={<><strong style={{ color: 'var(--c-text)' }}>{from}</strong> → <strong style={{ color: 'var(--c-text)' }}>main</strong></>} />
+          sub={<><strong style={{ color: 'var(--c-text)' }}>{from}</strong> → <strong style={{ color: 'var(--c-text)' }}>{target}</strong></>} />
       ) : (
         <>
           <div className="modal-body">
+            {error && (
+              <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(255,107,107,.1)', border: '1px solid rgba(255,107,107,.35)', borderRadius: 'var(--r2)', fontSize: 11, color: 'var(--c-danger)' }}>
+                {error}
+              </div>
+            )}
             <div className="mfield">
               <label>Into</label>
-              <div className="mval"><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e6a536', flexShrink: 0, display: 'inline-block' }} />main</div>
+              <div className="mval"><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e6a536', flexShrink: 0, display: 'inline-block' }} />{target}</div>
             </div>
             <div className="mfield">
               <label>From</label>
@@ -59,7 +83,7 @@ export function MergeModal({ onClose, branches }: Props) {
             </div>
             <div className="minfo">
               <span className="minfo-icon">ℹ</span>
-              <span>3 commits from <strong style={{ color: 'var(--c-text-strong)' }}>{from}</strong> → <strong style={{ color: 'var(--c-text-strong)' }}>main</strong></span>
+              <span>Commits from <strong style={{ color: 'var(--c-text-strong)' }}>{from}</strong> → <strong style={{ color: 'var(--c-text-strong)' }}>{target}</strong></span>
             </div>
           </div>
           <div className="modal-footer">
