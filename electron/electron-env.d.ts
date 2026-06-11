@@ -80,5 +80,6 @@ interface Window {
     push: (repoPath: string) => Promise<GitRemoteResult>
     fetch: (repoPath: string) => Promise<GitRemoteResult>
     checkout: (repoPath: string, branch: string) => Promise<void>
+    blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
   }
 }

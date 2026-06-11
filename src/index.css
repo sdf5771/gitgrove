@@ -179,7 +179,7 @@ body { display: flex; align-items: center; justify-content: center; }
 .sa { color: var(--c-success); } .sd { color: var(--c-danger); }
 
 /* ── Right panel ── */
-.rpanel { width: 300px; flex-shrink: 0; background: var(--c-bg-surface); display: flex; flex-direction: column; overflow: hidden; }
+.rpanel { flex-shrink: 0; background: var(--c-bg-surface); display: flex; flex-direction: column; overflow: hidden; }
 .pnl-hdr {
   display: flex; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--c-border); gap: 8px; flex-shrink: 0;
   background: linear-gradient(180deg, rgba(230,165,54,.06), transparent 80%);
