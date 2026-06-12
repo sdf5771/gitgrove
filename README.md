@@ -158,7 +158,7 @@ Fonts         Pixelify Sans · Noto Sans KR · IBM Plex Mono (Google Fonts)
 >
 > **방법 1 — 터미널 (권장):**
 > ```bash
-> xattr -rd com.apple.quarantine /Applications/GitGrove.app
+> xattr -d com.apple.quarantine /Applications/GitGrove.app
 > ```
 > **방법 2 — Finder:**  
 > GitGrove.app을 우클릭 → **열기** → **열기** 클릭
