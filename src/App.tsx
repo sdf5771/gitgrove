@@ -165,6 +165,22 @@ export default function App() {
 
   const [realCommits, setRealCommits] = useState<Commit[]>([])
   const [realBranches, setRealBranches] = useState<Branch[]>([])
+
+  // ── 커밋 로그 페이지네이션 / 전체 브랜치 토글 ──
+  const LOG_PAGE = 50
+  const [logLimit, setLogLimit] = useState(LOG_PAGE)
+  const [showAllBranches, setShowAllBranches] = useState(true)
+  const [hasMoreCommits, setHasMoreCommits] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // loadRepo가 최신 값을 읽도록 ref로 보관 (closure 정체 방지)
+  const logLimitRef = useRef(logLimit)
+  const showAllBranchesRef = useRef(showAllBranches)
+  useEffect(() => { logLimitRef.current = logLimit }, [logLimit])
+  useEffect(() => { showAllBranchesRef.current = showAllBranches }, [showAllBranches])
+  // hunk 단위 stage/unstage 진행 상태 + StageArea 재마운트 키
+  const [applyingHunk, setApplyingHunk] = useState<number | null>(null)
+  const [stageRefreshKey, setStageRefreshKey] = useState(0)
+  const [diffFileStaged, setDiffFileStaged] = useState(false)
   const [realRemotes, setRealRemotes] = useState<string[]>([])
   const [realTags, setRealTags] = useState<string[]>([])
   const [realUnstaged, setRealUnstaged] = useState<FileEntry[]>([])
@@ -264,8 +280,9 @@ export default function App() {
     if (!silent) setIsLoading(true)
     setLoadError(null)
     try {
+      const limit = logLimitRef.current
       const [gitCommits, gitBranches, gitStatus] = await Promise.all([
-        window.gitAPI?.getLog(path) ?? Promise.resolve([]),
+        window.gitAPI?.getLog(path, { limit, all: showAllBranchesRef.current }) ?? Promise.resolve([]),
         window.gitAPI?.getBranches(path) ?? Promise.resolve({ current: '', local: [], remote: [], tags: [] }),
         (window.gitAPI?.getStatus(path) as Promise<{ staged: Array<{ path: string; status: string; additions: number; deletions: number }>; unstaged: Array<{ path: string; status: string; additions: number; deletions: number }> }> | undefined) ?? Promise.resolve({ staged: [] as Array<{ path: string; status: string; additions: number; deletions: number }>, unstaged: [] as Array<{ path: string; status: string; additions: number; deletions: number }> }),
       ])
@@ -276,6 +293,7 @@ export default function App() {
       const appBranches = toAppBranches(gitBranches)
 
       setRealCommits(appCommits)
+      setHasMoreCommits(gitCommits.length >= limit)
       setRealBranches(appBranches)
       setRealRemotes(gitBranches.remote)
       setRealTags(gitBranches.tags)
@@ -471,21 +489,70 @@ export default function App() {
     window.addEventListener('mouseup', onMouseUp)
   }, [])
 
-  // ── 파일 선택 시 diff 로드 (git:diff) ──
-  const handleSelDiffFile = useCallback(async (f: FileEntry) => {
+  // ── 파일 선택 시 diff 로드 (staged 여부에 맞는 diff 사용) ──
+  const handleSelDiffFile = useCallback(async (f: FileEntry, staged = false) => {
     setDiffFile(f)
+    setDiffFileStaged(staged)
     if (!repoPath) return
     setLoadingDiff(true)
     try {
-      const raw = await window.gitAPI?.getDiff(repoPath, f.p) ?? ''
+      const raw = await window.gitAPI?.getFileDiff(repoPath, f.p, staged) ?? ''
       setDiffContent(raw)
     } catch (e) {
-      console.error('getDiff failed:', e)
+      console.error('getFileDiff failed:', e)
       setDiffContent('')
     } finally {
       setLoadingDiff(false)
     }
   }, [repoPath])
+
+  // ── hunk 단위 stage/unstage ──
+  const handleApplyHunk = useCallback(async (hunkIndex: number) => {
+    if (!repoPath || !diffFile || applyingHunk != null) return
+    setApplyingHunk(hunkIndex)
+    try {
+      await window.gitAPI?.applyHunk(repoPath, diffFile.p, hunkIndex, diffFileStaged)
+      // 실제 git 상태 갱신 후 StageArea 재마운트 + 현재 파일 diff 재로딩
+      await loadRepo(repoPath, true)
+      setStageRefreshKey(k => k + 1)
+      const raw = await window.gitAPI?.getFileDiff(repoPath, diffFile.p, diffFileStaged) ?? ''
+      setDiffContent(raw)
+      notify('success', diffFileStaged ? 'Hunk unstaged' : 'Hunk staged', diffFile.p)
+    } catch (e) {
+      notify('error', 'Hunk 적용 실패', e instanceof Error ? e.message : String(e))
+    } finally {
+      setApplyingHunk(null)
+    }
+  }, [repoPath, diffFile, diffFileStaged, applyingHunk, loadRepo, notify])
+
+  // ── 커밋 로그 추가 로드 (페이지네이션) ──
+  const loadMoreCommits = useCallback(async () => {
+    if (!repoPath || loadingMore) return
+    const nextLimit = logLimit + LOG_PAGE
+    setLoadingMore(true)
+    try {
+      const gitCommits = await window.gitAPI?.getLog(repoPath, { limit: nextLimit, all: showAllBranches }) ?? []
+      const hashes = gitCommits.map(c => c.id)
+      const laneMap = computeLanes(gitCommits)
+      setRealCommits(gitCommits.map(c => toAppCommit(c, hashes, laneMap)))
+      setLogLimit(nextLimit)
+      setHasMoreCommits(gitCommits.length >= nextLimit)
+    } catch (e) {
+      notify('error', '커밋 로드 실패', e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [repoPath, loadingMore, logLimit, showAllBranches, notify])
+
+  // ── 전체 브랜치 표시 토글 ──
+  const toggleAllBranches = useCallback(() => {
+    const next = !showAllBranchesRef.current
+    showAllBranchesRef.current = next
+    setShowAllBranches(next)
+    logLimitRef.current = LOG_PAGE
+    setLogLimit(LOG_PAGE)
+    if (repoPathRef.current) loadRepo(repoPathRef.current, true)
+  }, [loadRepo])
 
   // ── 표시할 커밋 목록 결정 ──
   const baseCommits = repoPath ? realCommits : COMMITS
@@ -821,6 +888,15 @@ export default function App() {
                           Message
                           {searchQuery && <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--c-gold-300)', fontFamily: 'var(--font-display)' }}>{filteredCommits.length} result{filteredCommits.length !== 1 ? 's' : ''}</span>}
                         </span>
+                        {repoPath && (
+                          <button
+                            className={`allbranch-toggle${showAllBranches ? ' on' : ''}`}
+                            onClick={toggleAllBranches}
+                            title={showAllBranches ? '전체 브랜치 표시 중 (현재 브랜치만 보기)' : '현재 브랜치만 표시 중 (전체 브랜치 보기)'}
+                          >
+                            ⎇ All branches
+                          </button>
+                        )}
                         <span className="gha">Author</span>
                         <span className="ght">Time</span>
                       </div>
@@ -833,9 +909,17 @@ export default function App() {
                         rowH={rowH}
                         activeBranch={activeBranch}
                       />
+                      {repoPath && hasMoreCommits && !searchQuery && (
+                        <button className="loadmore-btn" onClick={loadMoreCommits} disabled={loadingMore}>
+                          {loadingMore
+                            ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Loading…</span>
+                            : `↓ Load ${LOG_PAGE} more commits`}
+                        </button>
+                      )}
                     </>
                   ) : (
                     <StageArea
+                      key={stageRefreshKey}
                       onSelDiffFile={handleSelDiffFile}
                       initialUnstaged={realUnstaged.length > 0 || realStaged.length > 0 ? realUnstaged : undefined}
                       initialStaged={realUnstaged.length > 0 || realStaged.length > 0 ? realStaged : undefined}
@@ -893,6 +977,9 @@ export default function App() {
                       file={diffFile}
                       rawDiff={repoPath ? diffContent : undefined}
                       loading={loadingDiff}
+                      staged={diffFileStaged}
+                      onApplyHunk={repoPath ? handleApplyHunk : undefined}
+                      applyingHunk={applyingHunk}
                     />
                   )}
                 </div>

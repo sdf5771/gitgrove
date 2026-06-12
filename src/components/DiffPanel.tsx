@@ -5,24 +5,31 @@ interface Props {
   file: FileEntry | null
   rawDiff?: string
   loading?: boolean
+  // hunk 단위 stage/unstage (Stage 뷰 전용)
+  staged?: boolean
+  onApplyHunk?: (hunkIndex: number) => void
+  applyingHunk?: number | null
 }
 
 interface DiffLineWithNums extends DiffLine {
   oldNum?: number
   newNum?: number
+  hunkIndex?: number
 }
 
 function parseUnifiedDiff(raw: string): DiffLineWithNums[] {
   const result: DiffLineWithNums[] = []
   let oldNum = 0
   let newNum = 0
+  let hunkIndex = -1
 
   for (const line of raw.split('\n')) {
     if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('diff ') || line.startsWith('index ')) continue
     if (line.startsWith('@@')) {
       const m = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)/)
       if (m) { oldNum = parseInt(m[1]) - 1; newNum = parseInt(m[2]) - 1 }
-      result.push({ t: 'hunk', s: line })
+      hunkIndex++
+      result.push({ t: 'hunk', s: line, hunkIndex })
     } else if (line.startsWith('+')) {
       newNum++
       result.push({ t: 'add', s: line, newNum })
@@ -37,7 +44,7 @@ function parseUnifiedDiff(raw: string): DiffLineWithNums[] {
   return result
 }
 
-export function DiffPanel({ file, rawDiff, loading }: Props) {
+export function DiffPanel({ file, rawDiff, loading, staged, onApplyHunk, applyingHunk }: Props) {
   if (!file && rawDiff === undefined && !loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
@@ -78,7 +85,26 @@ export function DiffPanel({ file, rawDiff, loading }: Props) {
         ) : (
           <>
             {lines.map((line, i) => {
-              if (line.t === 'hunk') return <div key={i} className="dhunk">{line.s}</div>
+              if (line.t === 'hunk') {
+                const hi = line.hunkIndex ?? 0
+                return (
+                  <div key={i} className="dhunk">
+                    <span className="dhunk-txt">{line.s}</span>
+                    {onApplyHunk && (
+                      <button
+                        className="hunk-btn"
+                        disabled={applyingHunk != null}
+                        onClick={e => { e.stopPropagation(); onApplyHunk(hi) }}
+                        title={staged ? 'Unstage this hunk' : 'Stage this hunk'}
+                      >
+                        {applyingHunk === hi
+                          ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+                          : staged ? '− Unstage hunk' : '+ Stage hunk'}
+                      </button>
+                    )}
+                  </div>
+                )
+              }
               const num = line.newNum ?? line.oldNum ?? ''
               return (
                 <div key={i} className={`dline ${line.t === 'add' ? 'dadd' : line.t === 'del' ? 'ddel' : ''}`}>

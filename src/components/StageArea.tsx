@@ -3,7 +3,7 @@ import { FileEntry, INIT_UNSTAGED, INIT_STAGED } from '../data/mockData'
 import { FilePath } from './FilePath'
 
 interface Props {
-  onSelDiffFile: (f: FileEntry) => void
+  onSelDiffFile: (f: FileEntry, staged: boolean) => void
   initialUnstaged?: FileEntry[]
   initialStaged?: FileEntry[]
   repoPath?: string | null      // 실제 IPC 호출에 사용
@@ -30,7 +30,7 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoP
     setUnstaged(p => p.filter(x => x.p !== f.p))
     setStaged(p => [...p, f])
     setSelS(staged.length)
-    onSelDiffFile(f)
+    onSelDiffFile(f, true)
   }
 
   const unstageFile = async (f: FileEntry) => {
@@ -44,7 +44,7 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoP
     }
     setStaged(p => p.filter(x => x.p !== f.p))
     setUnstaged(p => [...p, f])
-    onSelDiffFile(f)
+    onSelDiffFile(f, false)
   }
 
   const stageAll = async () => {
@@ -108,7 +108,7 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoP
               <div
                 key={f.p}
                 className={`sfi${selU === i ? ' on' : ''}`}
-                onClick={() => { setSelU(i); onSelDiffFile(f) }}
+                onClick={() => { setSelU(i); onSelDiffFile(f, false) }}
               >
                 <button className="sact" onClick={e => { e.stopPropagation(); stageFile(f) }} title="Stage">+</button>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>
@@ -141,7 +141,7 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoP
               <div
                 key={f.p}
                 className={`sfi${selS === i ? ' on' : ''}`}
-                onClick={() => { setSelS(i); onSelDiffFile(f) }}
+                onClick={() => { setSelS(i); onSelDiffFile(f, true) }}
               >
                 <button className="sact" onClick={e => { e.stopPropagation(); unstageFile(f) }} title="Unstage">−</button>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>

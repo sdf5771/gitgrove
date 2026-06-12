@@ -31,10 +31,12 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 // --------- Expose gitAPI to the Renderer process ---------
 contextBridge.exposeInMainWorld('gitAPI', {
   openDialog: () => ipcRenderer.invoke('git:open-dialog'),
-  getLog: (repoPath: string) => ipcRenderer.invoke('git:log', repoPath),
+  getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => ipcRenderer.invoke('git:log', repoPath, opts),
   getBranches: (repoPath: string) => ipcRenderer.invoke('git:branches', repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke('git:status', repoPath),
   getDiff: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:diff', repoPath, filePath),
+  getFileDiff: (repoPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke('git:file-diff', repoPath, filePath, staged),
+  applyHunk: (repoPath: string, filePath: string, hunkIndex: number, reverse: boolean) => ipcRenderer.invoke('git:apply-hunk', repoPath, filePath, hunkIndex, reverse),
   getFiles: (repoPath: string, commitHash: string) => ipcRenderer.invoke('git:files', repoPath, commitHash),
   getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string) => ipcRenderer.invoke('git:commit-file-diff', repoPath, commitHash, filePath),
   stage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:stage', repoPath, files),
