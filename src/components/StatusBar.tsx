@@ -32,10 +32,16 @@ export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUse
         </>
       )}
       {githubUser && (
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, marginRight: 6 }}>
+        <button
+          onClick={() => window.appAPI?.openReleaseUrl(`https://github.com/${githubUser.login}`)}
+          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, marginRight: 6, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4, transition: 'background 120ms' }}
+          onMouseOver={e => (e.currentTarget.style.background = 'var(--c-bg-elevated)')}
+          onMouseOut={e => (e.currentTarget.style.background = 'none')}
+          title={`github.com/${githubUser.login}`}
+        >
           <img src={githubUser.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', border: '1px solid var(--c-border)' }} />
           <span style={{ fontSize: 11, color: 'var(--c-text-muted)', fontFamily: 'var(--font-mono)' }}>@{githubUser.login}</span>
-        </div>
+        </button>
       )}
       <button onClick={onSettings} style={{ marginLeft: githubUser ? undefined : 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: '11px', padding: '0 4px', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4, transition: 'color 120ms', fontFamily: 'var(--font-mono)' }}
         onMouseOver={e => (e.currentTarget.style.color = 'var(--c-text)')}
