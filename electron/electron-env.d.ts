@@ -92,6 +92,10 @@ interface GitStashEntry {
 // ──────────────────────────────────────────────
 
 interface Window {
+  appAPI: {
+    onUpdateAvailable: (cb: (info: { version: string; url: string }) => void) => void
+    openReleaseUrl: (url: string) => void
+  }
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {
     openDialog: () => Promise<string | null>

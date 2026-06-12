@@ -392,6 +392,13 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 마운트 시 1회만
 
+  // ── 새 버전 알림 ──
+  useEffect(() => {
+    window.appAPI?.onUpdateAvailable(({ version, url }) => {
+      notify('info', `GitGrove ${version} 출시`, '새 버전이 있습니다', () => window.appAPI?.openReleaseUrl(url), 8000)
+    })
+  }, [notify])
+
   // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
   useEffect(() => {
     const handleFocus = () => {

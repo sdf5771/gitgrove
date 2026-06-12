@@ -1,5 +1,13 @@
 import { ipcRenderer, contextBridge } from 'electron'
 
+// --------- App update bridge ---------
+contextBridge.exposeInMainWorld('appAPI', {
+  onUpdateAvailable: (cb: (info: { version: string; url: string }) => void) => {
+    ipcRenderer.on('app:update-available', (_e, info) => cb(info))
+  },
+  openReleaseUrl: (url: string) => ipcRenderer.send('app:open-release-url', url),
+})
+
 // --------- Expose ipcRenderer to the Renderer process ---------
 contextBridge.exposeInMainWorld('ipcRenderer', {
   on(...args: Parameters<typeof ipcRenderer.on>) {

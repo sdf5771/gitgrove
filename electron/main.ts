@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import https from 'node:https'
 import simpleGit from 'simple-git'
 
 // macOS GPU 프로세스 크래시 억제
@@ -128,9 +129,10 @@ function createWindow() {
   })
   ipcMain.on('win-close', () => win?.close())
 
-  // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
+    // 업데이트 체크 — 로드 후 3초 뒤 (UX 방해 최소화)
+    setTimeout(() => checkForUpdates(), 3000)
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -767,6 +769,51 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
   }
+})
+
+// ──────────────────────────────────────────────
+// 업데이트 체크 (GitHub Releases API)
+// ──────────────────────────────────────────────
+
+const REPO = 'sdf5771/gitgrove'
+
+function checkForUpdates() {
+  const currentVersion = app.getVersion()
+  const url = `https://api.github.com/repos/${REPO}/releases/latest`
+
+  const req = https.get(url, { headers: { 'User-Agent': 'GitGrove-App' } }, (res) => {
+    let data = ''
+    res.on('data', chunk => { data += chunk })
+    res.on('end', () => {
+      try {
+        const release = JSON.parse(data)
+        const latest = (release.tag_name as string)?.replace(/^v/, '') ?? ''
+        if (latest && isNewer(latest, currentVersion)) {
+          win?.webContents.send('app:update-available', {
+            version: latest,
+            url: release.html_url as string,
+          })
+        }
+      } catch {
+        // ignore parse errors
+      }
+    })
+  })
+  req.on('error', () => {})
+  req.end()
+}
+
+function isNewer(latest: string, current: string): boolean {
+  const parse = (v: string) => v.split('.').map(n => parseInt(n, 10))
+  const [la, lb, lc] = parse(latest)
+  const [ca, cb, cc] = parse(current)
+  if (la !== ca) return la > ca
+  if (lb !== cb) return lb > cb
+  return lc > cc
+}
+
+ipcMain.on('app:open-release-url', (_e, url: string) => {
+  shell.openExternal(url)
 })
 
 app.whenReady().then(createWindow)
