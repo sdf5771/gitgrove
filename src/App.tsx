@@ -400,9 +400,17 @@ export default function App() {
   }, [notify])
 
   // ── 탭 전환 시 해당 레포 로드 ──
+  // refs to avoid stale closure — adding repos/repoPath to deps would cause
+  // a loop: loadRepo → setRepos → repos changes → effect fires again
+  const reposRef = useRef(repos)
+  useEffect(() => { reposRef.current = repos }, [repos])
+  const repoPathRef = useRef(repoPath)
+  useEffect(() => { repoPathRef.current = repoPath }, [repoPath])
+
   useEffect(() => {
-    const path = repos[activeRepo]?.path
-    if (path && path !== repoPath) loadRepo(path, true)
+    const path = reposRef.current[activeRepo]?.path
+    if (path && path !== repoPathRef.current) loadRepo(path, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRepo])
 
   // ── GitHub 사용자 정보 ──

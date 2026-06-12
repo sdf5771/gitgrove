@@ -27,7 +27,28 @@ const getFileDel = (f: unknown): number => {
 }
 
 export function DiffExplorer({ commit, repoPath, commitFiles }: Props) {
-  const files: unknown[] = commitFiles ?? (commit ? commit.files : COMMITS[0].files)
+  // When the user navigates directly to the Diff tab without first clicking a commit
+  // in History (which populates commitFiles in App), fetch the file list internally.
+  const [localFiles, setLocalFiles] = useState<GitFileEntry[]>([])
+
+  useEffect(() => {
+    if (!repoPath || !commit) { setLocalFiles([]); return }
+    if (commitFiles && commitFiles.length > 0) { setLocalFiles([]); return }
+    window.gitAPI?.getFiles(repoPath, commit.id)
+      .then(f => setLocalFiles(f ?? []))
+      .catch(() => setLocalFiles([]))
+  }, [commit, repoPath, commitFiles])
+
+  const files: unknown[] =
+    (commitFiles && commitFiles.length > 0)
+      ? commitFiles
+      : localFiles.length > 0
+        ? localFiles
+        : commit
+          ? commit.files
+          : repoPath
+            ? []
+            : COMMITS[0].files
 
   const firstPath = files.length > 0 ? getFilePath(files[0]) : ''
   const [selFile, setSelFile] = useState(firstPath)
@@ -35,9 +56,9 @@ export function DiffExplorer({ commit, repoPath, commitFiles }: Props) {
   const [loadingDiff, setLoadingDiff] = useState(false)
 
   useEffect(() => {
-    const list: unknown[] = commitFiles ?? (commit ? commit.files : COMMITS[0].files)
-    setSelFile(list.length > 0 ? getFilePath(list[0]) : '')
-  }, [commit, commitFiles])
+    setSelFile(files.length > 0 ? getFilePath(files[0]) : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commit, commitFiles, localFiles])
 
   useEffect(() => {
     if (!selFile) { setRawDiff(''); return }
