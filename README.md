@@ -1,116 +1,274 @@
-# 🌿 GitGrove
+<div align="center">
+  <img src="assets/hero.svg" alt="GitGrove — A modern dark-mode Git GUI for macOS" width="100%">
+</div>
 
-모던 다크모드 Git GUI — Mac 데스크톱 앱
+<br>
 
-GitKraken, Sourcetree에서 영감을 받아 설계된 Electron 기반 Git 클라이언트입니다.
+<div align="center">
 
----
+  [![License: MIT](https://img.shields.io/badge/License-MIT-6fcf7c.svg?style=flat-square)](LICENSE)
+  [![Platform](https://img.shields.io/badge/Platform-macOS-b8c0d8.svg?style=flat-square)](https://github.com/seobisback/gitgrove/releases)
+  [![React](https://img.shields.io/badge/React-18.3-5fb8e6.svg?style=flat-square&logo=react&logoColor=white)](https://react.dev)
+  [![Electron](https://img.shields.io/badge/Electron-30-c39ad9.svg?style=flat-square&logo=electron&logoColor=white)](https://electronjs.org)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-5fb8e6.svg?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e6a536.svg?style=flat-square)](https://github.com/seobisback/gitgrove/pulls)
 
-## 주요 기능
+</div>
 
-| 기능 | 설명 |
-|------|------|
-| **브랜치 그래프** | SVG 베지어 DAG 시각화, 브랜치별 레인 컬러 |
-| **커밋 상세** | 파일 목록, diff 미리보기, Cherry-pick |
-| **Stage / Commit** | Unstaged ↔ Staged 파일 관리, 커밋 메시지 |
-| **Diff Explorer** | 사이드바이사이드 diff + 신택스 하이라이팅 |
-| **Git Blame** | 라인별 커밋 추적 |
-| **Pull Request** | PR 목록 / 상세 / Approve / Request Changes |
-| **Merge / Rebase** | Merge commit · Rebase · Squash 전략 선택 |
-| **Interactive Rebase** | 커밋 순서 변경, Squash, Drop |
-| **Cherry-pick** | 커밋 선택 적용 |
-| **Stash** | Push / Pop / Apply / Drop |
-| **Conflict Editor** | Ours / Theirs / Both 충돌 해결 |
-| **Branch 관리** | 생성 · 이름변경 · 삭제 |
-| **멀티 레포 탭** | 여러 레포지토리 동시 관리 |
-| **⌘K 커맨드 팔레트** | 퀵 액션 검색 |
-| **실시간 커밋 검색** | 메시지 · 작성자 · 해시 · 파일 검색 |
-| **알림 토스트** | Pull / Push / Fetch / Merge 완료 알림 |
-| **포커스 자동 새로고침** | 앱 복귀 시 상태 자동 갱신 |
+<br>
+
+<div align="center">
+  <strong>A professional dark-mode Git GUI desktop app for macOS.</strong><br>
+  Visual branch graph · Staging area · Diff explorer · PR review — all in one window.
+</div>
+
+<br>
 
 ---
 
-## 스크린샷
+## ✦ Screenshots
 
-| History 뷰 | Stage 뷰 |
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-history.png" alt="History View" width="100%">
+      <sub><b>History View</b> — Branch graph with bezier lanes + Commit detail panel</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-diff.png" alt="Diff Explorer" width="100%">
+      <sub><b>Diff Explorer</b> — Side-by-side diff with syntax highlighting</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-stage.png" alt="Staging Area" width="100%">
+      <sub><b>Stage View</b> — Unstaged ↔ Staged file mover + commit editor</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="assets/screenshot-pr.png" alt="PR Review" width="100%">
+      <sub><b>PR View</b> — GitHub PR list, file changes, CI checks</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
+## ✦ Features
+
+### Core Views
+| View | Description |
+|------|-------------|
+| **History** | SVG branch graph with bezier lane lines, merge nodes, label chips (HEAD / branch / tag / remote) |
+| **Stage** | Two-column unstaged ↔ staged file mover, commit message editor, amend support |
+| **Diff Explorer** | Full-screen side-by-side diff with syntax highlighting and file list |
+| **Git Blame** | Line-by-line blame with author info — click to jump to commit |
+| **PR Review** | Open / Merged PR list, file changes, inline comments, CI checks, approve / request-changes |
+
+### Git Operations
+| Operation | Details |
 |-----------|---------|
-| 브랜치 그래프 + 커밋 상세 | Unstaged / Staged + Diff 패널 |
+| **Branch** | Create · Rename · Delete with force-delete option and confirm dialogs |
+| **Merge / Rebase** | Merge commit · Rebase · Squash — with animated progress |
+| **Interactive Rebase** | Drag to reorder, click to cycle pick / squash / fixup / edit / drop |
+| **Cherry-pick** | Apply any commit to current branch, `--no-commit` option, conflict detection |
+| **Stash** | Push with message, Pop / Apply / Drop, stash stack management |
+| **Conflict Editor** | Side-by-side ours/theirs resolver with per-conflict choices and progress tracking |
+| **Tag** | Create lightweight and annotated tags from any commit |
+| **Config** | Read / write git config (user.name, user.email, etc.) |
+
+### UX
+- **⌘K Command Palette** — search and run any action from the keyboard
+- **Live Commit Search** — real-time filter by message, author, hash, or file path
+- **Multi-repo Tabs** — open multiple repos in one window, with dirty-state indicator
+- **Right-click Context Menu** — Cherry-pick · Revert · Reset (soft / mixed / hard) · Branch here · Tag here
+- **Branch Context Menu** — right-click any branch to Checkout / Merge / Rebase / Rename / Delete / Push / Pull
+- **Confirm Dialogs** — every destructive operation (delete, reset --hard, drop, etc.) requires confirmation
+- **Settings Panel** — Git config · Appearance · GitHub token for PR integration
+- **Focus Auto-refresh** — repository state refreshes when the app regains focus
 
 ---
 
-## 기술 스택
+## ✦ Design System
 
-| 레이어 | 기술 |
-|--------|------|
-| 데스크톱 런타임 | Electron 30 |
-| UI | React 18 + TypeScript 5 |
-| 번들러 | Vite 5 + vite-plugin-electron |
-| Git 연산 | simple-git |
-| 빌드 | electron-builder |
-| 폰트 | Pixelify Sans · Noto Sans KR · IBM Plex Mono |
+GitGrove is built on the **모여봐요 design system** — warm-navy dark with gold/amber accents.
+
+<table>
+  <tr>
+    <td><img src="assets/color-deep.svg" width="32" height="32" alt=""></td>
+    <td><code>#0d1220</code></td>
+    <td>Background Deep</td>
+    <td><img src="assets/color-gold.svg" width="32" height="32" alt=""></td>
+    <td><code>#e6a536</code></td>
+    <td>Gold Accent</td>
+  </tr>
+  <tr>
+    <td><img src="assets/color-surface.svg" width="32" height="32" alt=""></td>
+    <td><code>#161d30</code></td>
+    <td>Surface</td>
+    <td><img src="assets/color-success.svg" width="32" height="32" alt=""></td>
+    <td><code>#6fcf7c</code></td>
+    <td>Success / Grove</td>
+  </tr>
+  <tr>
+    <td><img src="assets/color-elevated.svg" width="32" height="32" alt=""></td>
+    <td><code>#1f273e</code></td>
+    <td>Elevated</td>
+    <td><img src="assets/color-info.svg" width="32" height="32" alt=""></td>
+    <td><code>#5fb8e6</code></td>
+    <td>Info / Branch</td>
+  </tr>
+</table>
+
+**Typography:** `Pixelify Sans` (display) · `Noto Sans KR` (body) · `IBM Plex Mono` (code / hashes)
+
+**Branch Lane Colors:**
+```
+lane 0 – main          ██  #e6a536  gold
+lane 1 – feature/*     ██  #5fb8e6  blue
+lane 2 – hotfix/*      ██  #ff6b6b  red
+lane 3 – other         ██  #c39ad9  purple
+```
 
 ---
 
-## 설치 및 실행
+## ✦ Tech Stack
 
-### 요구사항
-- Node.js 18+
-- macOS (현재 Mac 전용)
+```
+Renderer      React 18 + TypeScript 5
+Desktop Shell Electron 30
+Git Backend   simple-git (wraps system git binary)
+Styling       CSS custom properties (no framework)
+Bundler       Vite 5 + vite-plugin-electron
+Build         electron-builder
+Fonts         Pixelify Sans · Noto Sans KR · IBM Plex Mono (Google Fonts)
+```
 
-### 개발 모드
+---
+
+## ✦ Getting Started
+
+### Prerequisites
+
+- macOS 13 (Ventura) or later
+- Node.js 20+
+- Git 2.38+
+
+### Install
+
 ```bash
-# 의존성 설치
+git clone https://github.com/seobisback/gitgrove.git
+cd gitgrove
 npm install
-
-# 개발 서버 + Electron 실행
-npm run dev
 ```
 
-### 프로덕션 빌드
+### Development
+
 ```bash
-npm run build
+npm run dev       # Vite dev server + Electron (via vite-plugin-electron)
 ```
 
-빌드 결과물은 `dist/` 폴더에 생성됩니다.
+### Production Build
+
+```bash
+npm run build     # renderer → dist/, electron → dist-electron/
+```
+
+Packaged `.app` is produced by electron-builder (see `package.json` for the build config).
 
 ---
 
-## 사용법
+## ✦ Project Structure
 
-1. 앱 실행 후 타이틀바 **+** 버튼 또는 **폴더 열기** 클릭
-2. 로컬 git 레포지토리 폴더 선택
-3. 커밋 그래프 확인 및 작업 시작
+```
+gitgrove/
+├── electron/
+│   ├── main.ts            Electron main process — BrowserWindow + 32 IPC handlers
+│   ├── preload.ts         contextBridge → window.gitAPI
+│   └── electron-env.d.ts  TypeScript types for IPC API
+├── src/
+│   ├── App.tsx            Root layout, state management, IPC wiring
+│   ├── index.css          Design tokens + all component CSS
+│   ├── components/
+│   │   ├── CommitGraph.tsx    SVG branch graph with bezier lanes
+│   │   ├── CommitDetail.tsx   Commit metadata, file list, diff preview
+│   │   ├── DiffExplorer.tsx   Full-screen side-by-side diff
+│   │   ├── DiffPanel.tsx      Inline diff panel (Stage / History)
+│   │   ├── StageArea.tsx      Unstaged ↔ Staged file mover
+│   │   ├── BlameView.tsx      Line-by-line git blame
+│   │   ├── BranchSidebar.tsx  Local / Remote / Tags list
+│   │   ├── BranchContextMenu.tsx  Right-click branch actions
+│   │   ├── PRView.tsx         GitHub PR list + detail
+│   │   ├── StatusBar.tsx      Bottom status line
+│   │   └── modals/            BranchModal · MergeModal · CherryPickModal ·
+│   │                          InteractiveRebaseModal · StashPanel ·
+│   │                          SettingsPanel · ConfirmModal · …
+│   ├── data/              Type definitions + mock data (fallback)
+│   ├── hooks/             useNotifications
+│   └── utils/             computeLanes · syntaxHighlight · sideBySide
+├── assets/
+│   ├── hero.svg           README hero banner
+│   ├── color-*.svg        Design system color swatches
+│   └── screenshot-*.png   App screenshots
+└── README.md
+```
 
-### 키보드 단축키
+---
 
-| 단축키 | 동작 |
-|--------|------|
-| `⌘K` | 커맨드 팔레트 |
-| `⌘1` | History 뷰 |
-| `⌘2` | Stage 뷰 |
+## ✦ Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘K` | Open command palette |
+| `⌘1` | History view |
+| `⌘2` | Stage view |
 | `⌘3` | Diff Explorer |
-| `Esc` | 모달 닫기 / 검색 초기화 |
+| `⌘⇧B` | New branch |
+| `⌘M` | Merge / Rebase |
+| `⌘⇧S` | Stash |
+| `⌘,` | Settings |
+| `Esc` | Close topmost modal / clear search |
 
 ---
 
-## 프로젝트 구조
+## ✦ Roadmap
 
-```
-electron/           Electron 메인 프로세스 (IPC, git 연산)
-  main.ts           BrowserWindow + git IPC 핸들러
-  preload.ts        contextBridge (window.gitAPI)
-src/
-  components/       React 컴포넌트
-    modals/         모달 다이얼로그 8종
-  data/             타입 정의 + 목업 데이터
-  hooks/            useNotifications
-  utils/            computeLanes (DAG 알고리즘), syntaxHighlight, sideBySide
-  App.tsx           메인 레이아웃 + 상태 관리
-  index.css         디자인 토큰 + 전체 CSS
-```
+- [x] Real Git backend (simple-git IPC, 32 handlers)
+- [x] Branch graph with bezier lane lines
+- [x] Stage / Commit / Amend
+- [x] Side-by-side Diff Explorer with syntax highlighting
+- [x] Interactive Rebase, Cherry-pick, Stash, Merge
+- [x] GitHub PR integration (token-based)
+- [x] Branch context menu, confirm dialogs for destructive ops
+- [ ] SSH / HTTPS authentication manager
+- [ ] Commit graph virtualization (large repos)
+- [ ] Split-diff editor with inline editing
+- [ ] Windows / Linux support
+- [ ] Plugin system
 
 ---
 
-## 라이선스
+## ✦ Design Reference
 
-MIT
+The full interactive design prototype and logo system are in [`assets/design/`](assets/design/):
+
+- `assets/design/GitGrove.html` — interactive UI prototype (open in browser)
+- `assets/design/GitGrove Logo.html` — logo system (app icon · wordmark · favicon)
+- `assets/design/DESIGN_TOKENS.md` — all CSS tokens, typography, and branch colors
+
+---
+
+## ✦ Contributing
+
+Pull requests are welcome. For major changes, please open an issue first.
+
+---
+
+## ✦ License
+
+[MIT](LICENSE) — © 2026 GitGrove Contributors
+
+---
+
+<div align="center">
+  <sub>Built with ♥ · Designed in <a href="https://claude.ai">Claude</a></sub>
+</div>

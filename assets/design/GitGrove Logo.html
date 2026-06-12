@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitGrove — Logo System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --c-bg-deep:    #0d1220;
+  --c-bg-surface: #161d30;
+  --c-bg-elevated:#1f273e;
+  --c-bg-inset:   #0a0f1c;
+  --c-border:     #2d3551;
+  --c-border-strong:#45506e;
+  --c-divider:    #232a44;
+  --c-gold-50:    #fffbe8;
+  --c-gold-200:   #ffd770;
+  --c-gold-300:   #f5b94a;
+  --c-gold-400:   #e6a536;
+  --c-gold-500:   #c98a22;
+  --c-gold-bg:    rgba(230,165,54,.13);
+  --c-gold-border:rgba(230,165,54,.4);
+  --c-success:    #6fcf7c;
+  --c-info:       #5fb8e6;
+  --c-text:       #b8c0d8;
+  --c-text-strong:#f4ecd2;
+  --c-text-muted: #6d7798;
+  --c-text-faint: #4a5273;
+  --c-on-gold:    #1a1206;
+  --font-px:      'Pixelify Sans', 'DotGothic16', monospace;
+  --font-mono:    'IBM Plex Mono', monospace;
+  --font-body:    'Noto Sans KR', sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{background:var(--c-bg-deep);}
+body{font-family:var(--font-body);color:var(--c-text);min-height:100vh;padding:0;}
+
+/* ── Page layout ── */
+.page{max-width:1080px;margin:0 auto;padding:64px 40px 96px;}
+.page-title{font-family:var(--font-px);font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--c-text-faint);margin-bottom:8px;}
+.page-name{font-family:var(--font-px);font-size:36px;color:var(--c-gold-200);margin-bottom:4px;letter-spacing:1px;}
+.page-sub{font-size:14px;color:var(--c-text-muted);font-family:var(--font-body);margin-bottom:60px;}
+.divider{height:1px;background:var(--c-divider);margin:52px 0;}
+.section-label{font-family:var(--font-px);font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--c-text-faint);margin-bottom:20px;}
+.section-title{font-family:var(--font-px);font-size:20px;color:var(--c-text-strong);margin-bottom:6px;letter-spacing:.5px;}
+.section-desc{font-size:13px;color:var(--c-text-muted);margin-bottom:28px;line-height:1.6;}
+
+/* ── Cards ── */
+.card{background:var(--c-bg-surface);border:1px solid var(--c-border);border-radius:10px;overflow:hidden;}
+.card-inner{padding:32px;display:flex;align-items:center;justify-content:center;}
+.card-footer{padding:10px 16px;border-top:1px solid var(--c-divider);font-size:11px;color:var(--c-text-faint);font-family:var(--font-mono);display:flex;justify-content:space-between;align-items:center;}
+.card-footer-label{color:var(--c-text-muted);font-family:var(--font-px);font-size:10px;letter-spacing:.08em;}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.bg-dark{background:var(--c-bg-deep);}
+.bg-mid{background:var(--c-bg-surface);}
+.bg-light{background:#e8e4da;}
+.bg-white{background:#ffffff;}
+.bg-gold{background:var(--c-gold-400);}
+.checker{background-image:linear-gradient(45deg,#1a1e2e 25%,transparent 25%),linear-gradient(-45deg,#1a1e2e 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#1a1e2e 75%),linear-gradient(-45deg,transparent 75%,#1a1e2e 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0;}
+
+/* ── Color swatches ── */
+.swatch-row{display:flex;gap:12px;flex-wrap:wrap;}
+.swatch{border-radius:6px;overflow:hidden;flex:1;min-width:80px;}
+.swatch-color{height:52px;}
+.swatch-info{padding:8px;background:var(--c-bg-elevated);border-top:1px solid var(--c-border);}
+.swatch-name{font-family:var(--font-px);font-size:10px;color:var(--c-text-muted);letter-spacing:.05em;}
+.swatch-hex{font-family:var(--font-mono);font-size:11px;color:var(--c-text-strong);}
+
+/* ── Spec table ── */
+.spec{width:100%;border-collapse:collapse;font-size:12px;}
+.spec td,.spec th{padding:8px 12px;border-bottom:1px solid var(--c-divider);text-align:left;}
+.spec th{color:var(--c-text-faint);font-family:var(--font-px);font-size:10px;letter-spacing:.08em;text-transform:uppercase;}
+.spec td{color:var(--c-text);}
+.spec td:first-child{font-family:var(--font-mono);font-size:11px;color:var(--c-gold-300);}
+.spec tr:last-child td{border-bottom:none;}
+
+/* ── Do/Don't ── */
+.do-dont{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.do-card{border:1px solid rgba(111,207,124,.3);background:rgba(111,207,124,.04);border-radius:8px;overflow:hidden;}
+.dont-card{border:1px solid rgba(255,107,107,.3);background:rgba(255,107,107,.04);border-radius:8px;overflow:hidden;}
+.do-hdr{padding:7px 14px;font-family:var(--font-px);font-size:10px;letter-spacing:.09em;text-transform:uppercase;}
+.do-hdr.ok{background:rgba(111,207,124,.1);color:#6fcf7c;}
+.do-hdr.no{background:rgba(255,107,107,.1);color:#ff6b6b;}
+.do-body{padding:20px;display:flex;align-items:center;justify-content:center;min-height:80px;}
+.do-desc{padding:8px 14px;font-size:11px;color:var(--c-text-muted);border-top:1px solid var(--c-divider);}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="page-title">Brand Identity</div>
+  <div class="page-name">🌿 GitGrove</div>
+  <div class="page-sub">Logo System — App Icon · Wordmark · Favicon · Usage Guidelines</div>
+
+  <!-- ─── SVG DEFINITIONS (inline, reusable) ─── -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <!-- ══ MAIN ICON MARK (200×200) ══ -->
+      <symbol id="icon-mark" viewBox="0 0 200 200">
+        <!-- Background: rounded square, dark navy -->
+        <rect width="200" height="200" rx="38" fill="#0d1220"/>
+        <!-- Pixel border glow -->
+        <rect x=".75" y=".75" width="198.5" height="198.5" rx="37.5" fill="none" stroke="#e6a536" stroke-width="1.5" opacity=".22"/>
+        <!-- Inner top highlight (pixel bevel) -->
+        <rect x="1" y="1" width="198" height="8" rx="37" fill="rgba(244,236,210,.045)"/>
+
+        <!-- ── TRUNK: main branch, vertical center, gold ── -->
+        <rect x="97" y="38" width="6" height="128" fill="#e6a536"/>
+
+        <!-- ── LEFT BRANCH ── -->
+        <!-- horizontal arm leftward at fork (y=108) -->
+        <rect x="60" y="108" width="37" height="6" fill="#e6a536"/>
+        <!-- left vertical up to tip -->
+        <rect x="60" y="60" width="6" height="54" fill="#e6a536"/>
+
+        <!-- ── RIGHT BRANCH ── -->
+        <!-- horizontal arm rightward -->
+        <rect x="103" y="108" width="37" height="6" fill="#e6a536"/>
+        <!-- right vertical up to tip -->
+        <rect x="134" y="60" width="6" height="54" fill="#e6a536"/>
+
+        <!-- ══ COMMIT NODES (gold squares, 16×16, rx=3) ══ -->
+        <!-- Root -->
+        <rect x="92" y="152" width="16" height="16" rx="3" fill="#e6a536"/>
+        <rect x="95" y="155" width="10" height="10" rx="1.5" fill="#c98a22" opacity=".5"/>
+        <!-- Fork -->
+        <rect x="92" y="102" width="16" height="16" rx="3" fill="#e6a536"/>
+        <rect x="95" y="105" width="10" height="10" rx="1.5" fill="#c98a22" opacity=".5"/>
+        <!-- HEAD (brightest) -->
+        <rect x="92" y="30" width="16" height="16" rx="3" fill="#ffd770"/>
+        <rect x="96" y="34" width="8" height="8" rx="1" fill="#e6a536"/>
+        <!-- Left tip -->
+        <rect x="52" y="52" width="16" height="16" rx="3" fill="#e6a536"/>
+        <!-- Right tip -->
+        <rect x="132" y="52" width="16" height="16" rx="3" fill="#e6a536"/>
+
+        <!-- ══ LEAF CLUSTERS (green pixel squares — the "Grove") ══ -->
+        <!-- Left cluster: above left branch tip (63, 52) -->
+        <rect x="40" y="32" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="51" y="26" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="62" y="22" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="44" y="42" width="9" height="9" fill="#6fcf7c" opacity=".75"/>
+        <rect x="55" y="36" width="9" height="9" fill="#6fcf7c" opacity=".75"/>
+        <rect x="66" y="32" width="9" height="9" fill="#6fcf7c" opacity=".6"/>
+        <rect x="35" y="42" width="7" height="7" fill="#6fcf7c" opacity=".45"/>
+        <rect x="68" y="42" width="7" height="7" fill="#6fcf7c" opacity=".4"/>
+
+        <!-- Right cluster: above right branch tip (137, 52) -->
+        <rect x="142" y="32" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="131" y="26" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="120" y="22" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="138" y="42" width="9" height="9" fill="#6fcf7c" opacity=".75"/>
+        <rect x="127" y="36" width="9" height="9" fill="#6fcf7c" opacity=".75"/>
+        <rect x="116" y="32" width="9" height="9" fill="#6fcf7c" opacity=".6"/>
+        <rect x="149" y="42" width="7" height="7" fill="#6fcf7c" opacity=".45"/>
+        <rect x="113" y="42" width="7" height="7" fill="#6fcf7c" opacity=".4"/>
+
+        <!-- Top canopy: above HEAD (100, 30) -->
+        <rect x="84" y="12" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="95" y="7"  width="9" height="9" fill="#6fcf7c"/>
+        <rect x="106" y="12" width="9" height="9" fill="#6fcf7c"/>
+        <rect x="89" y="21"  width="9" height="9" fill="#6fcf7c" opacity=".8"/>
+        <rect x="101" y="21" width="9" height="9" fill="#6fcf7c" opacity=".8"/>
+        <rect x="78" y="20"  width="7" height="7" fill="#6fcf7c" opacity=".5"/>
+        <rect x="115" y="20" width="7" height="7" fill="#6fcf7c" opacity=".5"/>
+      </symbol>
+
+      <!-- ══ ICON MARK LIGHT (on white/light bg) ══ -->
+      <symbol id="icon-mark-light" viewBox="0 0 200 200">
+        <rect width="200" height="200" rx="38" fill="#f0ede6"/>
+        <rect x=".75" y=".75" width="198.5" height="198.5" rx="37.5" fill="none" stroke="#c98a22" stroke-width="1.5" opacity=".3"/>
+        <!-- trunk -->
+        <rect x="97" y="38" width="6" height="128" fill="#c98a22"/>
+        <!-- left arm -->
+        <rect x="60" y="108" width="37" height="6" fill="#c98a22"/>
+        <rect x="60" y="60" width="6" height="54" fill="#c98a22"/>
+        <!-- right arm -->
+        <rect x="103" y="108" width="37" height="6" fill="#c98a22"/>
+        <rect x="134" y="60" width="6" height="54" fill="#c98a22"/>
+        <!-- nodes -->
+        <rect x="92" y="152" width="16" height="16" rx="3" fill="#c98a22"/>
+        <rect x="92" y="102" width="16" height="16" rx="3" fill="#c98a22"/>
+        <rect x="92" y="30"  width="16" height="16" rx="3" fill="#e6a536"/>
+        <rect x="52" y="52"  width="16" height="16" rx="3" fill="#c98a22"/>
+        <rect x="132" y="52" width="16" height="16" rx="3" fill="#c98a22"/>
+        <!-- leaves -->
+        <rect x="40" y="32"  width="9" height="9" fill="#2d7a3a"/>
+        <rect x="51" y="26"  width="9" height="9" fill="#2d7a3a"/>
+        <rect x="62" y="22"  width="9" height="9" fill="#2d7a3a"/>
+        <rect x="44" y="42"  width="9" height="9" fill="#2d7a3a" opacity=".75"/>
+        <rect x="55" y="36"  width="9" height="9" fill="#2d7a3a" opacity=".75"/>
+        <rect x="66" y="32"  width="9" height="9" fill="#2d7a3a" opacity=".6"/>
+        <rect x="142" y="32" width="9" height="9" fill="#2d7a3a"/>
+        <rect x="131" y="26" width="9" height="9" fill="#2d7a3a"/>
+        <rect x="120" y="22" width="9" height="9" fill="#2d7a3a"/>
+        <rect x="138" y="42" width="9" height="9" fill="#2d7a3a" opacity=".75"/>
+        <rect x="127" y="36" width="9" height="9" fill="#2d7a3a" opacity=".75"/>
+        <rect x="84"  y="12" width="9" height="9" fill="#2d7a3a"/>
+        <rect x="95"  y="7"  width="9" height="9" fill="#2d7a3a"/>
+        <rect x="106" y="12" width="9" height="9" fill="#2d7a3a"/>
+        <rect x="89"  y="21" width="9" height="9" fill="#2d7a3a" opacity=".8"/>
+        <rect x="101" y="21" width="9" height="9" fill="#2d7a3a" opacity=".8"/>
+      </symbol>
+
+      <!-- ══ FAVICON 32×32 ══ -->
+      <symbol id="favicon-32" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="6" fill="#0d1220"/>
+        <!-- trunk -->
+        <rect x="15" y="5" width="2" height="22" fill="#e6a536"/>
+        <!-- left arm -->
+        <rect x="8"  y="16" width="7"  height="2" fill="#e6a536"/>
+        <rect x="8"  y="9"  width="2"  height="9" fill="#e6a536"/>
+        <!-- right arm -->
+        <rect x="17" y="16" width="7"  height="2" fill="#e6a536"/>
+        <rect x="22" y="9"  width="2"  height="9" fill="#e6a536"/>
+        <!-- nodes (3×3) -->
+        <rect x="13.5" y="3.5"  width="3" height="3" rx=".5" fill="#ffd770"/>
+        <rect x="13.5" y="14.5" width="3" height="3" rx=".5" fill="#e6a536"/>
+        <rect x="13.5" y="25.5" width="3" height="3" rx=".5" fill="#e6a536"/>
+        <rect x="6.5"  y="7.5"  width="3" height="3" rx=".5" fill="#e6a536"/>
+        <rect x="22.5" y="7.5"  width="3" height="3" rx=".5" fill="#e6a536"/>
+        <!-- leaves (2×2 pixels) -->
+        <rect x="5"  y="5"  width="2" height="2" fill="#6fcf7c"/>
+        <rect x="7"  y="4"  width="2" height="2" fill="#6fcf7c"/>
+        <rect x="5"  y="7"  width="2" height="2" fill="#6fcf7c" opacity=".6"/>
+        <rect x="24" y="5"  width="2" height="2" fill="#6fcf7c"/>
+        <rect x="22" y="4"  width="2" height="2" fill="#6fcf7c"/>
+        <rect x="24" y="7"  width="2" height="2" fill="#6fcf7c" opacity=".6"/>
+        <rect x="13" y="1"  width="2" height="2" fill="#6fcf7c"/>
+        <rect x="16" y="1"  width="2" height="2" fill="#6fcf7c"/>
+        <rect x="14" y="2"  width="3" height="2" fill="#6fcf7c" opacity=".7"/>
+      </symbol>
+
+      <!-- ══ FAVICON 16×16 ══ -->
+      <symbol id="favicon-16" viewBox="0 0 16 16">
+        <rect width="16" height="16" rx="3" fill="#0d1220"/>
+        <!-- trunk -->
+        <rect x="7" y="3" width="1" height="11" fill="#e6a536"/>
+        <!-- arms -->
+        <rect x="4" y="8" width="3" height="1" fill="#e6a536"/>
+        <rect x="4" y="5" width="1" height="4" fill="#e6a536"/>
+        <rect x="8" y="8" width="3" height="1" fill="#e6a536"/>
+        <rect x="10" y="5" width="1" height="4" fill="#e6a536"/>
+        <!-- nodes 2×2 -->
+        <rect x="6.5" y="2"  width="2" height="2" rx=".5" fill="#ffd770"/>
+        <rect x="6.5" y="7"  width="2" height="2" rx=".5" fill="#e6a536"/>
+        <rect x="6.5" y="12" width="2" height="2" rx=".5" fill="#e6a536"/>
+        <rect x="3"   y="4"  width="2" height="2" rx=".5" fill="#e6a536"/>
+        <rect x="10"  y="4"  width="2" height="2" rx=".5" fill="#e6a536"/>
+        <!-- leaf dots (1×1) -->
+        <rect x="2" y="3" width="1" height="1" fill="#6fcf7c"/>
+        <rect x="3" y="2" width="1" height="1" fill="#6fcf7c"/>
+        <rect x="12" y="3" width="1" height="1" fill="#6fcf7c"/>
+        <rect x="11" y="2" width="1" height="1" fill="#6fcf7c"/>
+        <rect x="7"  y="1" width="1" height="1" fill="#6fcf7c"/>
+      </symbol>
+
+      <!-- ══ MONO MARK (single color) ══ -->
+      <symbol id="icon-mono" viewBox="0 0 200 200">
+        <rect width="200" height="200" rx="38" fill="#e6a536"/>
+        <rect x="97" y="38" width="6" height="128" fill="#1a1206"/>
+        <rect x="60" y="108" width="37" height="6" fill="#1a1206"/>
+        <rect x="60" y="60" width="6" height="54" fill="#1a1206"/>
+        <rect x="103" y="108" width="37" height="6" fill="#1a1206"/>
+        <rect x="134" y="60" width="6" height="54" fill="#1a1206"/>
+        <rect x="92" y="152" width="16" height="16" rx="3" fill="#1a1206"/>
+        <rect x="92" y="102" width="16" height="16" rx="3" fill="#1a1206"/>
+        <rect x="92" y="30"  width="16" height="16" rx="3" fill="#1a1206"/>
+        <rect x="52" y="52"  width="16" height="16" rx="3" fill="#1a1206"/>
+        <rect x="132" y="52" width="16" height="16" rx="3" fill="#1a1206"/>
+        <rect x="40" y="32" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="51" y="26" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="62" y="22" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="44" y="42" width="9" height="9" fill="#1a1206" opacity=".4"/>
+        <rect x="55" y="36" width="9" height="9" fill="#1a1206" opacity=".4"/>
+        <rect x="142" y="32" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="131" y="26" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="120" y="22" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="138" y="42" width="9" height="9" fill="#1a1206" opacity=".4"/>
+        <rect x="127" y="36" width="9" height="9" fill="#1a1206" opacity=".4"/>
+        <rect x="84"  y="12" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="95"  y="7"  width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="106" y="12" width="9" height="9" fill="#1a1206" opacity=".55"/>
+        <rect x="89"  y="21" width="9" height="9" fill="#1a1206" opacity=".4"/>
+        <rect x="101" y="21" width="9" height="9" fill="#1a1206" opacity=".4"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- ═══════════ SECTION 1: APP ICON ═══════════ -->
+  <div class="section-label">01 — App Icon</div>
+  <div class="section-title">Icon Mark</div>
+  <div class="section-desc">나무(Grove)와 Git 브랜치 그래프를 결합한 픽셀아트 아이콘. 황금색 트렁크가 메인 브랜치, 좌우 분기가 피처 브랜치, 초록 픽셀 클러스터가 잎(Grove)을 표현합니다.</div>
+
+  <div class="grid-4" style="margin-bottom:14px;">
+    <!-- 512px -->
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:20px;">
+        <svg width="180" height="180"><use href="#icon-mark"/></svg>
+      </div>
+      <div class="card-footer">
+        <span class="card-footer-label">App Icon</span>
+        <span>512 × 512</span>
+      </div>
+    </div>
+    <!-- 256px -->
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:28px;">
+        <svg width="128" height="128"><use href="#icon-mark"/></svg>
+      </div>
+      <div class="card-footer">
+        <span class="card-footer-label">Large</span>
+        <span>256 × 256</span>
+      </div>
+    </div>
+    <!-- 128px -->
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:40px;">
+        <svg width="80" height="80"><use href="#icon-mark"/></svg>
+      </div>
+      <div class="card-footer">
+        <span class="card-footer-label">Medium</span>
+        <span>128 × 128</span>
+      </div>
+    </div>
+    <!-- 64px -->
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:44px;">
+        <svg width="48" height="48"><use href="#icon-mark"/></svg>
+      </div>
+      <div class="card-footer">
+        <span class="card-footer-label">Small</span>
+        <span>64 × 64</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checker background test -->
+  <div class="grid-4" style="margin-bottom:40px;">
+    <div class="card">
+      <div class="card-inner checker" style="padding:28px;">
+        <svg width="128" height="128"><use href="#icon-mark"/></svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Transparent bg test</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-mid" style="padding:28px;">
+        <svg width="128" height="128"><use href="#icon-mark"/></svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">On surface</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-light" style="padding:28px;">
+        <svg width="128" height="128"><use href="#icon-mark-light"/></svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Light background</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-white" style="padding:28px;">
+        <svg width="128" height="128"><use href="#icon-mark-light"/></svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">White background</span></div>
+    </div>
+  </div>
+
+  <div class="divider"/>
+
+  <!-- ═══════════ SECTION 2: WORDMARK ═══════════ -->
+  <div class="section-label">02 — Wordmark</div>
+  <div class="section-title">Horizontal Lockup</div>
+  <div class="section-desc">Pixelify Sans로 설정된 워드마크. 아이콘과 텍스트 간격은 항상 아이콘 높이의 0.4× 를 유지하세요.</div>
+
+  <!-- Large wordmark -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-inner bg-dark" style="padding:40px;justify-content:flex-start;gap:0;">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 120" width="540">
+        <!-- Icon mark embedded -->
+        <g transform="translate(0,0) scale(0.6)">
+          <rect width="200" height="200" rx="38" fill="#0d1220"/>
+          <rect x=".75" y=".75" width="198.5" height="198.5" rx="37.5" fill="none" stroke="#e6a536" stroke-width="1.5" opacity=".22"/>
+          <rect x="1" y="1" width="198" height="8" rx="37" fill="rgba(244,236,210,.045)"/>
+          <rect x="97" y="38" width="6" height="128" fill="#e6a536"/>
+          <rect x="60" y="108" width="37" height="6" fill="#e6a536"/>
+          <rect x="60" y="60" width="6" height="54" fill="#e6a536"/>
+          <rect x="103" y="108" width="37" height="6" fill="#e6a536"/>
+          <rect x="134" y="60" width="6" height="54" fill="#e6a536"/>
+          <rect x="92" y="152" width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="92" y="102" width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="92" y="30"  width="16" height="16" rx="3" fill="#ffd770"/>
+          <rect x="96" y="34"  width="8" height="8"  rx="1" fill="#e6a536"/>
+          <rect x="52" y="52"  width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="132" y="52" width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="40" y="32" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="51" y="26" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="62" y="22" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="44" y="42" width="9" height="9" fill="#6fcf7c" opacity=".7"/>
+          <rect x="55" y="36" width="9" height="9" fill="#6fcf7c" opacity=".7"/>
+          <rect x="66" y="32" width="9" height="9" fill="#6fcf7c" opacity=".6"/>
+          <rect x="142" y="32" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="131" y="26" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="120" y="22" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="138" y="42" width="9" height="9" fill="#6fcf7c" opacity=".7"/>
+          <rect x="127" y="36" width="9" height="9" fill="#6fcf7c" opacity=".7"/>
+          <rect x="84"  y="12" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="95"  y="7"  width="9" height="9" fill="#6fcf7c"/>
+          <rect x="106" y="12" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="89"  y="21" width="9" height="9" fill="#6fcf7c" opacity=".8"/>
+          <rect x="101" y="21" width="9" height="9" fill="#6fcf7c" opacity=".8"/>
+        </g>
+        <!-- Wordmark text -->
+        <text x="136" y="78" font-family="'Pixelify Sans', monospace" font-size="54" font-weight="700" fill="#f4ecd2" letter-spacing="-0.5">GitGrove</text>
+      </svg>
+    </div>
+    <div class="card-footer"><span class="card-footer-label">Primary wordmark · dark</span><span>Pixelify Sans 700 · 54px</span></div>
+  </div>
+
+  <!-- Wordmark sizes -->
+  <div class="grid-3" style="margin-bottom:14px;">
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:28px;gap:10px;justify-content:flex-start;align-items:center;flex-direction:row;">
+        <svg width="36" height="36"><use href="#icon-mark"/></svg>
+        <span style="font-family:'Pixelify Sans',monospace;font-size:24px;font-weight:700;color:#f4ecd2;letter-spacing:.3px;">GitGrove</span>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Medium</span><span>24px</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:28px;gap:7px;justify-content:flex-start;align-items:center;flex-direction:row;">
+        <svg width="22" height="22"><use href="#icon-mark"/></svg>
+        <span style="font-family:'Pixelify Sans',monospace;font-size:16px;font-weight:700;color:#f4ecd2;letter-spacing:.2px;">GitGrove</span>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Small (UI)</span><span>16px</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:28px;gap:6px;justify-content:flex-start;align-items:center;flex-direction:row;">
+        <svg width="16" height="16"><use href="#icon-mark"/></svg>
+        <span style="font-family:'Pixelify Sans',monospace;font-size:12px;font-weight:700;color:#f4ecd2;letter-spacing:.15px;">GitGrove</span>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Micro (titlebar)</span><span>12px</span></div>
+    </div>
+  </div>
+
+  <!-- Gold variant -->
+  <div class="grid-2" style="margin-bottom:40px;">
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:28px;gap:10px;justify-content:flex-start;align-items:center;flex-direction:row;">
+        <svg width="36" height="36"><use href="#icon-mark"/></svg>
+        <span style="font-family:'Pixelify Sans',monospace;font-size:24px;font-weight:700;color:#ffd770;letter-spacing:.3px;">GitGrove</span>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Gold text variant</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-light" style="padding:28px;gap:10px;justify-content:flex-start;align-items:center;flex-direction:row;">
+        <svg width="36" height="36"><use href="#icon-mark-light"/></svg>
+        <span style="font-family:'Pixelify Sans',monospace;font-size:24px;font-weight:700;color:#1a1206;letter-spacing:.3px;">GitGrove</span>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Light background variant</span></div>
+    </div>
+  </div>
+
+  <div class="divider"/>
+
+  <!-- ═══════════ SECTION 3: FAVICON ═══════════ -->
+  <div class="section-label">03 — Favicon</div>
+  <div class="section-title">Small Icon Variants</div>
+  <div class="section-desc">16px와 32px에서 읽히도록 단순화된 버전. 픽셀 단위로 설계됩니다.</div>
+
+  <div class="grid-2" style="margin-bottom:14px;">
+    <!-- 32×32 -->
+    <div class="card">
+      <div class="card-inner bg-dark" style="gap:32px;flex-direction:column;">
+        <!-- Actual size -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+          <svg width="32" height="32" style="image-rendering:pixelated;"><use href="#favicon-32"/></svg>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);">actual 32px</span>
+        </div>
+        <!-- 4× zoom -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+          <svg width="128" height="128" style="image-rendering:pixelated;"><use href="#favicon-32"/></svg>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);">4× zoom</span>
+        </div>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">favicon-32.svg</span><span>32 × 32</span></div>
+    </div>
+
+    <!-- 16×16 -->
+    <div class="card">
+      <div class="card-inner bg-dark" style="gap:32px;flex-direction:column;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+          <svg width="16" height="16" style="image-rendering:pixelated;"><use href="#favicon-16"/></svg>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);">actual 16px</span>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:8px;">
+          <svg width="128" height="128" style="image-rendering:pixelated;"><use href="#favicon-16"/></svg>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);">8× zoom</span>
+        </div>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">favicon-16.svg</span><span>16 × 16</span></div>
+    </div>
+  </div>
+
+  <!-- Favicon in browser context mock -->
+  <div class="card" style="margin-bottom:40px;">
+    <div class="card-inner bg-dark" style="padding:24px;justify-content:flex-start;">
+      <div style="display:flex;align-items:center;gap:0;background:#1f273e;border:1px solid #2d3551;border-radius:6px;overflow:hidden;max-width:520px;">
+        <div style="padding:10px 14px;display:flex;align-items:center;gap:8px;border-right:1px solid #2d3551;background:#161d30;">
+          <svg width="16" height="16" style="image-rendering:pixelated;"><use href="#favicon-16"/></svg>
+          <span style="font-family:var(--font-px);font-size:12px;color:#b8c0d8;">GitGrove</span>
+          <span style="color:#4a5273;font-size:12px;margin-left:4px;">×</span>
+        </div>
+        <div style="padding:10px 14px;flex:1;font-family:var(--font-mono);font-size:11px;color:#6d7798;">gitgrove.app/repo/gitgrove-project</div>
+      </div>
+    </div>
+    <div class="card-footer"><span class="card-footer-label">Browser tab context</span></div>
+  </div>
+
+  <div class="divider"/>
+
+  <!-- ═══════════ SECTION 4: MONO + VARIANTS ═══════════ -->
+  <div class="section-label">04 — Monochrome & Variants</div>
+  <div class="section-title">Color Variants</div>
+  <div class="section-desc">단색 버전과 골드 배경 버전. 배경이 복잡하거나 단색 인쇄 상황에 사용하세요.</div>
+
+  <div class="grid-4" style="margin-bottom:40px;">
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:28px;">
+        <svg width="120" height="120"><use href="#icon-mono"/></svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Gold mono</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner" style="background:#e6a536;padding:28px;">
+        <svg width="120" height="120" viewBox="0 0 200 200">
+          <rect width="200" height="200" rx="38" fill="rgba(26,18,6,.15)"/>
+          <rect x="97" y="38" width="6" height="128" fill="#1a1206"/>
+          <rect x="60" y="108" width="37" height="6" fill="#1a1206"/>
+          <rect x="60" y="60" width="6" height="54" fill="#1a1206"/>
+          <rect x="103" y="108" width="37" height="6" fill="#1a1206"/>
+          <rect x="134" y="60" width="6" height="54" fill="#1a1206"/>
+          <rect x="92" y="152" width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="92" y="102" width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="92" y="30"  width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="52" y="52"  width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="132" y="52" width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="40" y="32" width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="51" y="26" width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="62" y="22" width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="44" y="42" width="9" height="9" fill="#1a1206" opacity=".35"/>
+          <rect x="55" y="36" width="9" height="9" fill="#1a1206" opacity=".35"/>
+          <rect x="142" y="32" width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="131" y="26" width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="120" y="22" width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="84"  y="12" width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="95"  y="7"  width="9" height="9" fill="#1a1206" opacity=".5"/>
+          <rect x="106" y="12" width="9" height="9" fill="#1a1206" opacity=".5"/>
+        </svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">Reversed (gold bg)</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-white" style="padding:28px;">
+        <svg width="120" height="120" viewBox="0 0 200 200">
+          <rect width="200" height="200" rx="38" fill="#f0f0f0"/>
+          <rect x="97" y="38" width="6" height="128" fill="#1a1206"/>
+          <rect x="60" y="108" width="37" height="6" fill="#1a1206"/>
+          <rect x="60" y="60" width="6" height="54" fill="#1a1206"/>
+          <rect x="103" y="108" width="37" height="6" fill="#1a1206"/>
+          <rect x="134" y="60" width="6" height="54" fill="#1a1206"/>
+          <rect x="92" y="152" width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="92" y="102" width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="92" y="30"  width="16" height="16" rx="3" fill="#c98a22"/>
+          <rect x="52" y="52"  width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="132" y="52" width="16" height="16" rx="3" fill="#1a1206"/>
+          <rect x="40" y="32" width="9" height="9" fill="#2d7a3a"/>
+          <rect x="51" y="26" width="9" height="9" fill="#2d7a3a"/>
+          <rect x="62" y="22" width="9" height="9" fill="#2d7a3a"/>
+          <rect x="44" y="42" width="9" height="9" fill="#2d7a3a" opacity=".7"/>
+          <rect x="55" y="36" width="9" height="9" fill="#2d7a3a" opacity=".7"/>
+          <rect x="142" y="32" width="9" height="9" fill="#2d7a3a"/>
+          <rect x="131" y="26" width="9" height="9" fill="#2d7a3a"/>
+          <rect x="120" y="22" width="9" height="9" fill="#2d7a3a"/>
+          <rect x="84"  y="12" width="9" height="9" fill="#2d7a3a"/>
+          <rect x="95"  y="7"  width="9" height="9" fill="#2d7a3a"/>
+          <rect x="106" y="12" width="9" height="9" fill="#2d7a3a"/>
+        </svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">White background</span></div>
+    </div>
+    <div class="card">
+      <div class="card-inner bg-dark" style="padding:28px;">
+        <svg width="120" height="120" viewBox="0 0 200 200">
+          <rect width="200" height="200" rx="38" fill="none"/>
+          <rect x="97" y="38" width="6" height="128" fill="#e6a536"/>
+          <rect x="60" y="108" width="37" height="6" fill="#e6a536"/>
+          <rect x="60" y="60" width="6" height="54" fill="#e6a536"/>
+          <rect x="103" y="108" width="37" height="6" fill="#e6a536"/>
+          <rect x="134" y="60" width="6" height="54" fill="#e6a536"/>
+          <rect x="92" y="152" width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="92" y="102" width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="92" y="30"  width="16" height="16" rx="3" fill="#ffd770"/>
+          <rect x="52" y="52"  width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="132" y="52" width="16" height="16" rx="3" fill="#e6a536"/>
+          <rect x="40" y="32" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="51" y="26" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="62" y="22" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="142" y="32" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="131" y="26" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="120" y="22" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="84"  y="12" width="9" height="9" fill="#6fcf7c"/>
+          <rect x="95"  y="7"  width="9" height="9" fill="#6fcf7c"/>
+          <rect x="106" y="12" width="9" height="9" fill="#6fcf7c"/>
+        </svg>
+      </div>
+      <div class="card-footer"><span class="card-footer-label">No container (mark only)</span></div>
+    </div>
+  </div>
+
+  <div class="divider"/>
+
+  <!-- ═══════════ SECTION 5: COLOR PALETTE ═══════════ -->
+  <div class="section-label">05 — Logo Colors</div>
+  <div class="section-title">Brand Color System</div>
+  <div class="section-desc">로고에 사용되는 색상. 디자인 시스템 토큰에서 직접 파생됩니다.</div>
+
+  <div class="swatch-row" style="margin-bottom:40px;">
+    <div class="swatch"><div class="swatch-color" style="background:#0d1220;border:1px solid #2d3551;border-radius:6px 6px 0 0;"></div><div class="swatch-info"><div class="swatch-name">--c-bg-deep</div><div class="swatch-hex">#0d1220</div></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#ffd770;"></div><div class="swatch-info"><div class="swatch-name">--c-gold-200</div><div class="swatch-hex">#ffd770</div></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#e6a536;"></div><div class="swatch-info"><div class="swatch-name">--c-gold-400</div><div class="swatch-hex">#e6a536</div></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#c98a22;"></div><div class="swatch-info"><div class="swatch-name">--c-gold-500</div><div class="swatch-hex">#c98a22</div></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#6fcf7c;"></div><div class="swatch-info"><div class="swatch-name">--c-success</div><div class="swatch-hex">#6fcf7c</div></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#f4ecd2;"></div><div class="swatch-info"><div class="swatch-name">--c-text-strong</div><div class="swatch-hex">#f4ecd2</div></div></div>
+  </div>
+
+  <div class="divider"/>
+
+  <!-- ═══════════ SECTION 6: USAGE ═══════════ -->
+  <div class="section-label">06 — Usage</div>
+  <div class="section-title">Do &amp; Don't</div>
+  <div class="section-desc">로고를 올바르게 사용하는 방법과 피해야 할 사례.</div>
+
+  <div class="do-dont" style="margin-bottom:14px;">
+    <div class="do-card">
+      <div class="do-hdr ok">✓ Do — 다크 배경</div>
+      <div class="do-body bg-dark"><svg width="72" height="72"><use href="#icon-mark"/></svg></div>
+      <div class="do-desc">원래 다크 네이비 배경 위에 사용하세요</div>
+    </div>
+    <div class="do-card">
+      <div class="do-hdr ok">✓ Do — 충분한 여백</div>
+      <div class="do-body bg-dark" style="position:relative;">
+        <div style="border:1px dashed rgba(230,165,54,.35);padding:20px;border-radius:4px;">
+          <svg width="56" height="56"><use href="#icon-mark"/></svg>
+        </div>
+      </div>
+      <div class="do-desc">Clear space = 아이콘 높이의 0.25× 이상</div>
+    </div>
+  </div>
+
+  <div class="do-dont" style="margin-bottom:40px;">
+    <div class="dont-card">
+      <div class="do-hdr no">✗ Don't — 스트레칭</div>
+      <div class="do-body bg-dark">
+        <svg width="96" height="56" style="display:block;"><use href="#icon-mark" width="96" height="56"/></svg>
+      </div>
+      <div class="do-desc">종횡비를 변경하지 마세요</div>
+    </div>
+    <div class="dont-card">
+      <div class="do-hdr no">✗ Don't — 낮은 대비 배경</div>
+      <div class="do-body" style="background:#2a3050;">
+        <svg width="72" height="72"><use href="#icon-mark"/></svg>
+      </div>
+      <div class="do-desc">로고 배경과 비슷한 색상에는 사용 금지</div>
+    </div>
+  </div>
+
+  <div class="divider"/>
+
+  <!-- ═══════════ SECTION 7: SPEC ═══════════ -->
+  <div class="section-label">07 — Spec</div>
+  <div class="section-title">Technical Specifications</div>
+  <div class="section-desc">개발에 필요한 수치 참조.</div>
+
+  <div class="card" style="margin-bottom:0;">
+    <div style="padding:0;">
+      <table class="spec">
+        <thead>
+          <tr><th>항목</th><th>값</th><th>비고</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>App Icon</td><td>1024 × 1024</td><td>macOS App Store 제출 사이즈</td></tr>
+          <tr><td>Icon Grid</td><td>200 × 200 viewBox</td><td>내부 디자인 그리드</td></tr>
+          <tr><td>Container radius</td><td>rx=38 (19%)</td><td>iOS/macOS 아이콘 표준 근사치</td></tr>
+          <tr><td>Trunk width</td><td>6px (on 200 grid)</td><td>3% of icon width</td></tr>
+          <tr><td>Node size</td><td>16 × 16 px, rx=3</td><td>커밋 노드 사각형</td></tr>
+          <tr><td>Leaf pixel size</td><td>9 × 9 px</td><td>그로브 픽셀 클러스터</td></tr>
+          <tr><td>Wordmark font</td><td>Pixelify Sans 700</td><td>Google Fonts</td></tr>
+          <tr><td>Wordmark / icon gap</td><td>icon height × 0.4</td><td>고정 비율 유지</td></tr>
+          <tr><td>Favicon 32</td><td>32 × 32, rx=6</td><td>browser tab, taskbar</td></tr>
+          <tr><td>Favicon 16</td><td>16 × 16, rx=3</td><td>최소 표시 크기</td></tr>
+          <tr><td>Primary bg</td><td>#0d1220 (--c-bg-deep)</td><td>항상 다크 네이비</td></tr>
+          <tr><td>Primary accent</td><td>#e6a536 (--c-gold-400)</td><td>트렁크 + 노드</td></tr>
+          <tr><td>Grove green</td><td>#6fcf7c (--c-success)</td><td>잎 픽셀 클러스터</td></tr>
+          <tr><td>HEAD node</td><td>#ffd770 (--c-gold-200)</td><td>최상단 커밋 강조</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
