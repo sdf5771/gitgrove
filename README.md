@@ -147,7 +147,25 @@ Fonts         Pixelify Sans · Noto Sans KR · IBM Plex Mono (Google Fonts)
 
 ## ✦ Getting Started
 
-### Prerequisites
+### Download (권장)
+
+[Releases 페이지](https://github.com/sdf5771/gitgrove/releases/latest)에서 `GitGrove-Mac-*-Installer.dmg` 다운로드 후 Applications 폴더로 드래그.
+
+> **⚠️ "앱이 손상되었습니다" 오류가 뜨는 경우**
+>
+> 앱이 현재 코드 서명 없이 배포되고 있어 macOS Gatekeeper가 차단합니다.  
+> 실제로 손상된 것이 아니며, 아래 중 하나로 해결할 수 있습니다.
+>
+> **방법 1 — 터미널 (권장):**
+> ```bash
+> xattr -rd com.apple.quarantine /Applications/GitGrove.app
+> ```
+> **방법 2 — Finder:**  
+> GitGrove.app을 우클릭 → **열기** → **열기** 클릭
+
+---
+
+### Prerequisites (소스 빌드 시)
 
 - macOS 13 (Ventura) or later
 - Node.js 20+
@@ -156,7 +174,7 @@ Fonts         Pixelify Sans · Noto Sans KR · IBM Plex Mono (Google Fonts)
 ### Install
 
 ```bash
-git clone https://github.com/seobisback/gitgrove.git
+git clone https://github.com/sdf5771/gitgrove.git
 cd gitgrove
 npm install
 ```
