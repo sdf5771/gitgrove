@@ -92,7 +92,7 @@ export function CommitDetail({ commit, files, loadingFiles, fileDiffPreview, loa
         )}
       </div>
       <div className="divl" />
-      <div style={{ background: 'var(--c-bg-inset)', borderRadius: 'var(--r2)', overflow: 'hidden', border: '1px solid var(--c-border)' }}>
+      <div style={{ background: 'var(--c-bg-inset)', borderRadius: 'var(--r2)', overflowY: 'auto', maxHeight: 200, border: '1px solid var(--c-border)' }}>
         {loadingPreview ? (
           <div style={{ padding: '10px', textAlign: 'center', color: 'var(--c-text-faint)', fontSize: 11 }}>
             <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>

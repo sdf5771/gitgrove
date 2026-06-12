@@ -399,6 +399,32 @@ export default function App() {
     })
   }, [notify])
 
+  // ── 탭 전환 시 해당 레포 로드 ──
+  useEffect(() => {
+    const path = repos[activeRepo]?.path
+    if (path && path !== repoPath) loadRepo(path, true)
+  }, [activeRepo])
+
+  // ── GitHub 사용자 정보 ──
+  const [githubUser, setGithubUser] = useState<{ login: string; avatar_url: string } | null>(null)
+
+  const fetchGithubUser = useCallback(() => {
+    const token = localStorage.getItem('gitgrove:githubToken')
+    if (!token) { setGithubUser(null); return }
+    fetch('https://api.github.com/user', {
+      headers: { Authorization: `token ${token}` }
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setGithubUser(data ? { login: data.login, avatar_url: data.avatar_url } : null))
+      .catch(() => setGithubUser(null))
+  }, [])
+
+  useEffect(() => { fetchGithubUser() }, [fetchGithubUser])
+  useEffect(() => {
+    window.addEventListener('gitgrove:settings-changed', fetchGithubUser)
+    return () => window.removeEventListener('gitgrove:settings-changed', fetchGithubUser)
+  }, [fetchGithubUser])
+
   // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
   useEffect(() => {
     const handleFocus = () => {
@@ -776,7 +802,7 @@ export default function App() {
                 />
               </>
             ) : view === 'diff' ? (
-              <DiffExplorer commit={selectedCommit} repoPath={repoPath} />
+              <DiffExplorer commit={selectedCommit} repoPath={repoPath} commitFiles={repoPath ? commitFiles : undefined} />
             ) : (
               <>
                 <div className="cpanel">
@@ -920,6 +946,7 @@ export default function App() {
         behind={repo?.behind}
         remote={repo ? `origin/${repo.branch}` : undefined}
         onSettings={() => setShowSettings(true)}
+        githubUser={githubUser}
       />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}
