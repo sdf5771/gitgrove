@@ -873,7 +873,8 @@ export default function App() {
                 <BlameView
                   onSelectCommit={i => { setSelIdx(i); setView('history') }}
                   repoPath={repoPath}
-                  filePath={diffFile?.p || (selectedCommit?.files?.[0]?.p ?? 'src/auth/jwt.ts')}
+                  commits={filteredCommits}
+                  filePath={diffFile?.p || selectedCommit?.files?.[0]?.p || (repoPath ? undefined : 'src/auth/jwt.ts')}
                 />
               </>
             ) : view === 'diff' ? (

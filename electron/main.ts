@@ -584,7 +584,10 @@ ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): 
 
   let raw: string
   try {
-    raw = await git.raw(['blame', '--porcelain', filePath])
+    // --line-porcelain: author/author-time 블록을 라인마다 반복 출력.
+    // (일반 --porcelain은 커밋 첫 등장 시에만 메타데이터를 주므로, 같은
+    //  커밋이 재등장하면 직전 라인의 author/time이 잘못 carry-over 된다.)
+    raw = await git.raw(['blame', '--line-porcelain', filePath])
   } catch {
     // 바이너리 파일 등 blame 불가 케이스 → 빈 배열 반환
     return []

@@ -200,7 +200,7 @@ Packaged `.app` is produced by electron-builder (see `package.json` for the buil
 ```
 gitgrove/
 ├── electron/
-│   ├── main.ts            Electron main process — BrowserWindow + 32 IPC handlers
+│   ├── main.ts            Electron main process — BrowserWindow + 35 IPC handlers
 │   ├── preload.ts         contextBridge → window.gitAPI
 │   └── electron-env.d.ts  TypeScript types for IPC API
 ├── src/

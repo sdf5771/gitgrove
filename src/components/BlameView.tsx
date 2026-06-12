@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { BLAME_LINES, COMMITS, type BlameLine } from '../data/mockData'
+import { BLAME_LINES, type BlameLine, type Commit } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
 
 // IPC에서 반환되는 blame 라인 타입 (electron-env.d.ts의 GitBlameLine과 동일)
@@ -47,9 +47,11 @@ interface Props {
   onSelectCommit: (i: number) => void
   repoPath?: string | null
   filePath?: string
+  // 클릭 시 hash → index 매핑에 사용하는 실제 커밋 목록 (App의 filteredCommits)
+  commits?: Commit[]
 }
 
-export function BlameView({ onSelectCommit, repoPath, filePath }: Props) {
+export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props) {
   const [selLine, setSelLine] = useState<number | null>(null)
   const [blameLines, setBlameLines] = useState<RealBlameLine[]>([])
   const [loading, setLoading] = useState(false)
@@ -67,10 +69,13 @@ export function BlameView({ onSelectCommit, repoPath, filePath }: Props) {
       .finally(() => setLoading(false))
   }, [repoPath, filePath])
 
-  // 실제 데이터가 있으면 사용, 없으면 mock fallback
-  const displayLines: DisplayLine[] = blameLines.length > 0
-    ? blameLines.map(fromRealBlameLine)
-    : BLAME_LINES.map(fromMockBlameLine)
+  // 실제 데이터가 있으면 사용. 실 레포(repoPath)에서는 데이터가 없어도
+  // mock으로 대체하지 않는다 (가짜 blame이 실데이터처럼 보이는 것 방지).
+  // 데모 모드(repoPath 없음)에서만 mock fallback 표시.
+  const displayLines: DisplayLine[] = useMemo(() => {
+    if (blameLines.length > 0) return blameLines.map(fromRealBlameLine)
+    return repoPath ? [] : BLAME_LINES.map(fromMockBlameLine)
+  }, [blameLines, repoPath])
 
   const displayFilePath = filePath ?? ''
 
@@ -86,8 +91,9 @@ export function BlameView({ onSelectCommit, repoPath, filePath }: Props) {
 
   const handleClick = (lineNum: number, hash: string) => {
     setSelLine(lineNum)
-    // 실제 데이터면 커밋 목록에서 hash로 탐색, fallback은 mock COMMITS
-    const ci = COMMITS.findIndex(c => c.id === hash)
+    // 현재 표시 중인 커밋 목록(filteredCommits)에서 hash로 인덱스 탐색.
+    // blame hash와 commit.id 모두 7자리 short hash라 정확 매칭된다.
+    const ci = commits?.findIndex(c => c.id === hash) ?? -1
     if (ci >= 0) onSelectCommit(ci)
   }
 
@@ -110,6 +116,11 @@ export function BlameView({ onSelectCommit, repoPath, filePath }: Props) {
         </div>
       </div>
       <div className="blame-scroll">
+        {!loading && displayLines.length === 0 && (
+          <div style={{ padding: '24px 16px', fontSize: 12, color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)' }}>
+            {filePath ? `No blame data for ${displayFilePath}` : 'Select a file to view blame'}
+          </div>
+        )}
         {displayLines.map(line => (
           <div key={line.lineNum} className={`blame-row${selLine === line.lineNum ? ' sel' : ''}`} onClick={() => handleClick(line.lineNum, line.hash)}>
             <div className="blame-gutter">
