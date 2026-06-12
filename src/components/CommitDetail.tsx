@@ -1,19 +1,26 @@
 import { useState, useEffect } from 'react'
-import { COMMITS, DIFF, type Commit } from '../data/mockData'
+import type { Commit } from '../data/mockData'
 import { FilePath } from './FilePath'
 
 interface Props {
   commit: Commit | null
-  files?: GitFileEntry[]       // 실제 파일 목록 (IPC로 로드)
-  loadingFiles?: boolean       // 파일 로딩 중 여부
-  onOpenDiff: () => void
+  files?: GitFileEntry[]
+  loadingFiles?: boolean
+  fileDiffPreview?: string
+  loadingPreview?: boolean
+  onOpenDiff: (filePath: string) => void
+  onFileSelect?: (filePath: string) => void
   onCherryPick: () => void
   onBlame: () => void
 }
 
-export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherryPick, onBlame }: Props) {
+export function CommitDetail({ commit, files, loadingFiles, fileDiffPreview, loadingPreview, onOpenDiff, onFileSelect, onCherryPick, onBlame }: Props) {
   const [selFile, setSelFile] = useState(0)
-  useEffect(() => setSelFile(0), [commit])
+  useEffect(() => {
+    setSelFile(0)
+    const firstPath = files?.[0]?.path
+    if (firstPath) onFileSelect?.(firstPath)
+  }, [commit])
 
   if (!commit) {
     return (
@@ -36,12 +43,12 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
       <div className="cd-msg">{commit.msg}</div>
       <div className="cd-meta">
         <div className="cd-row"><span className="cd-lbl">Author</span><span className="cd-val">{commit.author}</span></div>
-        <div className="cd-row"><span className="cd-lbl">Date</span><span className="cd-val" style={{ color: 'var(--c-text-muted)' }}>Jun 11, 2026</span></div>
+        <div className="cd-row"><span className="cd-lbl">Date</span><span className="cd-val" style={{ color: 'var(--c-text-muted)' }}>{commit.time}</span></div>
         {commit.parents.length >= 2 && (
           <div className="cd-row">
             <span className="cd-lbl">Parents</span>
             <span className="cd-val" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-              {commit.parents.map(pi => COMMITS[pi]?.id).filter(Boolean).join(', ')}
+              {commit.parents.join(', ')}
             </span>
           </div>
         )}
@@ -59,7 +66,7 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
         ) : hasRealFiles ? (
           <div className="fl">
             {(files ?? []).map((f, i) => (
-              <div key={f.path} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => setSelFile(i)}>
+              <div key={f.path} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => { setSelFile(i); onFileSelect?.(f.path) }}>
                 <span className={`fst fst-${f.status}`}>{f.status}</span>
                 <FilePath path={f.path} />
                 <span className="fstats">
@@ -75,7 +82,7 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
         ) : (
           <div className="fl">
             {commit.files.map((f, i) => (
-              <div key={f.p} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => setSelFile(i)}>
+              <div key={f.p} className={`fi${i === selFile ? ' sel' : ''}`} onClick={() => { setSelFile(i); onFileSelect?.(f.p) }}>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>
                 <FilePath path={f.p} />
                 <span className="fstats"><span className="fadd">+{f.a}</span><span className="fdel">−{f.d}</span></span>
@@ -85,8 +92,32 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
         )}
       </div>
       <div className="divl" />
+      <div style={{ background: 'var(--c-bg-inset)', borderRadius: 'var(--r2)', overflow: 'hidden', border: '1px solid var(--c-border)' }}>
+        {loadingPreview ? (
+          <div style={{ padding: '10px', textAlign: 'center', color: 'var(--c-text-faint)', fontSize: 11 }}>
+            <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+          </div>
+        ) : fileDiffPreview ? (
+          fileDiffPreview.split('\n')
+            .filter(l => !l.startsWith('---') && !l.startsWith('+++') && !l.startsWith('diff ') && !l.startsWith('index '))
+            .slice(0, 10)
+            .map((line, i) => {
+              const t = line.startsWith('@@') ? 'hunk' : line.startsWith('+') ? 'add' : line.startsWith('-') ? 'del' : 'ctx'
+              if (t === 'hunk') return <div key={i} style={{ padding: '3px 10px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--c-info)', borderBottom: '1px solid var(--c-divider)' }}>{line}</div>
+              return <div key={i} className={`dline ${t === 'add' ? 'dadd' : t === 'del' ? 'ddel' : ''}`} style={{ lineHeight: '18px', padding: '0 10px', fontSize: 11 }}><span className="dtxt">{line}</span></div>
+            })
+        ) : (
+          <div style={{ padding: '10px', color: 'var(--c-text-faint)', fontSize: 11, textAlign: 'center' }}>파일을 선택하세요</div>
+        )}
+      </div>
+      <div className="divl" />
       <div style={{ display: 'flex', gap: 5 }}>
-        <button style={btnStyle} onClick={onOpenDiff}>
+        <button style={btnStyle} onClick={() => {
+          const filePath = hasRealFiles
+            ? (files?.[selFile]?.path ?? '')
+            : (commit.files[selFile]?.p ?? '')
+          onOpenDiff(filePath)
+        }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="16,18 22,12 16,6"/><polyline points="8,6 2,12 8,18"/></svg>Diff
         </button>
         <button style={btnStyle} onClick={onCherryPick}>
@@ -95,13 +126,6 @@ export function CommitDetail({ commit, files, loadingFiles, onOpenDiff, onCherry
         <button style={btnStyle} onClick={onBlame}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Blame
         </button>
-      </div>
-      <div style={{ background: 'var(--c-bg-inset)', borderRadius: 'var(--r2)', overflow: 'hidden', border: '1px solid var(--c-border)' }}>
-        <div style={{ padding: '5px 10px', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--c-info)', borderBottom: '1px solid var(--c-divider)' }}>@@ −18,8 +18,16 @@</div>
-        {DIFF.slice(1, 9).map((line, i) => {
-          if (line.t === 'hunk') return null
-          return <div key={i} className={`dline ${line.t === 'add' ? 'dadd' : line.t === 'del' ? 'ddel' : ''}`} style={{ lineHeight: '18px', padding: '0 10px', fontSize: 11 }}><span className="dtxt">{line.s}</span></div>
-        })}
       </div>
     </div>
   )

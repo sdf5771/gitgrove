@@ -1,26 +1,94 @@
-import { useState } from 'react'
-import { COMMITS, INIT_STASHES, type Stash } from '../../data/mockData'
+import { useState, useEffect } from 'react'
+import { ConfirmModal } from './ConfirmModal'
 
-export function StashPanel({ onClose }: { onClose: () => void }) {
-  const [stashes, setStashes] = useState<Stash[]>(INIT_STASHES)
+interface StashItem {
+  index: number
+  message: string
+  branch: string
+  time: string
+}
+
+interface Props {
+  onClose: () => void
+  repoPath?: string | null
+  currentBranch?: string
+}
+
+export function StashPanel({ onClose, repoPath }: Props) {
+  const [stashes, setStashes] = useState<StashItem[]>([])
   const [msg, setMsg] = useState('')
   const [toast, setToast] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [dropConfirm, setDropConfirm] = useState<number | null>(null)
 
   const showToast = (t: string) => { setToast(t); setTimeout(() => setToast(''), 1800) }
 
-  const push = () => {
-    const s: Stash = { idx: 0, msg: msg || `WIP on main: ${COMMITS[0].id.slice(0, 7)} ${COMMITS[0].msg.slice(0, 28)}…`, branch: 'main', files: 3, time: 'just now' }
-    setStashes(p => [s, ...p.map((x, i) => ({ ...x, idx: i + 1 }))])
-    setMsg(''); showToast('Stash pushed')
+  const reload = async () => {
+    if (!repoPath) return
+    setLoading(true)
+    try {
+      const list = await window.gitAPI!.stashList(repoPath)
+      setStashes(list.map(s => ({ index: s.index, message: s.message, branch: s.branch, time: s.time })))
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false)
+    }
   }
-  const pop = (idx: number) => {
-    setStashes(p => p.filter(x => x.idx !== idx).map((x, i) => ({ ...x, idx: i })))
-    showToast('Stash applied & dropped')
-    setTimeout(() => onClose(), 1500)
+
+  useEffect(() => { reload() }, [repoPath])
+
+  const push = async () => {
+    try {
+      if (repoPath) {
+        await window.gitAPI!.stashPush(repoPath, msg || undefined)
+        await reload()
+      }
+      setMsg('')
+      showToast('Stash pushed')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Push failed')
+    }
   }
-  const drop = (idx: number) => {
-    setStashes(p => p.filter(x => x.idx !== idx).map((x, i) => ({ ...x, idx: i })))
-    showToast('Stash dropped')
+
+  const pop = async (index: number) => {
+    try {
+      if (repoPath) {
+        await window.gitAPI!.stashPop(repoPath, index)
+        await reload()
+      } else {
+        setStashes(p => p.filter(x => x.index !== index).map((x, i) => ({ ...x, index: i })))
+      }
+      showToast('Stash applied & dropped')
+      setTimeout(() => onClose(), 1500)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Pop failed')
+    }
+  }
+
+  const apply = async (index: number) => {
+    try {
+      if (repoPath) {
+        await window.gitAPI!.stashApply(repoPath, index)
+      }
+      showToast('Applied (kept)')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Apply failed')
+    }
+  }
+
+  const drop = async (index: number) => {
+    try {
+      if (repoPath) {
+        await window.gitAPI!.stashDrop(repoPath, index)
+        await reload()
+      } else {
+        setStashes(p => p.filter(x => x.index !== index).map((x, i) => ({ ...x, index: i })))
+      }
+      showToast('Stash dropped')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Drop failed')
+    }
   }
 
   return (
@@ -40,23 +108,28 @@ export function StashPanel({ onClose }: { onClose: () => void }) {
         </div>
         <div style={{ padding: '5px 12px 3px', fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)', borderBottom: '1px solid var(--c-divider)' }}>Saved stashes</div>
         <div className="stash-list">
-          {!stashes.length && (
+          {loading && (
+            <div style={{ padding: '16px', color: 'var(--c-text-faint)', fontSize: 12, textAlign: 'center' }}>
+              <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+            </div>
+          )}
+          {!loading && !stashes.length && (
             <div className="stash-empty">
               <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
               No stashes
             </div>
           )}
           {stashes.map(s => (
-            <div key={s.idx} className="stash-item">
+            <div key={s.index} className="stash-item">
               <div className="stash-item-hd">
-                <span className="stash-idx">stash@{'{' + s.idx + '}'}</span>
-                <span className="stash-msg">{s.msg}</span>
+                <span className="stash-idx">stash@{'{' + s.index + '}'}</span>
+                <span className="stash-msg">{s.message}</span>
               </div>
-              <div className="stash-meta"><span>{s.branch}</span><span>·</span><span>{s.files}f</span><span>·</span><span>{s.time}</span></div>
+              <div className="stash-meta"><span>{s.branch}</span>{s.time && <><span>·</span><span>{s.time}</span></>}</div>
               <div className="stash-actions">
-                <button className="stash-act pop" onClick={() => pop(s.idx)}>↑ Pop</button>
-                <button className="stash-act" onClick={() => showToast('Applied (kept)')}>Apply</button>
-                <button className="stash-act drop" onClick={() => drop(s.idx)}>Drop</button>
+                <button className="stash-act pop" onClick={() => pop(s.index)}>↑ Pop</button>
+                <button className="stash-act" onClick={() => apply(s.index)}>Apply</button>
+                <button className="stash-act drop" onClick={() => setDropConfirm(s.index)}>Drop</button>
               </div>
             </div>
           ))}
@@ -65,6 +138,16 @@ export function StashPanel({ onClose }: { onClose: () => void }) {
           <div style={{ position: 'absolute', bottom: 12, left: 12, right: 12, padding: '7px 12px', background: 'var(--c-bg-elevated)', border: '1px solid var(--c-gold-border)', borderRadius: 'var(--r2)', fontSize: 12, color: 'var(--c-text-strong)', textAlign: 'center', animation: 'mslide 200ms ease', boxShadow: '0 4px 16px rgba(0,0,0,.5)' }}>{toast}</div>
         )}
       </div>
+      {dropConfirm !== null && (
+        <ConfirmModal
+          title="Stash 삭제"
+          message={`stash@{${dropConfirm}}을 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다.`}
+          confirmLabel="Drop"
+          danger={true}
+          onConfirm={() => { drop(dropConfirm); setDropConfirm(null) }}
+          onCancel={() => setDropConfirm(null)}
+        />
+      )}
     </div>
   )
 }

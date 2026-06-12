@@ -171,7 +171,16 @@ export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoP
           onChange={e => setMsg(e.target.value)}
         />
         <div className="cmt-btns">
-          <button className="amnd">↩ Amend</button>
+          <button className="amnd" onClick={async () => {
+            if (!repoPath) return
+            setCommitting(true)
+            try {
+              await window.gitAPI?.commitAmend(repoPath, msg.trim() || undefined)
+              setMsg('')
+              onCommitDone?.()
+            } catch (e) { console.error('amend failed:', e) }
+            finally { setCommitting(false) }
+          }}>↩ Amend</button>
           <button
             className="cmt-btn"
             disabled={staged.length === 0 || !msg.trim() || committing}

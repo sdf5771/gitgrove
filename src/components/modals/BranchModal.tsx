@@ -1,29 +1,77 @@
 import { useState } from 'react'
-import { LOCAL_BRANCHES } from '../../data/mockData'
+import { LOCAL_BRANCHES, type Branch } from '../../data/mockData'
 import { ModalShell, SuccessState } from './ModalShell'
 
 type Tab = 'create' | 'rename' | 'delete'
 
-export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: Tab; onClose: () => void }) {
+interface Props {
+  initialTab?: Tab
+  onClose: () => void
+  onSuccess?: () => void
+  branches?: Branch[]
+  repoPath?: string | null
+}
+
+export function BranchModal({ initialTab = 'create', onClose, onSuccess, branches, repoPath }: Props) {
+  const allBranches = branches ?? LOCAL_BRANCHES
+  const nonCurrent = allBranches.filter(b => !b.current)
+
   const [tab, setTab] = useState<Tab>(initialTab)
   const [cName, setCName] = useState('')
-  const [cBase, setCBase] = useState('main')
+  const [cBase, setCBase] = useState(allBranches.find(b => b.current)?.name ?? allBranches[0]?.name ?? 'main')
   const [cCheckout, setCCheckout] = useState(true)
-  const [rFrom, setRFrom] = useState('feature/auth')
+  const [rFrom, setRFrom] = useState(nonCurrent[0]?.name ?? '')
   const [rNew, setRNew] = useState('')
-  const [dBranch, setDBranch] = useState('feature/auth')
+  const [dBranch, setDBranch] = useState(nonCurrent[0]?.name ?? '')
   const [dForce, setDForce] = useState(false)
   const [doing, setDoing] = useState(false)
   const [isDone, setIsDone] = useState(false)
   const [doneMsg, setDoneMsg] = useState('')
+  const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const nonCurrent = LOCAL_BRANCHES.filter(b => !b.current)
   const validateName = (n: string) => /^[a-z0-9_\-/]+$/i.test(n) && n.length > 0
-  const run = (msg: string) => { setDoing(true); setTimeout(() => { setDoing(false); setIsDone(true); setDoneMsg(msg) }, 1000); setTimeout(() => onClose(), 2000) }
 
-  const create = () => validateName(cName) && run(`Branch '${cName}' created${cCheckout ? ' and checked out' : ''}`)
-  const rename = () => validateName(rNew) && run(`Renamed '${rFrom}' → '${rNew}'`)
-  const del = () => run(`Branch '${dBranch}' deleted`)
+  const run = async (fn: () => Promise<void>, msg: string) => {
+    setError('')
+    setDoing(true)
+    try {
+      if (repoPath) {
+        await fn()
+      } else {
+        await new Promise(r => setTimeout(r, 1000))
+      }
+      setDoneMsg(msg)
+      setIsDone(true)
+      onSuccess?.()
+      setTimeout(() => onClose(), 2000)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDoing(false)
+    }
+  }
+
+  const create = () => {
+    if (!validateName(cName)) return
+    run(
+      () => window.gitAPI!.branchCreate(repoPath!, cName, cBase, cCheckout),
+      `Branch '${cName}' created${cCheckout ? ' and checked out' : ''}`
+    )
+  }
+  const rename = () => {
+    if (!validateName(rNew)) return
+    run(
+      () => window.gitAPI!.branchRename(repoPath!, rFrom, rNew),
+      `Renamed '${rFrom}' → '${rNew}'`
+    )
+  }
+  const del = () => {
+    run(
+      () => window.gitAPI!.branchDelete(repoPath!, dBranch, dForce),
+      `Branch '${dBranch}' deleted`
+    )
+  }
 
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
 
@@ -39,6 +87,12 @@ export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: T
             ))}
           </div>
 
+          {error && (
+            <div style={{ margin: '8px 16px 0', padding: '8px 12px', background: 'rgba(255,107,107,.1)', border: '1px solid rgba(255,107,107,.35)', borderRadius: 'var(--r2)', fontSize: 11, color: 'var(--c-danger)' }}>
+              {error}
+            </div>
+          )}
+
           {tab === 'create' && (
             <div className="modal-body">
               <div className="mfield">
@@ -51,7 +105,7 @@ export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: T
               <div className="mfield">
                 <label>Based on</label>
                 <select className="mselect" value={cBase} onChange={e => setCBase(e.target.value)}>
-                  {LOCAL_BRANCHES.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
+                  {allBranches.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
                 </select>
               </div>
               <div className={`mcheckrow${cCheckout ? ' on' : ''}`} onClick={() => setCCheckout(v => !v)}>
@@ -73,7 +127,7 @@ export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: T
               <div className="mfield">
                 <label>Branch to rename</label>
                 <select className="mselect" value={rFrom} onChange={e => setRFrom(e.target.value)}>
-                  {LOCAL_BRANCHES.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
+                  {allBranches.map(b => <option key={b.name} value={b.name}>{b.name}{b.current ? ' (current)' : ''}</option>)}
                 </select>
               </div>
               <div className="mfield">
@@ -93,7 +147,7 @@ export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: T
             <div className="modal-body">
               <div className="mfield">
                 <label>Branch to delete</label>
-                <select className="mselect" value={dBranch} onChange={e => setDBranch(e.target.value)}>
+                <select className="mselect" value={dBranch} onChange={e => { setDBranch(e.target.value); setConfirmDelete(false) }}>
                   {nonCurrent.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
                 </select>
               </div>
@@ -105,10 +159,20 @@ export function BranchModal({ initialTab = 'create', onClose }: { initialTab?: T
                   <div className="mcheck-sub"><code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>-D</code> — allows deleting unmerged branches</div>
                 </div>
               </div>
-              <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
-                <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
-                <button className="mbtn-danger" onClick={del} disabled={doing}>{doing ? 'Deleting…' : 'Delete Branch'}</button>
-              </div>
+              {confirmDelete ? (
+                <div style={{ marginTop: 8, padding: '10px 12px', background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)', borderRadius: 'var(--r2)', fontSize: 12, color: 'var(--c-text)' }}>
+                  <div style={{ marginBottom: 8 }}>정말로 <strong>{dBranch}</strong>를 삭제하시겠습니까?</div>
+                  <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none' }}>
+                    <button className="mbtn-cancel" onClick={() => setConfirmDelete(false)}>아니오</button>
+                    <button className="mbtn-danger" onClick={del} disabled={doing}>{doing ? 'Deleting…' : '예, 삭제합니다'}</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
+                  <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
+                  <button className="mbtn-danger" onClick={() => setConfirmDelete(true)} disabled={doing}>Delete Branch</button>
+                </div>
+              )}
             </div>
           )}
         </>

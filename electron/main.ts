@@ -70,6 +70,18 @@ interface GitFileEntry {
   deletions: number
 }
 
+interface GitConfigResult {
+  name: string
+  email: string
+  defaultBranch: string
+}
+
+interface GitStashEntry {
+  index: number
+  message: string
+  branch: string
+}
+
 // ──────────────────────────────────────────────
 // 유틸리티: 상대 시간 변환
 // ──────────────────────────────────────────────
@@ -350,6 +362,13 @@ ipcMain.handle('git:diff', async (_event, repoPath: string, filePath: string): P
   return unstagedDiff
 })
 
+// git:commit-file-diff — 특정 커밋의 특정 파일 diff 조회
+ipcMain.handle('git:commit-file-diff', async (_event, repoPath: string, commitHash: string, filePath: string): Promise<string> => {
+  const git = simpleGit(repoPath)
+  const result = await git.raw(['diff-tree', '--no-commit-id', '-r', '-p', commitHash, '--', filePath])
+  return result
+})
+
 // git:files — 특정 커밋의 변경 파일 목록 조회
 ipcMain.handle('git:files', async (_event, repoPath: string, commitHash: string): Promise<GitFileEntry[]> => {
   const git = simpleGit(repoPath)
@@ -530,6 +549,207 @@ ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): 
   }
 
   return lines
+})
+
+// ──────────────────────────────────────────────
+// git:config — git config 읽기/쓰기 (Settings 패널)
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:config-get', async (_event, repoPath: string): Promise<GitConfigResult> => {
+  const git = simpleGit(repoPath)
+  const [name, email, defaultBranch] = await Promise.all([
+    git.raw(['config', 'user.name']).catch(() => ''),
+    git.raw(['config', 'user.email']).catch(() => ''),
+    git.raw(['config', 'init.defaultBranch']).catch(() => 'main'),
+  ])
+  return {
+    name: name.trim(),
+    email: email.trim(),
+    defaultBranch: defaultBranch.trim() || 'main',
+  }
+})
+
+ipcMain.handle('git:config-set', async (_event, repoPath: string, cfg: Partial<GitConfigResult>): Promise<void> => {
+  const git = simpleGit(repoPath)
+  const ops: Promise<unknown>[] = []
+  if (cfg.name)          ops.push(git.raw(['config', 'user.name', cfg.name]))
+  if (cfg.email)         ops.push(git.raw(['config', 'user.email', cfg.email]))
+  if (cfg.defaultBranch) ops.push(git.raw(['config', 'init.defaultBranch', cfg.defaultBranch]))
+  await Promise.all(ops)
+})
+
+// ──────────────────────────────────────────────
+// git:tag-create — 태그 생성 (ContextMenu "Create tag here")
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:tag-create', async (_event, repoPath: string, tagName: string, commitHash: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.tag([tagName, commitHash])
+})
+
+// ──────────────────────────────────────────────
+// git:stash-* — Stash 패널 연산
+// ──────────────────────────────────────────────
+
+// Apply: 스태시 적용 (keep stash)
+ipcMain.handle('git:stash-apply', async (_event, repoPath: string, index: number): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['stash', 'apply', `stash@{${index}}`])
+})
+
+// Drop: 스태시 삭제
+ipcMain.handle('git:stash-drop', async (_event, repoPath: string, index: number): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['stash', 'drop', `stash@{${index}}`])
+})
+
+// List: 스태시 목록 조회
+ipcMain.handle('git:stash-list', async (_event, repoPath: string): Promise<GitStashEntry[]> => {
+  const git = simpleGit(repoPath)
+  const raw = await git.raw(['stash', 'list', '--format=%gd|%s|%D|%ar']).catch(() => '')
+  return raw.trim().split('\n').filter(Boolean).map((line, i) => {
+    const parts = line.split('|')
+    const msg = parts[1]?.replace(/^WIP on [^:]+: /, '') ?? ''
+    const refs = parts[2] ?? ''
+    const time = parts[3]?.trim() ?? ''
+    const branchMatch = refs.match(/refs\/heads\/([^\s,]+)/) || msg.match(/^WIP on ([^:]+):/)
+    return {
+      index: i,
+      message: msg || `stash@{${i}}`,
+      branch: branchMatch?.[1] ?? 'unknown',
+      time,
+    }
+  })
+})
+
+// Push: 새 스태시 생성
+ipcMain.handle('git:stash-push', async (_event, repoPath: string, message?: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  if (message) {
+    await git.raw(['stash', 'push', '-m', message])
+  } else {
+    await git.raw(['stash', 'push'])
+  }
+})
+
+// ──────────────────────────────────────────────
+// git:branch-* — 브랜치 생성/이름 변경/삭제
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:branch-create', async (_event, repoPath: string, name: string, base: string, checkout: boolean): Promise<void> => {
+  const git = simpleGit(repoPath)
+  if (checkout) {
+    await git.checkoutBranch(name, base)
+  } else {
+    await git.raw(['branch', name, base])
+  }
+})
+
+ipcMain.handle('git:branch-rename', async (_event, repoPath: string, from: string, to: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['branch', '-m', from, to])
+})
+
+ipcMain.handle('git:branch-delete', async (_event, repoPath: string, name: string, force: boolean): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['branch', force ? '-D' : '-d', name])
+})
+
+// ──────────────────────────────────────────────
+// git:cherry-pick
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:cherry-pick', async (_event, repoPath: string, hash: string, noCommit: boolean): Promise<void> => {
+  const git = simpleGit(repoPath)
+  const args = ['cherry-pick']
+  if (noCommit) args.push('--no-commit')
+  args.push(hash)
+  await git.raw(args)
+})
+
+// ──────────────────────────────────────────────
+// git:merge — merge / rebase / squash 전략
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:merge', async (_event, repoPath: string, branch: string, strategy: 'merge' | 'rebase' | 'squash'): Promise<void> => {
+  const git = simpleGit(repoPath)
+  if (strategy === 'rebase') {
+    await git.raw(['rebase', branch])
+  } else if (strategy === 'squash') {
+    await git.raw(['merge', '--squash', branch])
+    await git.raw(['commit', '-m', `Squash merge ${branch}`])
+  } else {
+    await git.merge([branch])
+  }
+})
+
+// ──────────────────────────────────────────────
+// git:stash-pop — apply + drop (pop)
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:stash-pop', async (_event, repoPath: string, index: number): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['stash', 'pop', `stash@{${index}}`])
+})
+
+// ──────────────────────────────────────────────
+// git:commit-amend — 마지막 커밋 수정
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:commit-amend', async (_event, repoPath: string, message?: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  if (message) {
+    await git.raw(['commit', '--amend', '-m', message])
+  } else {
+    await git.raw(['commit', '--amend', '--no-edit'])
+  }
+})
+
+// ──────────────────────────────────────────────
+// git:revert — 커밋 되돌리기 (no-commit 스테이지)
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:revert', async (_event, repoPath: string, hash: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['revert', '--no-commit', hash])
+})
+
+// ──────────────────────────────────────────────
+// git:reset — soft / mixed / hard 리셋
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:reset', async (_event, repoPath: string, mode: 'soft' | 'mixed' | 'hard', hash: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['reset', `--${mode}`, hash])
+})
+
+// ──────────────────────────────────────────────
+// git:rebase-interactive — 대화형 rebase
+// ──────────────────────────────────────────────
+
+ipcMain.handle('git:rebase-interactive', async (_event, repoPath: string, items: Array<{ hash: string; action: string; msg: string }>): Promise<void> => {
+  const { exec } = await import('child_process')
+  const { promisify } = await import('util')
+  const fs = await import('fs/promises')
+  const os = await import('os')
+  const nodePath = await import('path')
+
+  const count = items.length
+  const todo = items.map(item => `${item.action} ${item.hash} ${item.msg}`).join('\n') + '\n'
+
+  const tmpSeq = nodePath.join(os.tmpdir(), `gitgrove-seq-${Date.now()}.txt`)
+  const tmpEditor = nodePath.join(os.tmpdir(), `gitgrove-ed-${Date.now()}.sh`)
+
+  await fs.writeFile(tmpSeq, todo, 'utf8')
+  await fs.writeFile(tmpEditor, `#!/bin/sh\ncp "${tmpSeq}" "$1"\n`, 'utf8')
+  await fs.chmod(tmpEditor, 0o755)
+
+  const execPromise = promisify(exec)
+  try {
+    await execPromise(`GIT_SEQUENCE_EDITOR="${tmpEditor}" git rebase -i HEAD~${count}`, { cwd: repoPath })
+  } finally {
+    await Promise.all([fs.unlink(tmpSeq).catch(() => {}), fs.unlink(tmpEditor).catch(() => {})])
+  }
 })
 
 // ──────────────────────────────────────────────
