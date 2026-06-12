@@ -58,8 +58,8 @@
 ### Core Views
 | View | Description |
 |------|-------------|
-| **History** | SVG branch graph with bezier lane lines, merge nodes, label chips (HEAD / branch / tag / remote) |
-| **Stage** | Two-column unstaged ↔ staged file mover, commit message editor, amend support |
+| **History** | SVG branch graph with bezier lane lines, merge nodes, label chips (HEAD / branch / tag / remote) — **All-branches toggle** + **Load-more pagination** for large repos |
+| **Stage** | Two-column unstaged ↔ staged file mover, commit message editor, amend support — **per-hunk Stage / Unstage** (`git add -p` style) |
 | **Diff Explorer** | Full-screen side-by-side diff with syntax highlighting and file list |
 | **Git Blame** | Line-by-line blame with author info — click to jump to commit |
 | **PR Review** | Open / Merged PR list, file changes, inline comments, CI checks, approve / request-changes |
@@ -257,6 +257,8 @@ gitgrove/
 - [x] Interactive Rebase, Cherry-pick, Stash, Merge
 - [x] GitHub PR integration (token-based)
 - [x] Branch context menu, confirm dialogs for destructive ops
+- [x] Per-hunk staging / unstaging (`git add -p` style)
+- [x] All-branches graph (`--all`) + commit log pagination
 - [ ] SSH / HTTPS authentication manager
 - [ ] Commit graph virtualization (large repos)
 - [ ] Split-diff editor with inline editing

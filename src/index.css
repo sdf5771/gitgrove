@@ -155,6 +155,26 @@ body { display: flex; align-items: center; justify-content: center; }
 .ghm { flex: 1; } .gha { width: 90px; flex-shrink: 0; } .ght { width: 72px; padding-right: 14px; text-align: right; flex-shrink: 0; }
 .gscroll { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; }
 
+/* 전체 브랜치 표시 토글 (graph header) */
+.allbranch-toggle {
+  margin-right: 8px; padding: 2px 9px; border-radius: 5px; cursor: pointer;
+  background: transparent; border: 1px solid var(--c-border); color: var(--c-text-faint);
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .04em;
+  text-transform: uppercase; transition: all 120ms; flex-shrink: 0;
+}
+.allbranch-toggle:hover { border-color: var(--c-gold-border); color: var(--c-gold-300); }
+.allbranch-toggle.on { border-color: var(--c-gold-border); color: var(--c-gold-300); background: rgba(230,165,54,.10); }
+
+/* 커밋 로그 더 보기 버튼 */
+.loadmore-btn {
+  display: block; width: calc(100% - 28px); margin: 8px 14px 12px; padding: 8px;
+  border-radius: 6px; cursor: pointer; background: var(--c-bg-inset);
+  border: 1px solid var(--c-border); color: var(--c-text-muted);
+  font-family: var(--font-display); font-size: 12px; transition: all 120ms;
+}
+.loadmore-btn:hover:not(:disabled) { border-color: var(--c-gold-border); color: var(--c-gold-300); background: var(--c-elevated); }
+.loadmore-btn:disabled { opacity: .6; cursor: default; }
+
 /* ── Commit row ── */
 .crow {
   display: flex; align-items: center; cursor: pointer;
@@ -287,7 +307,15 @@ body { display: flex; align-items: center; justify-content: center; }
   flex-shrink: 0; position: sticky; top: 0; z-index: 1;
 }
 .dfn { color: var(--c-text-strong); }
-.dhunk { display: flex; padding: 3px 14px; background: rgba(95,184,230,.08); color: var(--c-info); font-size: 11px; line-height: 20px; }
+.dhunk { display: flex; align-items: center; gap: 8px; padding: 3px 14px; background: rgba(95,184,230,.08); color: var(--c-info); font-size: 11px; line-height: 20px; }
+.dhunk-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dhunk .hunk-btn {
+  flex-shrink: 0; padding: 1px 8px; border-radius: 4px; cursor: pointer;
+  background: var(--c-bg-inset); border: 1px solid var(--c-border); color: var(--c-text-muted);
+  font-family: var(--font-display); font-size: 10px; line-height: 16px; transition: all 120ms;
+}
+.dhunk .hunk-btn:hover:not(:disabled) { border-color: var(--c-gold-border); color: var(--c-gold-300); background: var(--c-elevated); }
+.dhunk .hunk-btn:disabled { opacity: .5; cursor: default; }
 .dline { display: flex; align-items: baseline; line-height: 20px; padding: 0 0 0 14px; }
 .dnum { width: 32px; color: var(--c-text-faint); font-size: 10px; flex-shrink: 0; padding-right: 8px; text-align: right; }
 .dtxt { flex: 1; white-space: pre; overflow: hidden; text-overflow: ellipsis; color: var(--c-text); }

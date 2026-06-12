@@ -99,10 +99,12 @@ interface Window {
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {
     openDialog: () => Promise<string | null>
-    getLog: (repoPath: string) => Promise<GitCommit[]>
+    getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => Promise<GitCommit[]>
     getBranches: (repoPath: string) => Promise<GitBranchResult>
     getStatus: (repoPath: string) => Promise<GitStatusResult>
     getDiff: (repoPath: string, filePath: string) => Promise<string>
+    getFileDiff: (repoPath: string, filePath: string, staged: boolean) => Promise<string>
+    applyHunk: (repoPath: string, filePath: string, hunkIndex: number, reverse: boolean) => Promise<void>
     getFiles: (repoPath: string, commitHash: string) => Promise<GitFileEntry[]>
     getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string) => Promise<string>
     stage: (repoPath: string, files: string[]) => Promise<void>

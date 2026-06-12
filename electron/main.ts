@@ -1,6 +1,8 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+import os from 'node:os'
+import fs from 'node:fs'
 import https from 'node:https'
 import simpleGit from 'simple-git'
 
@@ -157,12 +159,19 @@ ipcMain.handle('git:open-dialog', async () => {
 })
 
 // git:log — 커밋 로그 조회 (최대 50개)
-ipcMain.handle('git:log', async (_event, repoPath: string): Promise<GitCommit[]> => {
+ipcMain.handle('git:log', async (_event, repoPath: string, opts?: { limit?: number; all?: boolean }): Promise<GitCommit[]> => {
   const git = simpleGit(repoPath)
+
+  const limit = Math.max(1, opts?.limit ?? 50)
+  const all = opts?.all ?? false
+
+  // 모든 핸들러가 공유하는 로그 범위 인자 (limit / 전체 브랜치 여부)
+  const rangeArgs = [`--max-count=${limit}`]
+  if (all) rangeArgs.push('--all')
 
   // 커밋 로그 (stat 포함)
   const log = await git.log([
-    '--max-count=50',
+    ...rangeArgs,
     '--stat',
     '--decorate=full',
   ])
@@ -170,7 +179,7 @@ ipcMain.handle('git:log', async (_event, repoPath: string): Promise<GitCommit[]>
   // parents 별도 조회: short hash 배열 맵 (hash → parents[])
   const parentLines = await git.raw([
     'log',
-    '--max-count=50',
+    ...rangeArgs,
     '--pretty=format:%h %P',
   ])
   const parentMap = new Map<string, string[]>()
@@ -420,6 +429,73 @@ ipcMain.handle('git:unstage', async (_event, repoPath: string, files: string[]):
 ipcMain.handle('git:commit', async (_event, repoPath: string, message: string): Promise<void> => {
   const git = simpleGit(repoPath)
   await git.commit(message)
+})
+
+// git:file-diff — 특정 파일의 diff 조회 (staged 여부 명시)
+//   staged=false → 워킹트리(index 대비) diff,  staged=true → index(HEAD 대비) diff
+ipcMain.handle('git:file-diff', async (_event, repoPath: string, filePath: string, staged: boolean): Promise<string> => {
+  const git = simpleGit(repoPath)
+  const args = staged ? ['--cached', '--', filePath] : ['--', filePath]
+  return git.diff(args)
+})
+
+// unified diff 원본에서 헤더 + 지정 인덱스의 단일 hunk만 추출해 패치 생성
+function buildHunkPatch(raw: string, hunkIndex: number): string | null {
+  const lines = raw.split('\n')
+  const header: string[] = []
+  let i = 0
+  // 첫 '@@' 이전까지가 파일 헤더 (diff --git / index / --- / +++ 등)
+  for (; i < lines.length; i++) {
+    if (lines[i].startsWith('@@')) break
+    header.push(lines[i])
+  }
+  if (header.length === 0) return null
+
+  // 나머지를 hunk 단위로 분리
+  const hunks: string[][] = []
+  let cur: string[] | null = null
+  for (; i < lines.length; i++) {
+    const l = lines[i]
+    if (l.startsWith('@@')) {
+      if (cur) hunks.push(cur)
+      cur = [l]
+    } else if (cur) {
+      cur.push(l)
+    }
+  }
+  if (cur) hunks.push(cur)
+
+  if (hunkIndex < 0 || hunkIndex >= hunks.length) return null
+
+  // 선택한 hunk의 후행 빈 줄 제거 (다음 hunk 분리 과정에서 생기는 잔여 줄)
+  const body = [...hunks[hunkIndex]]
+  while (body.length > 0 && body[body.length - 1] === '') body.pop()
+
+  let patch = [...header, ...body].join('\n')
+  if (!patch.endsWith('\n')) patch += '\n'
+  return patch
+}
+
+// git:apply-hunk — 단일 hunk를 stage(reverse=false) / unstage(reverse=true)
+//   git add -p / git reset -p 의 hunk 단위 동작에 해당
+ipcMain.handle('git:apply-hunk', async (_event, repoPath: string, filePath: string, hunkIndex: number, reverse: boolean): Promise<void> => {
+  const git = simpleGit(repoPath)
+  // staging은 워킹트리 diff, unstaging은 index diff를 패치 소스로 사용
+  const diffArgs = reverse ? ['diff', '--cached', '--', filePath] : ['diff', '--', filePath]
+  const raw = await git.raw(diffArgs)
+  const patch = buildHunkPatch(raw, hunkIndex)
+  if (!patch) throw new Error('적용할 hunk를 찾을 수 없습니다')
+
+  const tmp = path.join(os.tmpdir(), `gitgrove-hunk-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`)
+  fs.writeFileSync(tmp, patch, 'utf8')
+  try {
+    const applyArgs = ['apply', '--cached']
+    if (reverse) applyArgs.push('--reverse')
+    applyArgs.push(tmp)
+    await git.raw(applyArgs)
+  } finally {
+    try { fs.unlinkSync(tmp) } catch { /* ignore */ }
+  }
 })
 
 // ──────────────────────────────────────────────
