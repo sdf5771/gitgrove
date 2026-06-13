@@ -108,6 +108,68 @@ function relativeTime(date: Date): string {
 // ──────────────────────────────────────────────
 
 let win: BrowserWindow | null
+let splash: BrowserWindow | null = null
+let splashShownAt = 0
+
+// 스플래시 최소 표시시간 / 페이드아웃 시간 (깜빡임 방지 + 모션 가이드 일치)
+const SPLASH_MIN_MS = 1200
+const SPLASH_FADE_MS = 180
+
+// 별도 frameless·투명 스플래시 윈도우 (방식 A)
+function createSplashWindow() {
+  splash = new BrowserWindow({
+    width: 560,
+    height: 360,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    center: true,
+    show: false,
+    // backgroundColor 지정 금지(투명)
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.mjs'),
+    },
+  })
+
+  splash.once('ready-to-show', () => {
+    splash?.show()
+    splashShownAt = Date.now()
+    // 동적 버전 주입 (시안의 정적 v1.7.0 대체)
+    splash?.webContents.send('splash-version', app.getVersion())
+  })
+
+  if (VITE_DEV_SERVER_URL) {
+    splash.loadURL(`${VITE_DEV_SERVER_URL}/splash.html`)
+  } else {
+    splash.loadFile(path.join(RENDERER_DIST, 'splash.html'))
+  }
+}
+
+// 메인 준비 완료 → 스플래시 완료 연출 후 메인 표시로 전환
+function finishSplashAndShow() {
+  if (!win) return
+
+  const reveal = () => {
+    if (splash && !splash.isDestroyed()) {
+      // 완료 신호 → 100% + 페이드아웃(스플래시 내부 CSS transition)
+      splash.webContents.send('boot-progress', { pct: 100, done: true })
+      setTimeout(() => {
+        if (splash && !splash.isDestroyed()) splash.destroy()
+        splash = null
+        win?.show()
+      }, SPLASH_FADE_MS)
+    } else {
+      win?.show()
+    }
+  }
+
+  // 최소 표시시간 보장 — 앱이 빨리 떠도 스플래시가 깜빡 사라지지 않게
+  const elapsed = splashShownAt ? Date.now() - splashShownAt : SPLASH_MIN_MS
+  const wait = Math.max(0, SPLASH_MIN_MS - elapsed)
+  if (wait > 0) setTimeout(reveal, wait)
+  else reveal()
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -116,6 +178,7 @@ function createWindow() {
     minWidth: 1024,
     minHeight: 700,
     frame: false,
+    show: false,
     backgroundColor: '#0d1220',
     icon: path.join(process.env.VITE_PUBLIC, 'gitgrove-icon.svg'),
     webPreferences: {
@@ -130,6 +193,17 @@ function createWindow() {
     else win?.maximize()
   })
   ipcMain.on('win-close', () => win?.close())
+
+  // 메인 렌더러가 준비되면 스플래시를 닫고 메인 윈도우 표시
+  win.once('ready-to-show', () => {
+    finishSplashAndShow()
+  })
+
+  // 안전장치(폴백): ready-to-show가 어떤 이유로든 안 떠도 메인 윈도우가
+  // 영원히 숨지 않게 한다. (show:false라 이 보장이 없으면 앱이 빈 채로 멈춤)
+  setTimeout(() => {
+    if (win && !win.isDestroyed() && !win.isVisible()) finishSplashAndShow()
+  }, 8000)
 
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
@@ -946,4 +1020,8 @@ ipcMain.on('app:open-release-url', (_e, url: string) => {
   shell.openExternal(url)
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(() => {
+  // 스플래시를 먼저 띄워 메인 윈도우 빌드 동안 빈 화면 깜빡임 제거
+  createSplashWindow()
+  createWindow()
+})
