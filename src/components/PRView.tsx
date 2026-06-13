@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { PR_DATA } from '../data/mockData'
 import type { PullRequest } from '../data/mockData'
 import { FilePath } from './FilePath'
+import { Markdown } from './Markdown'
 import { parseGitHubRepo } from '../utils/github'
 
 const GITHUB_TOKEN_KEY = 'gitgrove:githubToken'
@@ -194,7 +195,9 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
               {dtab === 'overview' && (
                 <>
                   <div style={{ fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)' }}>Description</div>
-                  <div className="pr-desc">{sel.body}</div>
+                  {sel.body
+                    ? <Markdown source={sel.body} className="pr-desc" />
+                    : <div className="pr-desc" style={{ color: 'var(--c-text-faint)' }}>설명이 없습니다</div>}
                   <div className="divl" />
                   <div style={{ fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)' }}>Reviewers</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -243,7 +246,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
                         <span style={{ fontSize: 11, color: 'var(--c-text-faint)' }}>{t.time}</span>
                         {t.file && <span style={{ marginLeft: 'auto', fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--c-info)' }}>{t.file.split('/').pop()}:{t.line}</span>}
                       </div>
-                      <div className="pr-comment-body">{t.body}</div>
+                      <Markdown source={t.body} className="pr-comment-body" />
                     </div>
                   ))
               )}
