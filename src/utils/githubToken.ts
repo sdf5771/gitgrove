@@ -13,7 +13,19 @@ export async function getGithubToken(): Promise<string> {
   try {
     if (await window.appAPI?.githubIsEncryptionAvailable()) {
       const stored = await window.appAPI.githubGetToken()
-      return stored ?? ''
+      if (stored) return stored
+      // safeStorage가 비어 있고 평문 미러가 남아 있으면(업그레이드 첫 실행 등)
+      // 읽는 시점에 자가 마이그레이션: safeStorage로 이관 후 평문 삭제.
+      // → 사용자가 Settings를 열기 전에도 토큰이 즉시 동작하고 평문도 정리된다.
+      let plain = ''
+      try { plain = localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { plain = '' }
+      if (plain) {
+        try {
+          const ok = await window.appAPI.githubSetToken(plain)
+          if (ok) { try { localStorage.removeItem(GITHUB_TOKEN_KEY) } catch { /* ignore */ } }
+        } catch { /* 이관 실패 시 plain 반환으로 동작 보존 */ }
+      }
+      return plain
     }
   } catch {
     /* safeStorage 미가용/오류 시 fallback */
