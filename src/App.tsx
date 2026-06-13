@@ -36,6 +36,8 @@ import { InteractiveRebaseModal } from './components/modals/InteractiveRebaseMod
 import { SettingsPanel } from './components/modals/SettingsPanel'
 import { AddRepoModal } from './components/modals/AddRepoModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
+import { RepoManager } from './components/RepoManager'
+import { loadFavorites, saveFavorites, loadRecents, pushRecent, type RecentRepoEntry } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
 
 type View = 'history' | 'commit' | 'diff' | 'blame' | 'pr'
@@ -135,6 +137,19 @@ export default function App() {
   })
   const [activeRepo, setActiveRepo] = useState(0)
   const addRepo = useCallback((r: Repo) => setRepos(p => [...p, r]), [])
+
+  // ── Repository Manager (풀스크린) 진입/즐겨찾기/최근 ──
+  const [showRepoManager, setShowRepoManager] = useState(false)
+  const [favorites, setFavorites] = useState<string[]>(() => loadFavorites())
+  const [recents, setRecents] = useState<RecentRepoEntry[]>(() => loadRecents())
+
+  const toggleFavorite = useCallback((path: string) => {
+    setFavorites(prev => {
+      const next = prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]
+      saveFavorites(next)
+      return next
+    })
+  }, [])
 
   // ── 사이드바 너비 ──
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -351,6 +366,8 @@ export default function App() {
         }
         return [...prev, newRepo]
       })
+      // 최근 열람 목록(localStorage) 갱신 — 경로/이름/마지막 브랜치 영속.
+      setRecents(pushRecent({ path, name, branch: currentBranch }))
       // active 탭 결정은 호출자가 activate로 명시할 때만 수행한다.
       // stale `repos`가 아니라 fresh `reposRef.current`로 인덱스를 계산한다.
       if (activate) {
@@ -733,6 +750,7 @@ export default function App() {
         else if (showSettings) setShowSettings(false)
         else if (showAddRepo) setShowAddRepo(false)
         else if (showConflict) setShowConflict(false)
+        else if (showRepoManager) setShowRepoManager(false)
         else if (searchQuery) { setSearchQuery(''); srchRef.current?.focus() }
       }
       if ((e.metaKey || e.ctrlKey) && e.key === '1') { e.preventDefault(); setView('history') }
@@ -741,7 +759,7 @@ export default function App() {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, searchQuery])
+  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
 
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
@@ -856,10 +874,18 @@ export default function App() {
         </div>
         <span className="app-name" style={{ marginRight: 10, display: 'flex', alignItems: 'center', gap: 7 }}><LogoIcon size={22} />GitGrove</span>
         <div style={{ width: 1, height: 20, background: 'var(--c-border)', flexShrink: 0, marginRight: 6 }} />
+        <div
+          className={`tb-repos-tab${showRepoManager ? ' on' : ''}`}
+          onClick={() => setShowRepoManager(true)}
+          title="Repository Manager"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="5.5" height="5.5" rx="1"/><rect x="8.5" y="2" width="5.5" height="5.5" rx="1"/><rect x="2" y="8.5" width="5.5" height="5.5" rx="1"/><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1"/></svg>
+          Repositories
+        </div>
         <RepoTabs
           repos={repos}
-          active={activeRepo}
-          onSelect={setActiveRepo}
+          active={showRepoManager ? -1 : activeRepo}
+          onSelect={i => { setShowRepoManager(false); setActiveRepo(i) }}
           onAdd={() => setShowAddRepo(true)}
           onClose={i => { closeRepo(i); if (activeRepo >= i) setActiveRepo(Math.max(0, activeRepo - 1)) }}
         />
@@ -871,7 +897,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* Action bar */}
+      {/* Action bar — Repository Manager 활성 시 숨김 */}
+      {!showRepoManager && (
       <div className="action-bar">
         <button className="abt" onClick={handlePull} disabled={!repoPath || !!remoteOp} style={remoteOp === 'pull' ? { opacity: .6 } : {}}>
           {remoteOp === 'pull'
@@ -919,11 +946,32 @@ export default function App() {
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--c-text-faint)' }}>⌘K</span>
         </button>
       </div>
+      )}
 
       {/* App body */}
       <div className="app-body" style={{ position: 'relative' }}>
 
-        {isLoading ? renderLoading() : !repoPath ? renderEmptyState() : (
+        {showRepoManager ? (
+          <RepoManager
+            repos={repos}
+            activeRepo={activeRepo}
+            githubConnected={!!githubToken}
+            githubLogin={githubUser?.login}
+            recents={recents}
+            favorites={favorites}
+            onToggleFavorite={toggleFavorite}
+            onOpenPath={(path) => { setShowRepoManager(false); void loadRepo(path, { activate: true }) }}
+            onCloseRepo={i => { closeRepo(i); if (activeRepo >= i) setActiveRepo(Math.max(0, activeRepo - 1)) }}
+            onBrowse={() => {
+              void (async () => {
+                const picked = await window.gitAPI?.openDialog()
+                if (picked) { setShowRepoManager(false); await loadRepo(picked, { activate: true }) }
+              })()
+            }}
+            onClose={() => setShowRepoManager(false)}
+            notify={notify}
+          />
+        ) : isLoading ? renderLoading() : !repoPath ? renderEmptyState() : (
           <>
             <BranchSidebar
               activeBranch={activeBranch}

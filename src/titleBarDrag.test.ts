@@ -20,4 +20,11 @@ describe('타이틀바 클릭 영역 (-webkit-app-region)', () => {
     expect(match, 'no-drag 규칙이 존재해야 함').not.toBeNull()
     expect(match![1]).toContain('.repo-tabs')
   })
+
+  it('Repository Manager 진입 탭(.tb-repos-tab)이 no-drag 예외에 포함돼야 한다', () => {
+    // 타이틀바에 새로 추가한 인터랙티브 요소도 클릭이 창 드래그에 먹히지 않게 no-drag여야 함.
+    const match = css.match(/([^{}]*)\{\s*-webkit-app-region:\s*no-drag;?\s*\}/)
+    expect(match, 'no-drag 규칙이 존재해야 함').not.toBeNull()
+    expect(match![1]).toContain('.tb-repos-tab')
+  })
 })
