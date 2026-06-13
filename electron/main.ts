@@ -109,7 +109,7 @@ function relativeTime(date: Date): string {
 
 let win: BrowserWindow | null
 let splash: BrowserWindow | null = null
-let splashShownAt = 0
+let splashCreatedAt = 0
 
 // 스플래시 최소 표시시간 / 페이드아웃 시간 (깜빡임 방지 + 모션 가이드 일치)
 const SPLASH_MIN_MS = 1200
@@ -131,13 +131,19 @@ function createSplashWindow() {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
+  splashCreatedAt = Date.now()
 
-  splash.once('ready-to-show', () => {
-    splash?.show()
-    splashShownAt = Date.now()
-    // 동적 버전 주입 (시안의 정적 v1.7.0 대체)
-    splash?.webContents.send('splash-version', app.getVersion())
-  })
+  const showSplash = () => {
+    if (splash && !splash.isDestroyed() && !splash.isVisible()) {
+      splash.show()
+      // 동적 버전 주입 (시안의 정적 v1.7.0 대체)
+      splash.webContents.send('splash-version', app.getVersion())
+    }
+  }
+  // ready-to-show가 정상이면 그때, 투명 윈도우에서 늦거나 안 떠도
+  // did-finish-load로 백업 표시 (둘 중 먼저 — show()는 idempotent)
+  splash.once('ready-to-show', showSplash)
+  splash.webContents.once('did-finish-load', showSplash)
 
   if (VITE_DEV_SERVER_URL) {
     splash.loadURL(`${VITE_DEV_SERVER_URL}/splash.html`)
@@ -164,8 +170,10 @@ function finishSplashAndShow() {
     }
   }
 
-  // 최소 표시시간 보장 — 앱이 빨리 떠도 스플래시가 깜빡 사라지지 않게
-  const elapsed = splashShownAt ? Date.now() - splashShownAt : SPLASH_MIN_MS
+  // 최소 표시시간 보장 — 생성 시점 기준으로 측정한다.
+  // (prod에선 메인이 로컬 asar라 빨리 떠서, splash가 아직 안 보였는데도
+  //  곧바로 destroy되던 버그를 막는다 — splash가 ~SPLASH_MIN_MS 동안 보이게)
+  const elapsed = splashCreatedAt ? Date.now() - splashCreatedAt : SPLASH_MIN_MS
   const wait = Math.max(0, SPLASH_MIN_MS - elapsed)
   if (wait > 0) setTimeout(reveal, wait)
   else reveal()
