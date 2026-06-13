@@ -140,7 +140,6 @@ export interface RepoManagerProps {
   repos: Repo[]
   activeRepo: number
   githubConnected: boolean
-  githubLogin?: string
   recents: RecentRepoEntry[]
   favorites: string[]
   onToggleFavorite: (path: string) => void
@@ -152,7 +151,7 @@ export interface RepoManagerProps {
 }
 
 export function RepoManager({
-  repos, activeRepo, githubConnected, githubLogin, recents, favorites,
+  repos, activeRepo, githubConnected, recents, favorites,
   onToggleFavorite, onOpenPath, onCloseRepo, onBrowse, onClose, notify,
 }: RepoManagerProps) {
   const [filter, setFilter] = useState<Filter>('all')
@@ -189,7 +188,6 @@ export function RepoManager({
   const favoriteRepos = repos.filter(r => favSet.has(r.path) && matchesQuery(r.name))
   const filteredRecents = recents.filter(r => matchesQuery(r.name))
 
-  const dirtyCount = repos.filter(r => r.dirty).length
 
   const handleOpen = (path: string, name?: string, branch?: string) => {
     onOpenPath(path, name, branch)
@@ -364,18 +362,6 @@ export function RepoManager({
               ))}
             </Section>
           )}
-        </div>
-
-        {/* Status bar */}
-        <div className="rm-status-bar">
-          <div className="rm-status-dot green" />
-          <span>{repos.length} repositories</span>
-          <span style={{ color: 'var(--c-text-faint)' }}>·</span>
-          <span>{repos.length} open · {dirtyCount} with changes</span>
-          <div className="rm-status-bar-right">
-            <span style={{ color: 'var(--c-text-faint)' }}>{githubConnected ? 'GitHub 연결됨' : 'GitHub 미연결'}</span>
-            {githubConnected && <><div className="rm-status-dot gold" /><span>{githubLogin || ''}</span></>}
-          </div>
         </div>
       </div>
     </div>
