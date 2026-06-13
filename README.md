@@ -62,7 +62,7 @@
 | **Stage** | Two-column unstaged ↔ staged file mover, commit message editor, amend support — **per-hunk Stage / Unstage** (`git add -p` style) |
 | **Diff Explorer** | Full-screen side-by-side diff with syntax highlighting and file list |
 | **Git Blame** | Line-by-line blame with author info — click to jump to commit |
-| **PR Review** | Open / Merged PR list, file changes, inline comments, CI checks, approve / request-changes |
+| **PR Review** | Open / Merged PR list, file changes, inline comments, CI checks, approve / request-changes — **GitHub-flavored Markdown** rendering for descriptions & comments |
 
 ### Git Operations
 | Operation | Details |
@@ -83,7 +83,8 @@
 - **Right-click Context Menu** — Cherry-pick · Revert · Reset (soft / mixed / hard) · Branch here · Tag here
 - **Branch Context Menu** — right-click any branch to Checkout / Merge / Rebase / Rename / Delete / Push / Pull
 - **Confirm Dialogs** — every destructive operation (delete, reset --hard, drop, etc.) requires confirmation
-- **Settings Panel** — Git config · Appearance · GitHub token for PR integration
+- **Settings Panel** — Git config · Appearance · **GitHub integration**: PAT setup guide with one-click token pages, in-place token **verify** (scopes + rate limit), and **secure token storage** via OS keychain (Electron `safeStorage`)
+- **GitHub Profile Card** — click the status-bar profile to preview account info (name, bio, followers / following, repos, location) and your **permission role** on the current repo, then jump to GitHub
 - **Focus Auto-refresh** — repository state refreshes when the app regains focus
 
 ---
@@ -140,6 +141,7 @@ Git Backend   simple-git (wraps system git binary)
 Styling       CSS custom properties (no framework)
 Bundler       Vite 5 + vite-plugin-electron
 Build         electron-builder
+Markdown      react-markdown + remark-gfm (GFM, raw-HTML off → XSS-safe)
 Fonts         Pixelify Sans · Noto Sans KR · IBM Plex Mono (Google Fonts)
 ```
 
@@ -200,8 +202,8 @@ Packaged `.app` is produced by electron-builder (see `package.json` for the buil
 ```
 gitgrove/
 ├── electron/
-│   ├── main.ts            Electron main process — BrowserWindow + 35 IPC handlers
-│   ├── preload.ts         contextBridge → window.gitAPI
+│   ├── main.ts            Electron main process — BrowserWindow + 38 IPC handlers (incl. safeStorage token store)
+│   ├── preload.ts         contextBridge → window.gitAPI · window.appAPI
 │   └── electron-env.d.ts  TypeScript types for IPC API
 ├── src/
 │   ├── App.tsx            Root layout, state management, IPC wiring
@@ -216,13 +218,14 @@ gitgrove/
 │   │   ├── BranchSidebar.tsx  Local / Remote / Tags list
 │   │   ├── BranchContextMenu.tsx  Right-click branch actions
 │   │   ├── PRView.tsx         GitHub PR list + detail
-│   │   ├── StatusBar.tsx      Bottom status line
+│   │   ├── Markdown.tsx       GFM markdown renderer (PR descriptions / comments)
+│   │   ├── StatusBar.tsx      Bottom status line + GitHub profile card
 │   │   └── modals/            BranchModal · MergeModal · CherryPickModal ·
 │   │                          InteractiveRebaseModal · StashPanel ·
 │   │                          SettingsPanel · ConfirmModal · …
 │   ├── data/              Type definitions + mock data (fallback)
 │   ├── hooks/             useNotifications
-│   └── utils/             computeLanes · syntaxHighlight · sideBySide
+│   └── utils/             computeLanes · syntaxHighlight · sideBySide · github
 ├── assets/
 │   ├── hero.svg           README hero banner
 │   ├── color-*.svg        Design system color swatches
@@ -259,6 +262,9 @@ gitgrove/
 - [x] Branch context menu, confirm dialogs for destructive ops
 - [x] Per-hunk staging / unstaging (`git add -p` style)
 - [x] All-branches graph (`--all`) + commit log pagination
+- [x] GitHub profile card + current-repo permission role badge
+- [x] Settings: PAT setup guide, token verification, secure storage (OS keychain)
+- [x] GitHub-flavored Markdown rendering for PR descriptions & comments
 - [ ] SSH / HTTPS authentication manager
 - [ ] Commit graph virtualization (large repos)
 - [ ] Split-diff editor with inline editing

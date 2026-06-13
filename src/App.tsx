@@ -277,8 +277,18 @@ export default function App() {
   // ── 원격 연산 로딩 상태 ──
   const [remoteOp, setRemoteOp] = useState<'pull' | 'push' | 'fetch' | null>(null)
 
+  // refs to avoid stale closure — adding repos/repoPath to loadRepo deps would
+  // cause a loop: loadRepo → setRepos → repos changes → loadRepo recreated → effect fires again
+  const reposRef = useRef(repos)
+  useEffect(() => { reposRef.current = repos }, [repos])
+  const repoPathRef = useRef(repoPath)
+  useEffect(() => { repoPathRef.current = repoPath }, [repoPath])
+
   // ── git 데이터 로드 ──
-  const loadRepo = useCallback(async (path: string, silent = false) => {
+  // loadRepo는 git 데이터 로드 + repos 목록 갱신만 책임진다.
+  // "어느 탭을 active로 둘지"는 호출자가 opts.activate로 소유한다(디커플링).
+  const loadRepo = useCallback(async (path: string, opts: { silent?: boolean; activate?: boolean } = {}) => {
+    const { silent = false, activate = false } = opts
     if (!silent) setIsLoading(true)
     setLoadError(null)
     try {
@@ -327,18 +337,23 @@ export default function App() {
         }
         return [...prev, newRepo]
       })
-      const existingIdx = repos.findIndex(r => r.path === path)
-      setActiveRepo(existingIdx >= 0 ? existingIdx : repos.length)
+      // active 탭 결정은 호출자가 activate로 명시할 때만 수행한다.
+      // stale `repos`가 아니라 fresh `reposRef.current`로 인덱스를 계산한다.
+      if (activate) {
+        const list = reposRef.current
+        const existingIdx = list.findIndex(r => r.path === path)
+        setActiveRepo(existingIdx >= 0 ? existingIdx : list.length)
+      }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
       if (!silent) setIsLoading(false)
     }
-  }, [repos])
+  }, [])
 
   const handleOpenRepo = useCallback(async () => {
     const picked = await window.gitAPI?.openDialog()
-    if (picked) await loadRepo(picked)
+    if (picked) await loadRepo(picked, { activate: true })
   }, [loadRepo])
 
   // ── 원격 연산 핸들러 ──
@@ -405,7 +420,7 @@ export default function App() {
   useEffect(() => {
     const lastPath = localStorage.getItem(STORAGE_KEYS.lastRepoPath)
     if (lastPath) {
-      loadRepo(lastPath, true).catch(() => {
+      loadRepo(lastPath, { silent: true, activate: true }).catch(() => {
         try { localStorage.removeItem(STORAGE_KEYS.lastRepoPath) } catch { /* ignore */ }
       })
     }
@@ -420,16 +435,11 @@ export default function App() {
   }, [notify])
 
   // ── 탭 전환 시 해당 레포 로드 ──
-  // refs to avoid stale closure — adding repos/repoPath to deps would cause
-  // a loop: loadRepo → setRepos → repos changes → effect fires again
-  const reposRef = useRef(repos)
-  useEffect(() => { reposRef.current = repos }, [repos])
-  const repoPathRef = useRef(repoPath)
-  useEffect(() => { repoPathRef.current = repoPath }, [repoPath])
-
+  // 탭 클릭 → onSelect=setActiveRepo → 이 effect가 데이터만 교체(activate:false).
+  // loadRepo가 active 탭을 되돌리지 않게 activate를 넘기지 않는다.
   useEffect(() => {
     const path = reposRef.current[activeRepo]?.path
-    if (path && path !== repoPathRef.current) loadRepo(path, true)
+    if (path && path !== repoPathRef.current) loadRepo(path, { silent: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRepo])
 
@@ -506,7 +516,7 @@ export default function App() {
   // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
   useEffect(() => {
     const handleFocus = () => {
-      if (repoPath) loadRepo(repoPath, true)
+      if (repoPath) loadRepo(repoPath, { silent: true })
     }
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
@@ -565,7 +575,7 @@ export default function App() {
     try {
       await window.gitAPI?.applyHunk(repoPath, diffFile.p, hunkIndex, diffFileStaged)
       // 실제 git 상태 갱신 후 StageArea 재마운트 + 현재 파일 diff 재로딩
-      await loadRepo(repoPath, true)
+      await loadRepo(repoPath, { silent: true })
       setStageRefreshKey(k => k + 1)
       const raw = await window.gitAPI?.getFileDiff(repoPath, diffFile.p, diffFileStaged) ?? ''
       setDiffContent(raw)
@@ -603,7 +613,7 @@ export default function App() {
     setShowAllBranches(next)
     logLimitRef.current = LOG_PAGE
     setLogLimit(LOG_PAGE)
-    if (repoPathRef.current) loadRepo(repoPathRef.current, true)
+    if (repoPathRef.current) loadRepo(repoPathRef.current, { silent: true })
   }, [loadRepo])
 
   // ── 표시할 커밋 목록 결정 ──
@@ -742,20 +752,20 @@ export default function App() {
     }
     else if (action === 'revert' && ctxMenu && repoPath) {
       window.gitAPI?.revert(repoPath, ctxMenu.commit.id)
-        .then(() => { notify('success', 'Reverted', `Changes from ${ctxMenu.commit.id} staged for revert`); return loadRepo(repoPath, true) })
+        .then(() => { notify('success', 'Reverted', `Changes from ${ctxMenu.commit.id} staged for revert`); return loadRepo(repoPath, { silent: true }) })
         .catch(err => notify('error', 'Revert 실패', err instanceof Error ? err.message : String(err)))
     }
     else if (action?.startsWith('reset-') && ctxMenu && repoPath) {
       const mode = action.split('-')[1] as 'soft' | 'mixed' | 'hard'
       window.gitAPI?.reset(repoPath, mode, ctxMenu.commit.id)
-        .then(() => { notify('warning', `Reset (${mode})`, `HEAD reset to ${ctxMenu.commit.id}`); return loadRepo(repoPath, true) })
+        .then(() => { notify('warning', `Reset (${mode})`, `HEAD reset to ${ctxMenu.commit.id}`); return loadRepo(repoPath, { silent: true }) })
         .catch(err => notify('error', 'Reset 실패', err instanceof Error ? err.message : String(err)))
     }
     else if (action === 'tag-here' && ctxMenu && repoPath) {
       const tagName = prompt('Tag name:')
       if (tagName?.trim()) {
         window.gitAPI?.createTag(repoPath, tagName.trim(), ctxMenu.commit.id)
-          .then(() => { notify('success', 'Tag created', `'${tagName}' → ${ctxMenu.commit.id}`); return loadRepo(repoPath, true) })
+          .then(() => { notify('success', 'Tag created', `'${tagName}' → ${ctxMenu.commit.id}`); return loadRepo(repoPath, { silent: true }) })
           .catch(err => notify('error', 'Tag 실패', err instanceof Error ? err.message : String(err)))
       }
     }
@@ -1044,7 +1054,7 @@ export default function App() {
         {/* Modals */}
         {showMerge       && <MergeModal
           onClose={() => setShowMerge(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, true); notify('success', 'Merge complete', '') } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', 'Merge complete', '') } }}
           branches={realBranches.length > 0 ? realBranches : undefined}
           repoPath={repoPath}
           currentBranch={activeBranch}
@@ -1052,20 +1062,20 @@ export default function App() {
         {showCherryPick  && selectedCommit && <CherryPickModal
           commit={selectedCommit}
           onClose={() => setShowCherryPick(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, true); notify('success', 'Cherry-pick applied', selectedCommit.id) } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', 'Cherry-pick applied', selectedCommit.id) } }}
           repoPath={repoPath}
           currentBranch={activeBranch}
         />}
         {showBranch      && <BranchModal
           initialTab={branchTab}
           onClose={() => setShowBranch(false)}
-          onSuccess={() => { if (repoPath) loadRepo(repoPath, true) }}
+          onSuccess={() => { if (repoPath) loadRepo(repoPath, { silent: true }) }}
           branches={realBranches.length > 0 ? realBranches : undefined}
           repoPath={repoPath}
         />}
         {showRebase      && <InteractiveRebaseModal
           onClose={() => setShowRebase(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, true); notify('info', 'Rebase complete', '') } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('info', 'Rebase complete', '') } }}
           repoPath={repoPath}
           commits={realCommits.length > 0 ? realCommits : undefined}
           currentBranch={activeBranch}
@@ -1078,7 +1088,7 @@ export default function App() {
             onAdd={r => { addRepo(r); notify('success', 'Repository added', r.name) }}
             onOpenPath={async (path) => {
               setShowAddRepo(false)
-              await loadRepo(path)
+              await loadRepo(path, { activate: true })
             }}
             recentPaths={repos.map(r => ({ name: r.name, path: r.path }))}
           />
