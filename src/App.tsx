@@ -1073,7 +1073,7 @@ export default function App() {
             onAdd={r => { addRepo(r); notify('success', 'Repository added', r.name) }}
             onOpenPath={async (path) => {
               setShowAddRepo(false)
-              await loadRepo(path)
+              await loadRepo(path, { activate: true })
             }}
             recentPaths={repos.map(r => ({ name: r.name, path: r.path }))}
           />
