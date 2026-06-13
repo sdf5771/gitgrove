@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -830,6 +830,57 @@ ipcMain.handle('git:rebase-interactive', async (_event, repoPath: string, items:
     await execPromise(`GIT_SEQUENCE_EDITOR="${tmpEditor}" git rebase -i HEAD~${count}`, { cwd: repoPath })
   } finally {
     await Promise.all([fs.unlink(tmpSeq).catch(() => {}), fs.unlink(tmpEditor).catch(() => {})])
+  }
+})
+
+// ──────────────────────────────────────────────
+// github:* — PAT 안전 저장 (safeStorage / OS 키체인)
+// ──────────────────────────────────────────────
+//
+// safeStorage가 가용하면 토큰을 암호화해 userData 경로의 파일에 보관한다.
+// 미가용 환경(일부 Linux 등)에서는 렌더러가 localStorage 평문 fallback을 쓰도록
+// isEncryptionAvailable=false를 알리고, set/get은 no-op/null을 반환한다.
+
+function githubTokenFilePath(): string {
+  return path.join(app.getPath('userData'), 'gitgrove-github-token.enc')
+}
+
+// safeStorage 암호화 가용 여부
+ipcMain.handle('github:isEncryptionAvailable', (): boolean => {
+  try {
+    return safeStorage.isEncryptionAvailable()
+  } catch {
+    return false
+  }
+})
+
+// 토큰 암호화 저장. 빈 문자열이면 저장 파일 제거(연결 해제).
+ipcMain.handle('github:setToken', (_event, token: string): boolean => {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  const file = githubTokenFilePath()
+  try {
+    if (!token) {
+      try { fs.unlinkSync(file) } catch { /* 파일 없으면 무시 */ }
+      return true
+    }
+    const encrypted = safeStorage.encryptString(token)
+    fs.writeFileSync(file, encrypted)
+    return true
+  } catch {
+    return false
+  }
+})
+
+// 토큰 복호화 조회. 없거나 실패 시 null.
+ipcMain.handle('github:getToken', (): string | null => {
+  if (!safeStorage.isEncryptionAvailable()) return null
+  const file = githubTokenFilePath()
+  try {
+    if (!fs.existsSync(file)) return null
+    const encrypted = fs.readFileSync(file)
+    return safeStorage.decryptString(encrypted)
+  } catch {
+    return null
   }
 })
 
