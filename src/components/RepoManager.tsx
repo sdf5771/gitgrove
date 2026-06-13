@@ -75,7 +75,9 @@ function RepoRow({ name, owner, branch, dirty, isFavorite, isSelected, faded, sh
     <div
       className={`rm-row${isSelected ? ' selected' : ''}`}
       style={faded ? { opacity: 0.82 } : undefined}
+      title="더블클릭으로 열기"
       onClick={onSelect}
+      onDoubleClick={onOpen}
     >
       <div className="rm-row-checks">
         <span
@@ -87,7 +89,7 @@ function RepoRow({ name, owner, branch, dirty, isFavorite, isSelected, faded, sh
         </span>
       </div>
       <div className="rm-row-name">
-        <span className="rm-row-name-text" onClick={e => { e.stopPropagation(); onOpen() }}>{name}</span>
+        <span className="rm-row-name-text">{name}</span>
       </div>
       <div className="rm-row-owner">{owner || '—'}</div>
       <div className="rm-row-branch"><BranchChip branch={branch} dirty={dirty} /></div>

@@ -807,7 +807,7 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-table-header{display:grid;grid-template-columns:48px 1fr 160px 1fr 90px;padding:4px 8px 4px 0;border-bottom:1px solid var(--c-divider);margin:4px 0 2px;}
 .rm-table-header span{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--c-text-faint);padding:0 8px;}
 
-.rm-row{display:grid;grid-template-columns:48px 1fr 160px 1fr 90px;align-items:center;border-radius:6px;cursor:pointer;transition:background 120ms,border-color 120ms;border:1px solid transparent;min-height:38px;}
+.rm-row{display:grid;grid-template-columns:48px 1fr 160px 1fr 90px;align-items:center;border-radius:6px;cursor:pointer;transition:background 120ms,border-color 120ms;border:1px solid transparent;min-height:38px;user-select:none;}
 .rm-row:hover{background:var(--c-gold-bg-soft);border-color:rgba(45,53,81,.8);}
 .rm-row.selected{background:var(--c-gold-bg);border-color:var(--c-gold-border);}
 .rm-row+.rm-row{margin-top:2px;}
@@ -817,8 +817,8 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-row-star:hover{color:var(--c-gold-400);}
 .rm-row-star.active{color:var(--c-gold-400);}
 .rm-row-name{padding:0 8px;overflow:hidden;}
-.rm-row-name-text{font-family:var(--font-mono);font-size:12.5px;color:var(--c-text-strong);font-weight:500;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:100%;}
-.rm-row-name-text:hover{color:var(--c-gold-300);text-decoration:underline;text-underline-offset:3px;}
+.rm-row-name-text{font-family:var(--font-mono);font-size:12.5px;color:var(--c-text-strong);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:100%;}
+.rm-row:hover .rm-row-name-text{color:var(--c-gold-300);}
 .rm-row-owner{padding:0 8px;font-size:12px;color:var(--c-text-muted);font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rm-row-branch{padding:0 8px;display:flex;align-items:center;gap:6px;overflow:hidden;}
 .rm-branch-chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:4px;font-family:var(--font-mono);font-size:11.5px;line-height:1;background:rgba(95,184,230,.1);color:var(--c-info);border:1px solid rgba(95,184,230,.25);flex-shrink:1;white-space:nowrap;max-width:240px;min-width:0;}
