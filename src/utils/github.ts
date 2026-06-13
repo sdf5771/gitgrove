@@ -19,13 +19,15 @@ export interface RepoPermissions {
   pull?: boolean
 }
 
-// 현재 사용자의 레포 권한 → 단일 역할 라벨로 환산 (높은 권한 우선)
+// 현재 사용자의 레포 권한 → 단일 역할 라벨로 환산 (높은 권한 우선).
+// pull-only("Read")는 공개 repo에서 비협력자에게도 항상 true이므로 협력자 표식이
+// 아니다 → null을 반환해 권한 배지를 숨긴다. 실제 협력자(쓰기 이상 권한:
+// Admin/Maintain/Write/Triage)일 때만 라벨을 노출한다.
 export function permissionToRole(p?: RepoPermissions | null): string | null {
   if (!p) return null
   if (p.admin) return 'Admin'
   if (p.maintain) return 'Maintain'
   if (p.push) return 'Write'
   if (p.triage) return 'Triage'
-  if (p.pull) return 'Read'
   return null
 }

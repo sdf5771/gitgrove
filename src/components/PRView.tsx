@@ -4,8 +4,7 @@ import type { PullRequest } from '../data/mockData'
 import { FilePath } from './FilePath'
 import { Markdown } from './Markdown'
 import { parseGitHubRepo } from '../utils/github'
-
-const GITHUB_TOKEN_KEY = 'gitgrove:githubToken'
+import { getGithubToken } from '../utils/githubToken'
 
 interface GHPullRequest {
   number: number
@@ -47,9 +46,21 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
   const [prError, setPRError] = useState<string | null>(null)
   const [ghInfo, setGhInfo] = useState<{ owner: string; repo: string } | null>(null)
 
+  // 토큰: safeStorage 우선 비동기 조회 후 state 보관 (평문 localStorage 미러 제거 v1.7.0)
+  const [token, setToken] = useState<string>('')
+  useEffect(() => {
+    let cancelled = false
+    const loadToken = () => { getGithubToken().then(t => { if (!cancelled) setToken(t) }).catch(() => {}) }
+    loadToken()
+    window.addEventListener('gitgrove:settings-changed', loadToken)
+    return () => {
+      cancelled = true
+      window.removeEventListener('gitgrove:settings-changed', loadToken)
+    }
+  }, [])
+
   useEffect(() => {
     if (!repoPath) return
-    const token = localStorage.getItem(GITHUB_TOKEN_KEY) ?? ''
     if (!token) return
 
     window.gitAPI?.getRemotes(repoPath)
@@ -89,9 +100,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
           .finally(() => setPRLoading(false))
       })
       .catch(() => {})
-  }, [repoPath])
-
-  const token = localStorage.getItem(GITHUB_TOKEN_KEY) ?? ''
+  }, [repoPath, token])
 
   if (prLoading) {
     return (

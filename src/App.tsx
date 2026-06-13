@@ -23,6 +23,7 @@ import { BlameView } from './components/BlameView'
 import { PRView } from './components/PRView'
 import { StatusBar, type GithubUser } from './components/StatusBar'
 import { parseGitHubRepo, permissionToRole } from './utils/github'
+import { getGithubToken } from './utils/githubToken'
 import { NotificationStack } from './components/NotificationStack'
 import { ContextMenu } from './components/ContextMenu'
 import { BranchContextMenu, type BranchMenuAction } from './components/BranchContextMenu'
@@ -432,11 +433,25 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRepo])
 
+  // ── GitHub 토큰 (safeStorage 우선 비동기 조회 후 state 보관) ──
+  // 평문 localStorage 미러 제거(v1.7.0): 소비자는 동기 조회 대신 이 state 사용.
+  const [githubToken, setGithubToken] = useState<string>('')
+  useEffect(() => {
+    let cancelled = false
+    const loadToken = () => { getGithubToken().then(t => { if (!cancelled) setGithubToken(t) }).catch(() => {}) }
+    loadToken()
+    window.addEventListener('gitgrove:settings-changed', loadToken)
+    return () => {
+      cancelled = true
+      window.removeEventListener('gitgrove:settings-changed', loadToken)
+    }
+  }, [])
+
   // ── GitHub 사용자 정보 ──
   const [githubUser, setGithubUser] = useState<GithubUser | null>(null)
 
-  const fetchGithubUser = useCallback(() => {
-    const token = localStorage.getItem('gitgrove:githubToken')
+  const fetchGithubUser = useCallback(async () => {
+    const token = await getGithubToken()
     if (!token) { setGithubUser(null); return }
     fetch('https://api.github.com/user', {
       headers: { Authorization: `token ${token}` }
@@ -460,18 +475,18 @@ export default function App() {
       .catch(() => setGithubUser(null))
   }, [])
 
-  useEffect(() => { fetchGithubUser() }, [fetchGithubUser])
+  useEffect(() => { void fetchGithubUser() }, [fetchGithubUser])
   useEffect(() => {
-    window.addEventListener('gitgrove:settings-changed', fetchGithubUser)
-    return () => window.removeEventListener('gitgrove:settings-changed', fetchGithubUser)
+    const handler = () => { void fetchGithubUser() }
+    window.addEventListener('gitgrove:settings-changed', handler)
+    return () => window.removeEventListener('gitgrove:settings-changed', handler)
   }, [fetchGithubUser])
 
   // ── 현재 레포에서 본인 권한(역할) ──
   const [repoRole, setRepoRole] = useState<string | null>(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('gitgrove:githubToken')
-    if (!repoPath || !token) { setRepoRole(null); return }
+    if (!repoPath || !githubToken) { setRepoRole(null); return }
     let cancelled = false
     window.gitAPI?.getRemotes(repoPath)
       .then(remotes => {
@@ -479,14 +494,14 @@ export default function App() {
         const info = origin && parseGitHubRepo(origin.url)
         if (!info) { setRepoRole(null); return }
         return fetch(`https://api.github.com/repos/${info.owner}/${info.repo}`, {
-          headers: { Authorization: `token ${token}` },
+          headers: { Authorization: `token ${githubToken}` },
         })
           .then(r => r.ok ? r.json() : null)
           .then(data => { if (!cancelled) setRepoRole(permissionToRole(data?.permissions)) })
       })
       .catch(() => { if (!cancelled) setRepoRole(null) })
     return () => { cancelled = true }
-  }, [repoPath, githubUser])
+  }, [repoPath, githubToken])
 
   // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
   useEffect(() => {
