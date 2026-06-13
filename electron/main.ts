@@ -199,6 +199,12 @@ function createWindow() {
     finishSplashAndShow()
   })
 
+  // 안전장치(폴백): ready-to-show가 어떤 이유로든 안 떠도 메인 윈도우가
+  // 영원히 숨지 않게 한다. (show:false라 이 보장이 없으면 앱이 빈 채로 멈춤)
+  setTimeout(() => {
+    if (win && !win.isDestroyed() && !win.isVisible()) finishSplashAndShow()
+  }, 8000)
+
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
     // 업데이트 체크 — 로드 후 3초 뒤 (UX 방해 최소화)
