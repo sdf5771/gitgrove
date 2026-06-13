@@ -389,6 +389,20 @@ export default function App() {
     if (picked) await loadRepo(picked, { activate: true })
   }, [loadRepo])
 
+  // ── 레포 탭 닫기 (인덱스 보정 + 표시 중이던 레포면 새 활성 레포 로드) ──
+  // 첫 탭(index 0)이 활성일 때 닫으면 setActiveRepo(0)가 no-op이라 탭전환 effect가
+  // 안 떠서 화면이 안 바뀌고 repoPath가 닫은 레포에 남는 버그를 막는다.
+  const handleCloseRepoTab = useCallback((i: number) => {
+    const closedPath = repos[i]?.path
+    const remaining = repos.filter((_, j) => j !== i)
+    const newIdx = i <= activeRepo ? Math.max(0, activeRepo - 1) : activeRepo
+    closeRepo(i)
+    setActiveRepo(newIdx)
+    if (closedPath && closedPath === repoPath && remaining[newIdx]) {
+      void loadRepo(remaining[newIdx].path, { silent: true })
+    }
+  }, [repos, activeRepo, repoPath, closeRepo, loadRepo])
+
   // ── 원격 연산 핸들러 ──
   const handlePull = useCallback(async () => {
     if (!repoPath || remoteOp) return
@@ -887,7 +901,7 @@ export default function App() {
           active={showRepoManager ? -1 : activeRepo}
           onSelect={i => { setShowRepoManager(false); setActiveRepo(i) }}
           onAdd={() => setShowAddRepo(true)}
-          onClose={i => { closeRepo(i); if (activeRepo >= i) setActiveRepo(Math.max(0, activeRepo - 1)) }}
+          onClose={handleCloseRepoTab}
         />
         <div className="sep" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>
@@ -956,12 +970,11 @@ export default function App() {
             repos={repos}
             activeRepo={activeRepo}
             githubConnected={!!githubToken}
-            githubLogin={githubUser?.login}
             recents={recents}
             favorites={favorites}
             onToggleFavorite={toggleFavorite}
             onOpenPath={(path) => { setShowRepoManager(false); void loadRepo(path, { activate: true }) }}
-            onCloseRepo={i => { closeRepo(i); if (activeRepo >= i) setActiveRepo(Math.max(0, activeRepo - 1)) }}
+            onCloseRepo={handleCloseRepoTab}
             onBrowse={() => {
               void (async () => {
                 const picked = await window.gitAPI?.openDialog()
@@ -1180,6 +1193,7 @@ export default function App() {
         onSettings={() => setShowSettings(true)}
         githubUser={githubUser}
         repoRole={repoRole}
+        repoSummary={showRepoManager ? { total: repos.length, dirty: repos.filter(r => r.dirty).length } : null}
       />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}

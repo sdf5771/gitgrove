@@ -24,30 +24,50 @@ interface Props {
   onSettings: () => void
   githubUser?: GithubUser | null
   repoRole?: string | null
+  // Repository Manager 표시 중에는 브랜치 대신 레포 요약을 보여준다(자체 상태바 통합).
+  repoSummary?: { total: number; dirty: number } | null
 }
 
-export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole }: Props) {
+export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary }: Props) {
   return (
     <div className="sbar">
-      <div className="sbranch">
-        <span className="sdot" />
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ opacity: .7 }}>
-          <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/>
-        </svg>
-        {branch}
-      </div>
-      {(ahead !== undefined || behind !== undefined) && (
+      {repoSummary ? (
+        <div className="sbranch">
+          <span className="sdot" />
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .7 }}>
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          {repoSummary.total} repositories
+          {repoSummary.dirty > 0 && (
+            <>
+              <span className="ssep">·</span>
+              <span style={{ color: 'var(--c-warning)' }}>{repoSummary.dirty} with changes</span>
+            </>
+          )}
+        </div>
+      ) : (
         <>
-          <span className="ssep">·</span>
-          {ahead !== undefined && ahead > 0 && <span><span className="sahead">↑ {ahead}</span></span>}
-          {behind !== undefined && behind > 0 && <span><span style={{ color: 'var(--c-warning)' }}>↓ {behind}</span></span>}
-          {(ahead === 0 && behind === 0) && <span style={{ color: 'var(--c-text-faint)', fontSize: 11 }}>up to date</span>}
-        </>
-      )}
-      {remote && (
-        <>
-          <span className="ssep">·</span>
-          <span>{remote}</span>
+          <div className="sbranch">
+            <span className="sdot" />
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ opacity: .7 }}>
+              <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/>
+            </svg>
+            {branch}
+          </div>
+          {(ahead !== undefined || behind !== undefined) && (
+            <>
+              <span className="ssep">·</span>
+              {ahead !== undefined && ahead > 0 && <span><span className="sahead">↑ {ahead}</span></span>}
+              {behind !== undefined && behind > 0 && <span><span style={{ color: 'var(--c-warning)' }}>↓ {behind}</span></span>}
+              {(ahead === 0 && behind === 0) && <span style={{ color: 'var(--c-text-faint)', fontSize: 11 }}>up to date</span>}
+            </>
+          )}
+          {remote && (
+            <>
+              <span className="ssep">·</span>
+              <span>{remote}</span>
+            </>
+          )}
         </>
       )}
       {githubUser && <GithubProfileButton user={githubUser} repoRole={repoRole} />}
