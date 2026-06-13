@@ -2,19 +2,9 @@ import { useState, useEffect } from 'react'
 import { PR_DATA } from '../data/mockData'
 import type { PullRequest } from '../data/mockData'
 import { FilePath } from './FilePath'
+import { parseGitHubRepo } from '../utils/github'
 
 const GITHUB_TOKEN_KEY = 'gitgrove:githubToken'
-
-// "git@github.com:owner/repo.git" 또는 "https://github.com/owner/repo.git" → { owner, repo }
-function parseGitHubRepo(url: string): { owner: string; repo: string } | null {
-  // SSH 형식
-  const sshMatch = url.match(/git@github\.com:([^/]+)\/([^.]+)(?:\.git)?$/)
-  if (sshMatch) return { owner: sshMatch[1], repo: sshMatch[2] }
-  // HTTPS 형식
-  const httpsMatch = url.match(/https?:\/\/github\.com\/([^/]+)\/([^/.]+)(?:\.git)?$/)
-  if (httpsMatch) return { owner: httpsMatch[1], repo: httpsMatch[2] }
-  return null
-}
 
 interface GHPullRequest {
   number: number
