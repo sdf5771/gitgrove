@@ -26,9 +26,9 @@ interface VerifyResult {
   rate: { remaining: number; limit: number } | null
 }
 
-// 토큰 영속화 추상화: safeStorage(메인) 우선, 미가용 시 localStorage 평문 fallback.
-// 렌더러의 다른 소비자(App.tsx / PRView.tsx)는 localStorage를 동기 조회하므로,
-// safeStorage 사용 시에도 localStorage를 미러링해 기존 동작을 보존한다.
+// 토큰 영속화 추상화: safeStorage(메인) 우선, 미가용 시에만 localStorage 평문 fallback.
+// 소비자(App.tsx / PRView.tsx)가 async IPC 조회로 이관됐으므로(v1.7.0),
+// safeStorage 사용 가능 시 평문 미러를 남기지 않고 오히려 삭제해 보안을 마무리한다.
 async function persistToken(token: string): Promise<void> {
   let encrypted = false
   try {
@@ -36,15 +36,20 @@ async function persistToken(token: string): Promise<void> {
       encrypted = await window.appAPI.githubSetToken(token)
     }
   } catch { encrypted = false }
-  // 미러: 다른 소비자의 동기 조회 호환. (암호화 성공해도 세션 캐시로 유지)
   try {
-    if (token) localStorage.setItem(GITHUB_TOKEN_KEY, token)
-    else localStorage.removeItem(GITHUB_TOKEN_KEY)
+    if (encrypted) {
+      // safeStorage에 저장 성공 → 평문 미러 제거 (보안)
+      localStorage.removeItem(GITHUB_TOKEN_KEY)
+    } else if (token) {
+      // safeStorage 미가용 → 평문 fallback
+      localStorage.setItem(GITHUB_TOKEN_KEY, token)
+    } else {
+      localStorage.removeItem(GITHUB_TOKEN_KEY)
+    }
   } catch { /* ignore */ }
-  void encrypted
 }
 
-// 초기 토큰 로드 + 1회 마이그레이션: localStorage 평문 토큰이 있으면 safeStorage로 이관.
+// 초기 토큰 로드 + 1회 마이그레이션: localStorage 평문 토큰이 있으면 safeStorage로 이관 후 평문 삭제.
 async function loadInitialToken(): Promise<string> {
   let plain = ''
   try { plain = localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { plain = '' }
@@ -52,13 +57,14 @@ async function loadInitialToken(): Promise<string> {
     if (await window.appAPI?.githubIsEncryptionAvailable()) {
       const stored = await window.appAPI.githubGetToken()
       if (stored) {
-        // 암호화 저장본 우선. localStorage 미러도 최신화.
-        try { localStorage.setItem(GITHUB_TOKEN_KEY, stored) } catch { /* ignore */ }
+        // 암호화 저장본 우선. 남아 있을 수 있는 평문 미러 제거.
+        try { localStorage.removeItem(GITHUB_TOKEN_KEY) } catch { /* ignore */ }
         return stored
       }
       if (plain) {
-        // 마이그레이션: 평문 → safeStorage 이관 (localStorage 미러는 유지)
-        await window.appAPI.githubSetToken(plain)
+        // 마이그레이션: 평문 → safeStorage 이관 후 평문 삭제
+        const ok = await window.appAPI.githubSetToken(plain)
+        if (ok) { try { localStorage.removeItem(GITHUB_TOKEN_KEY) } catch { /* ignore */ } }
       }
     }
   } catch { /* fallback: plain 사용 */ }
