@@ -112,7 +112,7 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
             {r.dirty && <span className="repo-tab-dirty" title="Uncommitted changes" />}
             <span>{r.name}</span>
             {r.behind > 0 && <span style={{ fontSize: 9, color: 'var(--c-warning)', fontFamily: 'var(--font-mono)' }}>↓{r.behind}</span>}
-            {repos.length > 1 && <button className="repo-tab-close" onClick={e => { e.stopPropagation(); onClose(i) }}>×</button>}
+            <button className="repo-tab-close" onClick={e => { e.stopPropagation(); onClose(i) }}>×</button>
           </div>
         ))}
       </div>
@@ -395,9 +395,25 @@ export default function App() {
   const handleCloseRepoTab = useCallback((i: number) => {
     const closedPath = repos[i]?.path
     const remaining = repos.filter((_, j) => j !== i)
-    const newIdx = i <= activeRepo ? Math.max(0, activeRepo - 1) : activeRepo
     closeRepo(i)
+    // 마지막 레포까지 닫으면 빈 상태(레포 미선택 화면)로 전환한다.
+    if (remaining.length === 0) {
+      setActiveRepo(0)
+      if (closedPath === repoPath) {
+        setRepoPath(null)
+        setRealCommits([])
+        setRealBranches([])
+        setRealStaged([])
+        setRealUnstaged([])
+        setRealRemotes([])
+        setRealTags([])
+      }
+      return
+    }
+    const newIdx = i <= activeRepo ? Math.max(0, activeRepo - 1) : activeRepo
     setActiveRepo(newIdx)
+    // 닫은 탭이 현재 표시 중이던 레포면, activeRepo 값이 안 바뀌어도(예: 첫 탭 닫기)
+    // 새 활성 레포를 명시적으로 로드해 화면을 갱신한다.
     if (closedPath && closedPath === repoPath && remaining[newIdx]) {
       void loadRepo(remaining[newIdx].path, { silent: true })
     }

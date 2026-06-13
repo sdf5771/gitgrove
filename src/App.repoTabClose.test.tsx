@@ -58,4 +58,32 @@ describe('레포 탭 닫기', () => {
     })
     expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(false)
   })
+
+  it('탭이 1개여도 닫기(×)가 보이고, 닫으면 빈 상태(레포 미선택)로 전환된다', async () => {
+    // 레포 1개만 시드 — 예전엔 repos.length>1 가드로 X가 안 보여 못 닫던 케이스
+    const repos = [
+      { id: 'repo-a-id', name: 'a', path: '/repo/a', branch: 'main', dirty: false, ahead: 0, behind: 0 },
+    ]
+    localStorage.setItem('gitgrove:repos', JSON.stringify(repos))
+    localStorage.setItem('gitgrove:lastRepoPath', '/repo/a')
+
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+
+    await waitFor(() => {
+      expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true)
+    })
+
+    // 탭이 1개여도 닫기 버튼이 존재해야 한다
+    const closeBtns = container.querySelectorAll('.repo-tab-close')
+    expect(closeBtns.length).toBe(1)
+
+    await user.click(closeBtns[0] as Element)
+
+    // 마지막 레포를 닫으면 빈 상태 화면으로 전환
+    await waitFor(() => {
+      expect(screen.queryByText('레포지토리를 열어주세요')).not.toBeNull()
+    })
+    expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(false)
+  })
 })
