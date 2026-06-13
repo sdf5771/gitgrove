@@ -54,6 +54,7 @@ body { display: flex; align-items: center; justify-content: center; }
 }
 .title-bar button,
 .title-bar .repo-pill,
+.title-bar .repo-tabs,
 .title-bar .tl { -webkit-app-region: no-drag; }
 .tl { display: flex; gap: 8px; align-items: center; }
 .td { width: 13px; height: 13px; border-radius: 50%; border: .5px solid rgba(0,0,0,.2); cursor: pointer; flex-shrink: 0; }
