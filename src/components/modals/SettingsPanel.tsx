@@ -11,6 +11,60 @@ const loadSettings = () => {
   } catch { return {} }
 }
 
+// PAT 발급 딥링크 (scope/description 사전세팅)
+const CLASSIC_TOKEN_URL =
+  'https://github.com/settings/tokens/new?scopes=repo,read:user&description=GitGrove'
+const FINEGRAINED_TOKEN_URL =
+  'https://github.com/settings/personal-access-tokens/new'
+
+type VerifyState = 'idle' | 'verifying' | 'success' | 'error'
+
+interface VerifyResult {
+  login: string
+  avatarUrl: string
+  scopes: string[]
+  rate: { remaining: number; limit: number } | null
+}
+
+// 토큰 영속화 추상화: safeStorage(메인) 우선, 미가용 시 localStorage 평문 fallback.
+// 렌더러의 다른 소비자(App.tsx / PRView.tsx)는 localStorage를 동기 조회하므로,
+// safeStorage 사용 시에도 localStorage를 미러링해 기존 동작을 보존한다.
+async function persistToken(token: string): Promise<void> {
+  let encrypted = false
+  try {
+    if (await window.appAPI?.githubIsEncryptionAvailable()) {
+      encrypted = await window.appAPI.githubSetToken(token)
+    }
+  } catch { encrypted = false }
+  // 미러: 다른 소비자의 동기 조회 호환. (암호화 성공해도 세션 캐시로 유지)
+  try {
+    if (token) localStorage.setItem(GITHUB_TOKEN_KEY, token)
+    else localStorage.removeItem(GITHUB_TOKEN_KEY)
+  } catch { /* ignore */ }
+  void encrypted
+}
+
+// 초기 토큰 로드 + 1회 마이그레이션: localStorage 평문 토큰이 있으면 safeStorage로 이관.
+async function loadInitialToken(): Promise<string> {
+  let plain = ''
+  try { plain = localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { plain = '' }
+  try {
+    if (await window.appAPI?.githubIsEncryptionAvailable()) {
+      const stored = await window.appAPI.githubGetToken()
+      if (stored) {
+        // 암호화 저장본 우선. localStorage 미러도 최신화.
+        try { localStorage.setItem(GITHUB_TOKEN_KEY, stored) } catch { /* ignore */ }
+        return stored
+      }
+      if (plain) {
+        // 마이그레이션: 평문 → safeStorage 이관 (localStorage 미러는 유지)
+        await window.appAPI.githubSetToken(plain)
+      }
+    }
+  } catch { /* fallback: plain 사용 */ }
+  return plain
+}
+
 interface Props {
   onClose: () => void
   repoPath?: string | null
@@ -27,6 +81,11 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
     try { return localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { return '' }
   })
   const [showToken, setShowToken] = useState(false)
+
+  // GitHub 토큰 검증 상태
+  const [verifyState, setVerifyState] = useState<VerifyState>('idle')
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null)
+  const [verifyError, setVerifyError] = useState<string>('')
 
   const _saved = loadSettings()
   const [density, setDensity] = useState<'comfortable' | 'compact'>(
@@ -58,10 +117,17 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
     }).catch(() => {}).finally(() => setCfgLoading(false))
   }, [repoPath])
 
+  // 마운트 시 safeStorage 우선 로드 + 1회 마이그레이션
+  useEffect(() => {
+    let cancelled = false
+    loadInitialToken().then(t => { if (!cancelled) setGithubToken(t) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
   const save = async () => {
     const settings = { density, fontSize, tabWidth, showDiffStats }
-    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch {}
-    try { localStorage.setItem(GITHUB_TOKEN_KEY, githubToken) } catch {}
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* ignore */ }
+    await persistToken(githubToken)
     document.documentElement.style.setProperty('--editor-font-size', `${fontSize}px`)
     window.dispatchEvent(new CustomEvent('gitgrove:settings-changed', { detail: { density, fontSize } }))
 
@@ -76,6 +142,77 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
   }
 
   const upCfg = (k: keyof typeof cfg) => (v: string | boolean) => setCfg(p => ({ ...p, [k]: v }))
+
+  // 토큰 입력 변경 시 검증 결과 초기화
+  const onTokenChange = (v: string) => {
+    setGithubToken(v)
+    if (verifyState !== 'idle') { setVerifyState('idle'); setVerifyResult(null); setVerifyError('') }
+  }
+
+  // GitHub 토큰 검증: GET /user → scope/rate 조회
+  const verifyToken = async () => {
+    const token = githubToken.trim()
+    if (!token) { setVerifyState('error'); setVerifyError('토큰을 입력하세요.'); return }
+    setVerifyState('verifying'); setVerifyError(''); setVerifyResult(null)
+    try {
+      const res = await fetch('https://api.github.com/user', {
+        headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
+      })
+      const scopesHeader = res.headers.get('X-OAuth-Scopes') ?? ''
+      const scopes = scopesHeader.split(',').map(s => s.trim()).filter(Boolean)
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          setVerifyError('토큰이 유효하지 않습니다 (401). 만료되었거나 잘못된 토큰입니다.')
+        } else if (res.status === 403) {
+          setVerifyError('접근이 거부되었습니다 (403). rate limit 또는 권한 부족일 수 있습니다.')
+        } else {
+          setVerifyError(`검증 실패 (HTTP ${res.status}).`)
+        }
+        setVerifyState('error')
+        return
+      }
+
+      const user = await res.json() as { login: string; avatar_url: string }
+
+      // scope 부족 점검 (classic 토큰은 X-OAuth-Scopes 노출, fine-grained는 비어있을 수 있음)
+      const hasScopeHeader = scopesHeader.length > 0
+      if (hasScopeHeader && !scopes.includes('repo')) {
+        setVerifyState('error')
+        setVerifyError(`scope 부족: 'repo' 권한이 필요합니다. (현재: ${scopes.join(', ') || '없음'})`)
+        return
+      }
+
+      // rate limit 조회 (실패해도 검증 자체는 성공으로 취급)
+      let rate: VerifyResult['rate'] = null
+      try {
+        const rl = await fetch('https://api.github.com/rate_limit', {
+          headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
+        })
+        if (rl.ok) {
+          const data = await rl.json() as { rate?: { remaining: number; limit: number } }
+          if (data.rate) rate = { remaining: data.rate.remaining, limit: data.rate.limit }
+        }
+      } catch { /* rate 조회 실패 무시 */ }
+
+      setVerifyResult({ login: user.login, avatarUrl: user.avatar_url, scopes, rate })
+      setVerifyState('success')
+      // 검증 성공 토큰은 즉시 영속화 + 구독부 갱신
+      await persistToken(token)
+      window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
+    } catch {
+      setVerifyState('error')
+      setVerifyError('네트워크 오류로 검증에 실패했습니다.')
+    }
+  }
+
+  // 연결 해제: 토큰 제거 + safeStorage/localStorage 삭제 + 이벤트 dispatch
+  const disconnect = async () => {
+    setGithubToken('')
+    setVerifyState('idle'); setVerifyResult(null); setVerifyError('')
+    await persistToken('')
+    window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
+  }
 
   return (
     <div className="sett-wrap">
@@ -179,34 +316,99 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
               <div className="sett-sec-ttl">Personal Access Token</div>
               <div className="sett-field">
                 <div className="sett-lbl">Token</div>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    className="sett-inp"
-                    type={showToken ? 'text' : 'password'}
-                    value={githubToken}
-                    onChange={e => setGithubToken(e.target.value)}
-                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                    style={{ fontFamily: 'var(--font-mono)', paddingRight: 36 }}
-                  />
+                <div className="sett-token-row">
+                  <div style={{ position: 'relative', flex: 1 }}>
+                    <input
+                      className="sett-inp"
+                      type={showToken ? 'text' : 'password'}
+                      value={githubToken}
+                      onChange={e => onTokenChange(e.target.value)}
+                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                      style={{ fontFamily: 'var(--font-mono)', paddingRight: 36 }}
+                    />
+                    <button
+                      onClick={() => setShowToken(v => !v)}
+                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: 13, padding: 0 }}
+                    >
+                      {showToken ? '🙈' : '👁'}
+                    </button>
+                  </div>
                   <button
-                    onClick={() => setShowToken(v => !v)}
-                    style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: 13, padding: 0 }}
+                    className="sett-verify-btn"
+                    onClick={verifyToken}
+                    disabled={verifyState === 'verifying' || !githubToken.trim()}
                   >
-                    {showToken ? '🙈' : '👁'}
+                    {verifyState === 'verifying'
+                      ? (<><span className="sett-spinner" />Verifying…</>)
+                      : 'Verify'}
                   </button>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.4 }}>
                   PR 뷰에서 실제 Pull Request를 조회하는 데 사용됩니다.
                   <br />
-                  <span style={{ color: 'var(--c-info)' }}>repo</span> 권한이 필요합니다.
+                  필요 scope: <span className="sett-scope-chip">repo</span>{' '}
+                  <span className="sett-scope-chip">read:user</span>
                 </div>
               </div>
+
+              {/* 검증 결과 */}
+              {verifyState === 'success' && verifyResult && (
+                <div className="sett-verify-ok">
+                  <div className="sett-verify-acct">
+                    <img className="sett-verify-avatar" src={verifyResult.avatarUrl} alt="" />
+                    <div className="sett-verify-acct-info">
+                      <div className="sett-verify-acct-login">@{verifyResult.login}</div>
+                      <div className="sett-verify-acct-sub">연결됨 · GitHub 계정 확인 완료</div>
+                    </div>
+                  </div>
+                  <div className="sett-verify-meta">
+                    <span className="sett-verify-meta-lbl">Scopes</span>
+                    <span className="sett-verify-meta-val">
+                      {verifyResult.scopes.length > 0
+                        ? verifyResult.scopes.join(', ')
+                        : '(fine-grained 또는 미노출)'}
+                    </span>
+                  </div>
+                  {verifyResult.rate && (
+                    <div className="sett-verify-meta">
+                      <span className="sett-verify-meta-lbl">Rate limit</span>
+                      <span className="sett-verify-meta-val">
+                        {verifyResult.rate.remaining} / {verifyResult.rate.limit} 남음
+                      </span>
+                    </div>
+                  )}
+                  <button className="sett-disconnect-btn" onClick={disconnect}>Disconnect</button>
+                </div>
+              )}
+
+              {verifyState === 'error' && (
+                <div className="sett-verify-err">{verifyError}</div>
+              )}
+
               <div className="sett-section">
-                <div className="sett-sec-ttl">토큰 생성 방법</div>
-                <div style={{ fontSize: 11, color: 'var(--c-text-muted)', lineHeight: 1.6 }}>
-                  1. GitHub → Settings → Developer settings<br />
-                  2. Personal access tokens → Tokens (classic)<br />
-                  3. Generate new token → <code style={{ fontFamily: 'var(--font-mono)', background: 'var(--c-bg-inset)', padding: '1px 4px', borderRadius: 2 }}>repo</code> 권한 선택
+                <div className="sett-sec-ttl">토큰 발급</div>
+                <div style={{ fontSize: 11, color: 'var(--c-text-muted)', lineHeight: 1.5 }}>
+                  <strong style={{ color: 'var(--c-text)' }}>Classic</strong>: 계정 전체에 적용되는 단순 토큰. 빠르게 시작할 때 권장.
+                  <br />
+                  <strong style={{ color: 'var(--c-text)' }}>Fine-grained</strong>: 특정 repo/권한만 허용하는 세분화 토큰. 더 안전하지만 설정 단계가 많음.
+                </div>
+                <div className="sett-token-links">
+                  <button
+                    className="sett-token-link-btn"
+                    onClick={() => window.appAPI?.openReleaseUrl(CLASSIC_TOKEN_URL)}
+                  >
+                    Classic 토큰 생성 ↗
+                  </button>
+                  <button
+                    className="sett-token-link-btn"
+                    onClick={() => window.appAPI?.openReleaseUrl(FINEGRAINED_TOKEN_URL)}
+                  >
+                    Fine-grained 토큰 생성 ↗
+                  </button>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
+                  Classic 링크에는 <code className="sett-code-inline">repo</code>,{' '}
+                  <code className="sett-code-inline">read:user</code> scope와 설명이 미리 채워져 있습니다.
                 </div>
               </div>
             </div>

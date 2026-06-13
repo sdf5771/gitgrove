@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld('appAPI', {
     ipcRenderer.on('app:update-available', (_e, info) => cb(info))
   },
   openReleaseUrl: (url: string) => ipcRenderer.send('app:open-release-url', url),
+  // GitHub PAT 안전 저장 (safeStorage)
+  githubIsEncryptionAvailable: () => ipcRenderer.invoke('github:isEncryptionAvailable') as Promise<boolean>,
+  githubSetToken: (token: string) => ipcRenderer.invoke('github:setToken', token) as Promise<boolean>,
+  githubGetToken: () => ipcRenderer.invoke('github:getToken') as Promise<string | null>,
 })
 
 // --------- Expose ipcRenderer to the Renderer process ---------

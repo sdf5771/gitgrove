@@ -95,6 +95,10 @@ interface Window {
   appAPI: {
     onUpdateAvailable: (cb: (info: { version: string; url: string }) => void) => void
     openReleaseUrl: (url: string) => void
+    // GitHub PAT 안전 저장 (Electron safeStorage). 미가용 환경은 localStorage 평문 fallback.
+    githubIsEncryptionAvailable: () => Promise<boolean>
+    githubSetToken: (token: string) => Promise<boolean>
+    githubGetToken: () => Promise<string | null>
   }
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {
