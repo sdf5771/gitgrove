@@ -21,7 +21,8 @@ import { DiffPanel } from './components/DiffPanel'
 import { DiffExplorer } from './components/DiffExplorer'
 import { BlameView } from './components/BlameView'
 import { PRView } from './components/PRView'
-import { StatusBar } from './components/StatusBar'
+import { StatusBar, type GithubUser } from './components/StatusBar'
+import { parseGitHubRepo, permissionToRole } from './utils/github'
 import { NotificationStack } from './components/NotificationStack'
 import { ContextMenu } from './components/ContextMenu'
 import { BranchContextMenu, type BranchMenuAction } from './components/BranchContextMenu'
@@ -432,7 +433,7 @@ export default function App() {
   }, [activeRepo])
 
   // ── GitHub 사용자 정보 ──
-  const [githubUser, setGithubUser] = useState<{ login: string; avatar_url: string } | null>(null)
+  const [githubUser, setGithubUser] = useState<GithubUser | null>(null)
 
   const fetchGithubUser = useCallback(() => {
     const token = localStorage.getItem('gitgrove:githubToken')
@@ -441,7 +442,21 @@ export default function App() {
       headers: { Authorization: `token ${token}` }
     })
       .then(r => r.ok ? r.json() : null)
-      .then(data => setGithubUser(data ? { login: data.login, avatar_url: data.avatar_url } : null))
+      .then(data => setGithubUser(data ? {
+        login: data.login,
+        avatar_url: data.avatar_url,
+        name: data.name,
+        bio: data.bio,
+        company: data.company,
+        location: data.location,
+        blog: data.blog,
+        twitter_username: data.twitter_username,
+        email: data.email,
+        followers: data.followers,
+        following: data.following,
+        public_repos: data.public_repos,
+        created_at: data.created_at,
+      } : null))
       .catch(() => setGithubUser(null))
   }, [])
 
@@ -450,6 +465,28 @@ export default function App() {
     window.addEventListener('gitgrove:settings-changed', fetchGithubUser)
     return () => window.removeEventListener('gitgrove:settings-changed', fetchGithubUser)
   }, [fetchGithubUser])
+
+  // ── 현재 레포에서 본인 권한(역할) ──
+  const [repoRole, setRepoRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    const token = localStorage.getItem('gitgrove:githubToken')
+    if (!repoPath || !token) { setRepoRole(null); return }
+    let cancelled = false
+    window.gitAPI?.getRemotes(repoPath)
+      .then(remotes => {
+        const origin = remotes.find(r => r.name === 'origin') ?? remotes[0]
+        const info = origin && parseGitHubRepo(origin.url)
+        if (!info) { setRepoRole(null); return }
+        return fetch(`https://api.github.com/repos/${info.owner}/${info.repo}`, {
+          headers: { Authorization: `token ${token}` },
+        })
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (!cancelled) setRepoRole(permissionToRole(data?.permissions)) })
+      })
+      .catch(() => { if (!cancelled) setRepoRole(null) })
+    return () => { cancelled = true }
+  }, [repoPath, githubUser])
 
   // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
   useEffect(() => {
@@ -1043,6 +1080,7 @@ export default function App() {
         remote={repo ? `origin/${repo.branch}` : undefined}
         onSettings={() => setShowSettings(true)}
         githubUser={githubUser}
+        repoRole={repoRole}
       />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}
