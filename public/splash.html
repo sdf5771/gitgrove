@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitGrove — Splash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --c-bg-deep:     #0d1220;
+  --c-bg-surface:  #161d30;
+  --c-bg-inset:    #0a0f1c;
+  --c-border:      #2d3551;
+  --c-text:        #b8c0d8;
+  --c-text-strong: #f4ecd2;
+  --c-text-muted:  #6d7798;
+  --c-text-faint:  #3f4a65;
+  --c-gold-200:    #ffd770;
+  --c-gold-300:    #f5b94a;
+  --c-gold-400:    #e6a536;
+  --c-gold-500:    #c98a22;
+  --c-success:     #6fcf7c;
+  --c-info:        #5fb8e6;
+  --font-display:  'Pixelify Sans', system-ui, sans-serif;
+  --font-body:     'Noto Sans KR', system-ui, sans-serif;
+  --font-mono:     'IBM Plex Mono', ui-monospace, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* 투명 윈도우용: 시안의 #060a12 배경 제거 → 둥근 모서리(splash border-radius) 유지 */
+html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; }
+
+.stage {
+  width: 100%; height: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Splash window (560×360 landscape) ── */
+.splash {
+  width: 560px; height: 360px;
+  position: relative; overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% -10%, rgba(230,165,54,.10), transparent 55%),
+    var(--c-bg-deep);
+  border-radius: 12px;
+  border: 1px solid rgba(230,165,54,.18);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 30px 70px rgba(0,0,0,.7);
+  font-family: var(--font-body);
+  display: flex; flex-direction: column;
+  transform-origin: center center;
+  transition: opacity .18s ease;
+}
+
+/* 완료 → 메인 전환 시 페이드아웃 (~180ms, --dur-base) */
+.stage.fade-out .splash { opacity: 0; }
+
+/* subtle grid texture */
+.splash::before {
+  content: ''; position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(45,53,81,.18) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(45,53,81,.18) 1px, transparent 1px);
+  background-size: 28px 28px;
+  -webkit-mask-image: radial-gradient(120% 100% at 50% 30%, #000 30%, transparent 78%);
+          mask-image: radial-gradient(120% 100% at 50% 30%, #000 30%, transparent 78%);
+  pointer-events: none;
+}
+
+/* top hairline accent */
+.splash::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--c-gold-400), transparent);
+  opacity: .5;
+}
+
+/* ── Main content ── */
+.content {
+  flex: 1; position: relative; z-index: 2;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 22px; padding-top: 14px;
+}
+
+/* ── Logo + graph cluster ── */
+.mark { position: relative; width: 240px; height: 132px; }
+
+/* SVG branch graph that draws itself */
+.graph { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.bl { stroke-dasharray: 200; stroke-dashoffset: 200; }
+.bl0 { animation: draw .7s cubic-bezier(.4,0,.2,1) .15s forwards; }
+.bl1 { animation: draw .6s cubic-bezier(.4,0,.2,1) .5s forwards; }
+.bl2 { animation: draw .6s cubic-bezier(.4,0,.2,1) .7s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+.gnode { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.gn0 { animation: pop .26s var(--ep, cubic-bezier(.2,.8,.2,1)) .55s forwards; }
+.gn1 { animation: pop .26s cubic-bezier(.2,.8,.2,1) .8s forwards; }
+.gn2 { animation: pop .26s cubic-bezier(.2,.8,.2,1) 1.05s forwards; }
+.gn3 { animation: pop .26s cubic-bezier(.2,.8,.2,1) 1.3s forwards; }
+@keyframes pop {
+  0% { opacity: 0; transform: scale(.2); }
+  70% { opacity: 1; transform: scale(1.3); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* HEAD node glow pulse */
+.head-glow { animation: glow 2s ease-in-out 1.5s infinite; transform-origin: center; }
+@keyframes glow {
+  0%, 100% { opacity: .35; }
+  50% { opacity: .1; }
+}
+
+/* ── Pixel leaves (grove) — light up step by step ── */
+.leaf { opacity: 0; }
+.lf0 { animation: leafIn .18s steps(1,end) 1.15s forwards; }
+.lf1 { animation: leafIn .18s steps(1,end) 1.28s forwards; }
+.lf2 { animation: leafIn .18s steps(1,end) 1.41s forwards; }
+.lf3 { animation: leafIn .18s steps(1,end) 1.54s forwards; }
+.lf4 { animation: leafIn .18s steps(1,end) 1.67s forwards; }
+.lf5 { animation: leafIn .18s steps(1,end) 1.80s forwards; }
+.lf6 { animation: leafIn .18s steps(1,end) 1.93s forwards; }
+@keyframes leafIn { to { opacity: 1; } }
+
+/* ── Wordmark ── */
+.wordmark {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  opacity: 0; animation: fadeUp .4s ease 1.0s forwards;
+}
+.wm-name {
+  font-family: var(--font-display); font-size: 34px; font-weight: 700;
+  color: var(--c-text-strong); letter-spacing: .5px; line-height: 1;
+}
+.wm-tag {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
+  color: var(--c-text-muted); text-transform: uppercase;
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Bottom loader region ── */
+.loader {
+  position: relative; z-index: 2;
+  padding: 0 28px 22px;
+  display: flex; flex-direction: column; gap: 9px;
+}
+
+/* progress track */
+.bar-track {
+  height: 4px; border-radius: 999px;
+  background: var(--c-bg-inset);
+  border: 1px solid var(--c-border);
+  overflow: hidden; position: relative;
+}
+.bar-fill {
+  position: absolute; inset: 0; right: auto;
+  width: 0%; border-radius: 999px;
+  background: linear-gradient(90deg, var(--c-gold-500), var(--c-gold-300));
+  box-shadow: 0 0 8px rgba(230,165,54,.5);
+  animation: fill 3.4s cubic-bezier(.55,.1,.3,1) .3s forwards;
+}
+@keyframes fill {
+  0%   { width: 0%; }
+  18%  { width: 22%; }
+  42%  { width: 40%; }
+  62%  { width: 68%; }
+  82%  { width: 84%; }
+  100% { width: 100%; }
+}
+
+/* status row */
+.status-row {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 11.5px;
+}
+/* spinner — rotating pixel blocks */
+.spinner {
+  width: 12px; height: 12px; flex-shrink: 0; position: relative;
+  animation: spin 1s steps(8,end) infinite;
+}
+.spinner i {
+  position: absolute; width: 3px; height: 3px; background: var(--c-gold-400);
+  border-radius: 1px;
+}
+.spinner i:nth-child(1){ top:0; left:4.5px; opacity:1; }
+.spinner i:nth-child(2){ top:1.5px; right:1px; opacity:.85; }
+.spinner i:nth-child(3){ top:4.5px; right:0; opacity:.7; }
+.spinner i:nth-child(4){ bottom:1.5px; right:1px; opacity:.55; }
+.spinner i:nth-child(5){ bottom:0; left:4.5px; opacity:.4; }
+.spinner i:nth-child(6){ bottom:1.5px; left:1px; opacity:.3; }
+.spinner i:nth-child(7){ top:4.5px; left:0; opacity:.5; }
+.spinner i:nth-child(8){ top:1.5px; left:1px; opacity:.7; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.status-text { color: var(--c-text); flex: 1; }
+.status-text .done { color: var(--c-success); }
+.status-pct { color: var(--c-gold-300); font-weight: 500; }
+
+/* version pinned bottom-right corner */
+.version {
+  position: absolute; bottom: 12px; right: 16px; z-index: 3;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--c-text-faint); letter-spacing: .05em;
+}
+/* author credit bottom-left */
+.credit {
+  position: absolute; bottom: 12px; left: 16px; z-index: 3;
+  font-family: var(--font-mono); font-size: 10px;
+  color: var(--c-text-faint); letter-spacing: .04em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bl, .gnode, .leaf, .wordmark, .bar-fill, .spinner { animation: none !important; }
+  .bl { stroke-dashoffset: 0; }
+  .gnode, .leaf, .wordmark { opacity: 1; }
+  .bar-fill { width: 100%; }
+}
+</style>
+</head>
+<body>
+<div class="stage" id="stage">
+  <div class="splash" id="splash">
+
+    <div class="content">
+      <!-- Logo + branch graph -->
+      <div class="mark">
+        <svg class="graph" viewBox="0 0 240 132" fill="none">
+          <!-- trunk (main, gold) -->
+          <line class="bl bl0" x1="120" y1="120" x2="120" y2="52"
+            stroke="#e6a536" stroke-width="3" stroke-linecap="round"/>
+          <!-- left branch (blue) -->
+          <path class="bl bl1" d="M120 92 C120 76 92 76 92 60"
+            stroke="#5fb8e6" stroke-width="2.5" stroke-linecap="round"/>
+          <!-- right branch (info) -->
+          <path class="bl bl2" d="M120 92 C120 76 148 76 148 60"
+            stroke="#6fcf7c" stroke-width="2.5" stroke-linecap="round"/>
+
+          <!-- HEAD glow -->
+          <circle class="head-glow" cx="120" cy="46" r="13" fill="rgba(255,215,112,.4)"/>
+
+          <!-- nodes -->
+          <g class="gnode gn3"><rect x="113" y="113" width="14" height="14" rx="3" fill="#e6a536"/></g>
+          <g class="gnode gn2"><rect x="85"  y="53"  width="13" height="13" rx="3" fill="#5fb8e6"/></g>
+          <g class="gnode gn1"><rect x="142" y="53"  width="13" height="13" rx="3" fill="#6fcf7c"/></g>
+          <!-- HEAD node (bright) -->
+          <g class="gnode gn0"><rect x="111" y="37" width="18" height="18" rx="4" fill="#ffd770"/><rect x="115" y="41" width="10" height="10" rx="2" fill="#c98a22"/></g>
+
+          <!-- pixel leaves around HEAD (grove) -->
+          <g>
+            <rect class="leaf lf0" x="104" y="22" width="6" height="6" fill="#6fcf7c"/>
+            <rect class="leaf lf1" x="111" y="17" width="6" height="6" fill="#6fcf7c"/>
+            <rect class="leaf lf2" x="118" y="14" width="6" height="6" fill="#6fcf7c"/>
+            <rect class="leaf lf3" x="125" y="14" width="6" height="6" fill="#6fcf7c"/>
+            <rect class="leaf lf4" x="132" y="17" width="6" height="6" fill="#6fcf7c"/>
+            <rect class="leaf lf5" x="108" y="29" width="6" height="6" fill="#6fcf7c" opacity=".7"/>
+            <rect class="leaf lf6" x="128" y="29" width="6" height="6" fill="#6fcf7c" opacity=".7"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Wordmark -->
+      <div class="wordmark">
+        <div class="wm-name">GitGrove</div>
+        <div class="wm-tag">Git client for macOS</div>
+      </div>
+    </div>
+
+    <!-- Bottom loader -->
+    <div class="loader">
+      <div class="bar-track">
+        <div class="bar-fill" id="barFill"></div>
+      </div>
+      <div class="status-row">
+        <div class="spinner"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="status-text" id="statusText">초기화 중…</div>
+        <div class="status-pct" id="statusPct">0%</div>
+      </div>
+    </div>
+
+    <div class="credit">© 2026 GitGrove</div>
+    <div class="version" id="version">v1.9.0</div>
+
+  </div>
+</div>
+
+<script>
+// ── Boot-stage status text (시안 stages 배열 — 데모 진행에 매핑) ──
+const stages = [
+  { at: 0,    text: 'Git 엔진 초기화 중…' },
+  { at: 22,   text: '사용자 설정 불러오는 중…' },
+  { at: 45,   text: '저장소 인덱싱 중…' },
+  { at: 70,   text: '원격 연결 확인 중…' },
+  { at: 88,   text: '워크스페이스 복원 중…' },
+  { at: 100,  text: '준비 완료', done: true },
+];
+const barFill    = document.getElementById('barFill');
+const statusText = document.getElementById('statusText');
+const statusPct  = document.getElementById('statusPct');
+const versionEl  = document.getElementById('version');
+
+let start = null;
+let done = false;             // 메인에서 완료 신호를 받으면 true
+const DURATION = 3700;        // ms — bar fill + delay와 일치 (자체 진행 데모)
+
+function paint(pct) {
+  statusPct.textContent = pct + '%';
+  let cur = stages[0];
+  for (const s of stages) { if (pct >= s.at) cur = s; }
+  statusText.innerHTML = (pct >= 100 || cur.done)
+    ? '<span class="done">✓ ' + stages[stages.length - 1].text + '</span>'
+    : cur.text;
+}
+
+function tick(ts) {
+  if (done) return;           // 완료 신호 수신 시 자체 진행 중단
+  if (!start) start = ts;
+  const t = Math.min((ts - start) / DURATION, 1);
+  paint(Math.round(t * 100));
+  // 자체 데모는 ~95%에서 대기 — 실제 완료(ready-to-show) 신호가 100%를 채운다.
+  if (t < 0.95) requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// ── Electron IPC: 메인 윈도우 ready-to-show 시 완료 연출 ──
+// preload(contextBridge)의 window.ipcRenderer.on 사용 (앱 기존 패턴).
+function finish() {
+  if (done) return;
+  done = true;
+  // bar-fill 애니메이션을 100% 고정값으로 잠금 후 점프
+  barFill.style.animation = 'none';
+  barFill.style.width = '100%';
+  paint(100);
+}
+
+try {
+  const ipc = window.ipcRenderer;
+  if (ipc && typeof ipc.on === 'function') {
+    // 동적 버전 주입 (app.getVersion())
+    ipc.on('splash-version', (_e, v) => {
+      if (v) versionEl.textContent = 'v' + String(v).replace(/^v/, '');
+    });
+    // 완료 신호 (pct:100, done:true)
+    ipc.on('boot-progress', (_e, payload) => {
+      if (payload && (payload.done || payload.pct >= 100)) finish();
+    });
+    ipc.on('splash-done', () => finish());
+  }
+} catch (_) { /* IPC 미가용(브라우저 프리뷰) — 데모 타이머만 동작 */ }
+</script>
+</body>
+</html>
