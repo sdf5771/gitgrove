@@ -283,12 +283,20 @@ export default function App() {
   useEffect(() => { reposRef.current = repos }, [repos])
   const repoPathRef = useRef(repoPath)
   useEffect(() => { repoPathRef.current = repoPath }, [repoPath])
+  // loadRepo 호출마다 증가하는 시퀀스. await 직후 "내가 여전히 최신 요청인가"를
+  // 검사해 늦게 도착한 stale 응답이 최신 화면을 덮어쓰지 못하게 한다(async 레이스 가드).
+  const loadSeqRef = useRef(0)
+  // 현재 로드 중(in-flight)인 path. 같은 경로의 이중 로드를 막는다.
+  const loadingPathRef = useRef<string | null>(null)
 
   // ── git 데이터 로드 ──
   // loadRepo는 git 데이터 로드 + repos 목록 갱신만 책임진다.
   // "어느 탭을 active로 둘지"는 호출자가 opts.activate로 소유한다(디커플링).
   const loadRepo = useCallback(async (path: string, opts: { silent?: boolean; activate?: boolean } = {}) => {
     const { silent = false, activate = false } = opts
+    // 이 호출의 시퀀스를 발급하고 in-flight path를 기록한다.
+    const mySeq = ++loadSeqRef.current
+    loadingPathRef.current = path
     if (!silent) setIsLoading(true)
     setLoadError(null)
     try {
@@ -298,6 +306,11 @@ export default function App() {
         window.gitAPI?.getBranches(path) ?? Promise.resolve({ current: '', local: [], remote: [], tags: [] }),
         (window.gitAPI?.getStatus(path) as Promise<{ staged: Array<{ path: string; status: string; additions: number; deletions: number }>; unstaged: Array<{ path: string; status: string; additions: number; deletions: number }> }> | undefined) ?? Promise.resolve({ staged: [] as Array<{ path: string; status: string; additions: number; deletions: number }>, unstaged: [] as Array<{ path: string; status: string; additions: number; deletions: number }> }),
       ])
+
+      // ── 레이스 가드 ── 응답이 도착한 시점에 더 늦은 loadRepo 호출이 있었다면
+      // 이 응답은 stale이다. 모든 setState(활성 탭 포함)를 스킵하고 조기 return해
+      // last-write-wins 덮어쓰기와 activate 되돌림을 모두 차단한다.
+      if (mySeq !== loadSeqRef.current) return
 
       const hashes = gitCommits.map(c => c.id)
       const laneMap = computeLanes(gitCommits)
@@ -332,7 +345,8 @@ export default function App() {
         const existing = prev.findIndex(r => r.path === path)
         if (existing >= 0) {
           const next = [...prev]
-          next[existing] = newRepo
+          // 기존 엔트리의 id를 유지한다(Date.now() 교체 시 key 변경 → 탭 remount 방지).
+          next[existing] = { ...newRepo, id: prev[existing].id }
           return next
         }
         return [...prev, newRepo]
@@ -345,8 +359,10 @@ export default function App() {
         setActiveRepo(existingIdx >= 0 ? existingIdx : list.length)
       }
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : String(err))
+      if (mySeq === loadSeqRef.current) setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
+      // 최신 호출일 때만 in-flight 표식을 해제한다(나보다 늦은 호출이 진행 중이면 그쪽이 소유).
+      if (mySeq === loadSeqRef.current) loadingPathRef.current = null
       if (!silent) setIsLoading(false)
     }
   }, [])
@@ -417,9 +433,16 @@ export default function App() {
   }, [repos])
 
   // ── 앱 시작 시 마지막 레포 자동 복원 ──
+  // 이중 로드 방지: lastPath가 이미 탭 목록에 있으면 activeRepo만 맞추고
+  // 실제 데이터 로드는 탭전환 effect에 일임한다. 목록에 없을 때만 loadRepo로 추가/활성화.
   useEffect(() => {
     const lastPath = localStorage.getItem(STORAGE_KEYS.lastRepoPath)
-    if (lastPath) {
+    if (!lastPath) return
+    const idx = reposRef.current.findIndex(r => r.path === lastPath)
+    if (idx >= 0) {
+      // 탭전환 effect가 repos[activeRepo]를 로드한다.
+      setActiveRepo(idx)
+    } else {
       loadRepo(lastPath, { silent: true, activate: true }).catch(() => {
         try { localStorage.removeItem(STORAGE_KEYS.lastRepoPath) } catch { /* ignore */ }
       })
@@ -439,7 +462,10 @@ export default function App() {
   // loadRepo가 active 탭을 되돌리지 않게 activate를 넘기지 않는다.
   useEffect(() => {
     const path = reposRef.current[activeRepo]?.path
-    if (path && path !== repoPathRef.current) loadRepo(path, { silent: true })
+    // 이미 표시 중이거나(repoPathRef) 로드 중인(loadingPathRef) 경로면 중복 로드하지 않는다.
+    if (path && path !== repoPathRef.current && path !== loadingPathRef.current) {
+      loadRepo(path, { silent: true })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRepo])
 
