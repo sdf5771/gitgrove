@@ -68,6 +68,9 @@ export function installGitApiMock() {
 
   const gitAPI = {
     openDialog: vi.fn(async () => null),
+    pickDirectory: vi.fn(async () => null),
+    isRepo: vi.fn(async () => true),
+    clone: vi.fn(async (_url: string, parentDir: string) => ({ path: `${parentDir}/cloned`, name: 'cloned' })),
     getLog,
     getBranches,
     getStatus,

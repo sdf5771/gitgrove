@@ -103,6 +103,9 @@ interface Window {
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {
     openDialog: () => Promise<string | null>
+    pickDirectory: (title?: string) => Promise<string | null>
+    isRepo: (repoPath: string) => Promise<boolean>
+    clone: (url: string, parentDir: string, opts?: { shallow?: boolean }) => Promise<{ path: string; name: string }>
     getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => Promise<GitCommit[]>
     getBranches: (repoPath: string) => Promise<GitBranchResult>
     getStatus: (repoPath: string) => Promise<GitStatusResult>
