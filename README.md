@@ -77,6 +77,8 @@
 | **Config** | Read / write git config (user.name, user.email, etc.) |
 
 ### UX
+- **Repository Manager** — full-screen hub to browse **Open / Favorite / Recent** repos, **clone remote repos** (URL → pick folder, optional shallow `--depth 1`), and organize repos into user-named **Workspaces** (e.g. Work / Personal — a repo can belong to several). Opens as the landing screen when there's no repo to restore. Per-row `⋯` menu: open · add to workspace · remove from GitGrove
+- **Safe repo loading** — opening a folder with no/deleted `.git` (or an empty directory) is caught and surfaced as a clear notification instead of breaking the view
 - **⌘K Command Palette** — search and run any action from the keyboard
 - **Live Commit Search** — real-time filter by message, author, hash, or file path
 - **Multi-repo Tabs** — open multiple repos in one window, with dirty-state indicator
@@ -202,7 +204,7 @@ Packaged `.app` is produced by electron-builder (see `package.json` for the buil
 ```
 gitgrove/
 ├── electron/
-│   ├── main.ts            Electron main process — BrowserWindow + 38 IPC handlers (incl. safeStorage token store)
+│   ├── main.ts            Electron main process — BrowserWindow + 40+ IPC handlers (git ops · clone · is-repo · safeStorage token store)
 │   ├── preload.ts         contextBridge → window.gitAPI · window.appAPI
 │   └── electron-env.d.ts  TypeScript types for IPC API
 ├── src/
@@ -218,14 +220,15 @@ gitgrove/
 │   │   ├── BranchSidebar.tsx  Local / Remote / Tags list
 │   │   ├── BranchContextMenu.tsx  Right-click branch actions
 │   │   ├── PRView.tsx         GitHub PR list + detail
+│   │   ├── RepoManager.tsx    Full-screen repo hub — workspaces · clone · favorites / recent
 │   │   ├── Markdown.tsx       GFM markdown renderer (PR descriptions / comments)
 │   │   ├── StatusBar.tsx      Bottom status line + GitHub profile card
-│   │   └── modals/            BranchModal · MergeModal · CherryPickModal ·
+│   │   └── modals/            AddRepoModal · BranchModal · MergeModal · CherryPickModal ·
 │   │                          InteractiveRebaseModal · StashPanel ·
 │   │                          SettingsPanel · ConfirmModal · …
 │   ├── data/              Type definitions + mock data (fallback)
 │   ├── hooks/             useNotifications
-│   └── utils/             computeLanes · syntaxHighlight · sideBySide · github
+│   └── utils/             computeLanes · syntaxHighlight · sideBySide · github · repoStore (favorites / recent / workspaces)
 ├── assets/
 │   ├── hero.svg           README hero banner
 │   ├── color-*.svg        Design system color swatches
@@ -265,6 +268,7 @@ gitgrove/
 - [x] GitHub profile card + current-repo permission role badge
 - [x] Settings: PAT setup guide, token verification, secure storage (OS keychain)
 - [x] GitHub-flavored Markdown rendering for PR descriptions & comments
+- [x] Repository Manager: workspaces, remote clone (shallow option), favorites / recent, safe non-git folder handling
 - [ ] SSH / HTTPS authentication manager
 - [ ] Commit graph virtualization (large repos)
 - [ ] Split-diff editor with inline editing

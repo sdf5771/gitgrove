@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Repo } from '../data/mockData'
-import type { RecentRepoEntry } from '../utils/repoStore'
+import type { RecentRepoEntry, Workspace } from '../utils/repoStore'
 import { parseGitHubRepo } from '../utils/github'
+import { ModalShell } from './modals/ModalShell'
 
 // ── 아이콘 (디자인 핸드오프 SVG 재현) ──
 const IconAllRepos = () => (
@@ -19,14 +20,23 @@ const IconBranch = () => (
 const IconOpenExternal = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9"/><path d="M10 2h4v4M14 2l-6 6"/></svg>
 )
-const IconClose = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+const IconKebab = () => (
+  <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="13" r="1.4"/></svg>
+)
+const IconTrash = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 4h10M6.5 4V2.5h3V4M5 4l.6 9a1 1 0 0 0 1 1h2.8a1 1 0 0 0 1-1L11 4"/></svg>
 )
 const IconSearch = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="6.5" cy="6.5" r="4"/><path d="M10.5 10.5l3 3"/></svg>
 )
 const IconChevron = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6l4 4 4-4"/></svg>
+)
+const IconWorkspace = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M5 4V3a3 3 0 0 1 6 0v1"/></svg>
+)
+const IconPlus = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 3v10M3 8h10"/></svg>
 )
 const IconGitHub = () => (
   <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -35,7 +45,16 @@ const IconGitLab = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="5" width="5" height="8" rx="1"/><rect x="9" y="3" width="5" height="10" rx="1"/><path d="M7 9h2"/></svg>
 )
 
-type Filter = 'all' | 'favorites' | 'recent'
+// 사이드바 선택: 내장 보기('all'/'favorites'/'recent') 또는 사용자 워크스페이스(id)
+type View = 'all' | 'favorites' | 'recent'
+type Selection = { kind: 'view'; view: View } | { kind: 'workspace'; id: string }
+
+// path → 표시용 레포 정보(이름/브랜치). 열린 레포가 우선, 없으면 최근 캐시, 둘 다 없으면 폴더명.
+interface RepoDesc { name: string; branch: string; dirty?: number; open: boolean }
+function basename(p: string): string {
+  const seg = p.split(/[\\/]/).filter(Boolean).pop()
+  return seg || p
+}
 
 interface BranchChipProps { branch: string; dirty?: number }
 function BranchChip({ branch, dirty }: BranchChipProps) {
@@ -64,13 +83,12 @@ interface RowProps {
   isFavorite: boolean
   isSelected: boolean
   faded?: boolean
-  showClose?: boolean
   onSelect: () => void
   onToggleStar: () => void
   onOpen: () => void
-  onClose?: () => void
+  onMenu: (e: React.MouseEvent) => void
 }
-function RepoRow({ name, owner, branch, dirty, isFavorite, isSelected, faded, showClose, onSelect, onToggleStar, onOpen, onClose }: RowProps) {
+function RepoRow({ name, owner, branch, dirty, isFavorite, isSelected, faded, onSelect, onToggleStar, onOpen, onMenu }: RowProps) {
   return (
     <div
       className={`rm-row${isSelected ? ' selected' : ''}`}
@@ -94,17 +112,13 @@ function RepoRow({ name, owner, branch, dirty, isFavorite, isSelected, faded, sh
       <div className="rm-row-owner">{owner || '—'}</div>
       <div className="rm-row-branch"><BranchChip branch={branch} dirty={dirty} /></div>
       <div className="rm-row-actions">
-        <button className="rm-row-action-btn" title="열기" onClick={e => { e.stopPropagation(); onOpen() }}><IconOpenExternal /></button>
-        {showClose && onClose && (
-          <button className="rm-row-action-btn danger" title="닫기" onClick={e => { e.stopPropagation(); onClose() }}><IconClose /></button>
-        )}
+        <button className="rm-row-action-btn" title="메뉴" onClick={e => { e.stopPropagation(); onMenu(e) }}><IconKebab /></button>
       </div>
     </div>
   )
 }
 
 interface SectionProps {
-  id: string
   title: string
   count: number
   children: React.ReactNode
@@ -138,31 +152,116 @@ function Section({ title, count, children, hasHeaderColumns = true, lastBranchLa
   )
 }
 
+// ── New Workspace 모달 ──
+function NewWorkspaceModal({ onCreate, onClose }: { onCreate: (name: string) => void; onClose: () => void }) {
+  const [name, setName] = useState('')
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => { ref.current?.focus() }, [])
+  const submit = () => { const t = name.trim(); if (t) onCreate(t) }
+  return (
+    <ModalShell title="새 워크스페이스" icon={<span className="rm-modal-ic"><IconWorkspace /></span>} width={400} onClose={onClose}>
+      <div className="rm-modal-body">
+        <label className="rm-modal-label">워크스페이스 이름</label>
+        <input
+          ref={ref}
+          className="rm-modal-input"
+          placeholder="예: 회사, 개인 프로젝트, 백엔드…"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') onClose() }}
+        />
+        <div className="rm-modal-actions">
+          <button className="rm-modal-btn" onClick={onClose}>취소</button>
+          <button className="rm-modal-btn rm-primary" disabled={!name.trim()} onClick={submit}>만들기</button>
+        </div>
+      </div>
+    </ModalShell>
+  )
+}
+
+// ── Clone 모달 ──
+function CloneModal({ onClone, onClose }: { onClone: (url: string) => Promise<boolean>; onClose: () => void }) {
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => { ref.current?.focus() }, [])
+  const submit = async () => {
+    const t = url.trim()
+    if (!t || busy) return
+    setBusy(true)
+    const ok = await onClone(t)
+    if (!ok) setBusy(false) // 성공 시엔 매니저가 닫히며 언마운트됨
+  }
+  return (
+    <ModalShell title="원격 저장소 클론" icon={<span className="rm-modal-ic"><IconOpenExternal /></span>} width={460} onClose={busy ? () => {} : onClose}>
+      <div className="rm-modal-body">
+        <label className="rm-modal-label">저장소 URL</label>
+        <input
+          ref={ref}
+          className="rm-modal-input"
+          placeholder="https://github.com/owner/repo.git"
+          value={url}
+          disabled={busy}
+          onChange={e => setUrl(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') void submit(); if (e.key === 'Escape' && !busy) onClose() }}
+        />
+        <div className="rm-modal-hint">{busy ? '클론 중…' : '다음 단계에서 저장할 부모 폴더를 선택합니다.'}</div>
+        <div className="rm-modal-actions">
+          <button className="rm-modal-btn" disabled={busy} onClick={onClose}>취소</button>
+          <button className="rm-modal-btn rm-primary" disabled={!url.trim() || busy} onClick={() => void submit()}>
+            {busy ? '클론 중…' : '폴더 선택 후 클론'}
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  )
+}
+
 export interface RepoManagerProps {
   repos: Repo[]
   activeRepo: number
   githubConnected: boolean
   recents: RecentRepoEntry[]
   favorites: string[]
+  workspaces: Workspace[]
   onToggleFavorite: (path: string) => void
   onOpenPath: (path: string, name?: string, branch?: string) => void
-  onCloseRepo: (index: number) => void
+  onRemoveRepo: (path: string) => void
+  onCreateWorkspace: (name: string) => string
+  onRenameWorkspace: (id: string, name: string) => void
+  onDeleteWorkspace: (id: string) => void
+  onToggleRepoInWorkspace: (id: string, path: string) => void
+  onClone: (url: string) => Promise<boolean>
   onBrowse: () => void
-  onClose: () => void
   notify: (type: 'info' | 'success' | 'warning' | 'error', title: string, body: string) => void
 }
 
 export function RepoManager({
-  repos, activeRepo, githubConnected, recents, favorites,
-  onToggleFavorite, onOpenPath, onCloseRepo, onBrowse, onClose, notify,
+  repos, activeRepo, githubConnected, recents, favorites, workspaces,
+  onToggleFavorite, onOpenPath, onRemoveRepo, onCreateWorkspace, onRenameWorkspace,
+  onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, notify,
 }: RepoManagerProps) {
-  const [filter, setFilter] = useState<Filter>('all')
+  const [sel, setSel] = useState<Selection>({ kind: 'view', view: 'all' })
   const [query, setQuery] = useState('')
   const [selectedPath, setSelectedPath] = useState<string | null>(repos[activeRepo]?.path ?? null)
   // path → owner (remote에서 lazily 추출)
   const [owners, setOwners] = useState<Record<string, string>>({})
+  // 행 케밥 메뉴 / 모달 상태
+  const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null)
+  const [wsModal, setWsModal] = useState<{ pendingPath: string | null } | null>(null)
+  const [cloneOpen, setCloneOpen] = useState(false)
+  // 워크스페이스 인라인 이름변경
+  const [renamingWs, setRenamingWs] = useState<string | null>(null)
+  const [renameVal, setRenameVal] = useState('')
 
   const favSet = useMemo(() => new Set(favorites), [favorites])
+
+  // 선택된 워크스페이스가 삭제되면 '모든 저장소'로 복귀
+  useEffect(() => {
+    if (sel.kind === 'workspace' && !workspaces.some(w => w.id === sel.id)) {
+      setSel({ kind: 'view', view: 'all' })
+    }
+  }, [workspaces, sel])
 
   // ── 열린 레포의 소유자를 remote에서 추출 (가벼운 로컬 조회, 원격 호출 없음) ──
   useEffect(() => {
@@ -181,6 +280,15 @@ export function RepoManager({
     return () => { cancelled = true }
   }, [repos, owners])
 
+  // path → 표시정보 조회 (열린 레포 우선 → 최근 → 폴더명)
+  const repoByPath = useMemo(() => {
+    const m = new Map<string, RepoDesc>()
+    repos.forEach(r => m.set(r.path, { name: r.name, branch: r.branch, dirty: r.dirty ? 1 : 0, open: true }))
+    recents.forEach(r => { if (!m.has(r.path)) m.set(r.path, { name: r.name, branch: r.branch, open: false }) })
+    return m
+  }, [repos, recents])
+  const describe = (path: string): RepoDesc => repoByPath.get(path) ?? { name: basename(path), branch: '', open: false }
+
   const matchesQuery = (name: string) => {
     const q = query.trim().toLowerCase()
     return !q || name.toLowerCase().includes(q)
@@ -190,48 +298,105 @@ export function RepoManager({
   const favoriteRepos = repos.filter(r => favSet.has(r.path) && matchesQuery(r.name))
   const filteredRecents = recents.filter(r => matchesQuery(r.name))
 
+  const handleOpen = (path: string, name?: string, branch?: string) => onOpenPath(path, name, branch)
 
-  const handleOpen = (path: string, name?: string, branch?: string) => {
-    onOpenPath(path, name, branch)
+  const openMenu = (path: string, e: React.MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setMenu({ path, x: rect.right, y: rect.bottom + 4 })
+  }
+
+  const handleCreateWorkspace = (name: string) => {
+    const id = onCreateWorkspace(name)
+    if (wsModal?.pendingPath) onToggleRepoInWorkspace(id, wsModal.pendingPath)
+    setSel({ kind: 'workspace', id })
+    setWsModal(null)
+    notify('success', '워크스페이스 생성', name)
+  }
+
+  const startRename = (w: Workspace) => { setRenamingWs(w.id); setRenameVal(w.name) }
+  const commitRename = () => {
+    if (renamingWs) {
+      const t = renameVal.trim()
+      if (t) onRenameWorkspace(renamingWs, t)
+    }
+    setRenamingWs(null)
   }
 
   const placeholder = (label: string) => () => notify('info', `${label} 준비 중`, '다음 버전에서 제공됩니다.')
 
-  const showOpen = filter === 'all'
-  const showFavorites = filter === 'all' || filter === 'favorites'
-  const showRecent = filter === 'all' || filter === 'recent'
+  // 메인 리스트 렌더 분기
+  const isView = sel.kind === 'view'
+  const showOpen = isView && sel.view === 'all'
+  const showFavorites = isView && (sel.view === 'all' || sel.view === 'favorites')
+  const showRecent = isView && (sel.view === 'all' || sel.view === 'recent')
+  const activeWs = sel.kind === 'workspace' ? workspaces.find(w => w.id === sel.id) ?? null : null
+  const wsPaths = activeWs ? activeWs.paths.filter(p => matchesQuery(describe(p).name)) : []
+  const menuTarget = menu ? describe(menu.path) : null
 
   return (
     <div className="rm-body">
       {/* ── Sidebar ── */}
       <div className="rm-sidebar">
-        <div className="rm-sidebar-label">워크스페이스</div>
+        <div className="rm-sidebar-label">보기</div>
         <div className="rm-sidebar-section">
-          <div className={`rm-sidebar-item${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>
+          <div className={`rm-sidebar-item${isView && sel.view === 'all' ? ' active' : ''}`} onClick={() => setSel({ kind: 'view', view: 'all' })}>
             <IconAllRepos />모든 저장소
-            <span className={`rm-badge-count${filter === 'all' ? ' active' : ''}`}>{repos.length}</span>
+            <span className={`rm-badge-count${isView && sel.view === 'all' ? ' active' : ''}`}>{repos.length}</span>
           </div>
-          <div className={`rm-sidebar-item${filter === 'favorites' ? ' active' : ''}`} onClick={() => setFilter('favorites')}>
+          <div className={`rm-sidebar-item${isView && sel.view === 'favorites' ? ' active' : ''}`} onClick={() => setSel({ kind: 'view', view: 'favorites' })}>
             <IconStar />즐겨찾기
-            <span className={`rm-badge-count${filter === 'favorites' ? ' active' : ''}`}>{favoriteRepos.length}</span>
+            <span className={`rm-badge-count${isView && sel.view === 'favorites' ? ' active' : ''}`}>{favoriteRepos.length}</span>
           </div>
-          <div className={`rm-sidebar-item${filter === 'recent' ? ' active' : ''}`} onClick={() => setFilter('recent')}>
+          <div className={`rm-sidebar-item${isView && sel.view === 'recent' ? ' active' : ''}`} onClick={() => setSel({ kind: 'view', view: 'recent' })}>
             <IconClock />최근 열람
-            <span className={`rm-badge-count${filter === 'recent' ? ' active' : ''}`}>{recents.length}</span>
+            <span className={`rm-badge-count${isView && sel.view === 'recent' ? ' active' : ''}`}>{recents.length}</span>
           </div>
         </div>
 
         <div className="rm-sidebar-divider" />
-        <div className="rm-sidebar-label">그룹</div>
+        <div className="rm-sidebar-label">
+          워크스페이스
+          <button className="rm-ws-add" title="새 워크스페이스" onClick={() => setWsModal({ pendingPath: null })}><IconPlus /></button>
+        </div>
         <div className="rm-sidebar-section">
-          <div className="rm-sidebar-item rm-disabled" title="준비 중">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="5" width="12" height="9" rx="1.5"/><path d="M5 5V4a3 3 0 0 1 6 0v1"/></svg>
-            개인 프로젝트
-          </div>
-          <div className="rm-sidebar-item rm-disabled" title="준비 중">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="7" r="2.5"/><circle cx="11" cy="5" r="2"/><path d="M1 14c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M11 9c2 0 4 1 4 3"/></svg>
-            팀 / 회사
-          </div>
+          {workspaces.length === 0 && (
+            <div className="rm-ws-empty">+ 로 워크스페이스를 만들어<br />레포를 분류하세요.</div>
+          )}
+          {workspaces.map(w => {
+            const active = sel.kind === 'workspace' && sel.id === w.id
+            if (renamingWs === w.id) {
+              return (
+                <div key={w.id} className="rm-sidebar-item">
+                  <IconWorkspace />
+                  <input
+                    className="rm-ws-rename-input"
+                    autoFocus
+                    value={renameVal}
+                    onChange={e => setRenameVal(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') setRenamingWs(null) }}
+                  />
+                </div>
+              )
+            }
+            return (
+              <div
+                key={w.id}
+                className={`rm-sidebar-item rm-ws-item${active ? ' active' : ''}`}
+                onClick={() => setSel({ kind: 'workspace', id: w.id })}
+                onDoubleClick={() => startRename(w)}
+                title="더블클릭으로 이름 변경"
+              >
+                <IconWorkspace /><span className="rm-ws-name">{w.name}</span>
+                <span className={`rm-badge-count${active ? ' active' : ''}`}>{w.paths.length}</span>
+                <button
+                  className="rm-ws-del"
+                  title="워크스페이스 삭제"
+                  onClick={e => { e.stopPropagation(); onDeleteWorkspace(w.id); notify('info', '워크스페이스 삭제', `'${w.name}' 삭제됨 (저장소는 보존)`) }}
+                ><IconTrash /></button>
+              </div>
+            )
+          })}
         </div>
 
         <div className="rm-sidebar-divider" />
@@ -252,7 +417,7 @@ export function RepoManager({
         <div className="rm-content-header">
           <div className="rm-content-title">Repository Management</div>
           <div className="rm-action-bar">
-            <button className="rm-action-btn rm-disabled" onClick={placeholder('Clone')} title="다음 버전 예정">
+            <button className="rm-action-btn" onClick={() => setCloneOpen(true)} title="원격 저장소 클론">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 8a6 6 0 1 1 12 0"/><path d="M8 3v2M5 4.5l1.5 1.5M11 4.5L9.5 6"/></svg>
               Clone
             </button>
@@ -265,7 +430,7 @@ export function RepoManager({
               Init
             </button>
             <div className="rm-action-sep" />
-            <button className="rm-action-btn rm-disabled" onClick={placeholder('New Workspace')} title="준비 중">
+            <button className="rm-action-btn" onClick={() => setWsModal({ pendingPath: null })} title="새 워크스페이스 만들기">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M5 4V3a3 3 0 0 1 6 0v1"/></svg>
               New Workspace
             </button>
@@ -287,65 +452,56 @@ export function RepoManager({
               onChange={e => setQuery(e.target.value)}
             />
           </div>
-          <button className="rm-close-manager" onClick={onClose} title="매니저 닫기">닫기 ✕</button>
         </div>
 
         {/* Repo list */}
         <div className="rm-list">
           {showOpen && (
-            <Section id="open" title="Open repositories" count={openRepos.length}>
+            <Section title="Open repositories" count={openRepos.length}>
               {openRepos.length === 0 ? (
                 <div className="rm-empty-section">열린 저장소가 없습니다. Browse 로 추가하세요.</div>
-              ) : openRepos.map(r => {
-                const idx = repos.findIndex(rp => rp.path === r.path)
-                return (
-                  <RepoRow
-                    key={r.path}
-                    name={r.name}
-                    owner={owners[r.path]}
-                    branch={r.branch}
-                    dirty={r.dirty ? 1 : 0}
-                    isFavorite={favSet.has(r.path)}
-                    isSelected={selectedPath === r.path}
-                    showClose={repos.length > 1}
-                    onSelect={() => setSelectedPath(r.path)}
-                    onToggleStar={() => onToggleFavorite(r.path)}
-                    onOpen={() => handleOpen(r.path, r.name, r.branch)}
-                    onClose={() => onCloseRepo(idx)}
-                  />
-                )
-              })}
+              ) : openRepos.map(r => (
+                <RepoRow
+                  key={r.path}
+                  name={r.name}
+                  owner={owners[r.path]}
+                  branch={r.branch}
+                  dirty={r.dirty ? 1 : 0}
+                  isFavorite={favSet.has(r.path)}
+                  isSelected={selectedPath === r.path}
+                  onSelect={() => setSelectedPath(r.path)}
+                  onToggleStar={() => onToggleFavorite(r.path)}
+                  onOpen={() => handleOpen(r.path, r.name, r.branch)}
+                  onMenu={e => openMenu(r.path, e)}
+                />
+              ))}
             </Section>
           )}
 
           {showFavorites && (
-            <Section id="fav" title="Favorites" count={favoriteRepos.length}>
+            <Section title="Favorites" count={favoriteRepos.length}>
               {favoriteRepos.length === 0 ? (
                 <div className="rm-empty-section">즐겨찾기한 저장소가 없습니다. ☆ 를 클릭해 추가하세요.</div>
-              ) : favoriteRepos.map(r => {
-                const idx = repos.findIndex(rp => rp.path === r.path)
-                return (
-                  <RepoRow
-                    key={r.path}
-                    name={r.name}
-                    owner={owners[r.path]}
-                    branch={r.branch}
-                    dirty={r.dirty ? 1 : 0}
-                    isFavorite
-                    isSelected={selectedPath === r.path}
-                    showClose={repos.length > 1}
-                    onSelect={() => setSelectedPath(r.path)}
-                    onToggleStar={() => onToggleFavorite(r.path)}
-                    onOpen={() => handleOpen(r.path, r.name, r.branch)}
-                    onClose={() => onCloseRepo(idx)}
-                  />
-                )
-              })}
+              ) : favoriteRepos.map(r => (
+                <RepoRow
+                  key={r.path}
+                  name={r.name}
+                  owner={owners[r.path]}
+                  branch={r.branch}
+                  dirty={r.dirty ? 1 : 0}
+                  isFavorite
+                  isSelected={selectedPath === r.path}
+                  onSelect={() => setSelectedPath(r.path)}
+                  onToggleStar={() => onToggleFavorite(r.path)}
+                  onOpen={() => handleOpen(r.path, r.name, r.branch)}
+                  onMenu={e => openMenu(r.path, e)}
+                />
+              ))}
             </Section>
           )}
 
           {showRecent && (
-            <Section id="recent" title="Recent repositories" count={filteredRecents.length} lastBranchLabel>
+            <Section title="Recent repositories" count={filteredRecents.length} lastBranchLabel>
               {filteredRecents.length === 0 ? (
                 <div className="rm-empty-section">최근 열람한 저장소가 없습니다.</div>
               ) : filteredRecents.map(r => (
@@ -360,12 +516,80 @@ export function RepoManager({
                   onSelect={() => setSelectedPath(r.path)}
                   onToggleStar={() => onToggleFavorite(r.path)}
                   onOpen={() => handleOpen(r.path, r.name, r.branch)}
+                  onMenu={e => openMenu(r.path, e)}
                 />
               ))}
             </Section>
           )}
+
+          {activeWs && (
+            <Section title={activeWs.name} count={wsPaths.length}>
+              {wsPaths.length === 0 ? (
+                <div className="rm-empty-section">이 워크스페이스에 저장소가 없습니다. 레포 행의 ⋯ 메뉴 → 워크스페이스에서 추가하세요.</div>
+              ) : wsPaths.map(p => {
+                const d = describe(p)
+                return (
+                  <RepoRow
+                    key={p}
+                    name={d.name}
+                    owner={owners[p]}
+                    branch={d.branch}
+                    dirty={d.dirty}
+                    isFavorite={favSet.has(p)}
+                    isSelected={selectedPath === p}
+                    faded={!d.open}
+                    onSelect={() => setSelectedPath(p)}
+                    onToggleStar={() => onToggleFavorite(p)}
+                    onOpen={() => handleOpen(p, d.name, d.branch)}
+                    onMenu={e => openMenu(p, e)}
+                  />
+                )
+              })}
+            </Section>
+          )}
         </div>
       </div>
+
+      {/* ── 행 케밥 메뉴 ── */}
+      {menu && menuTarget && (
+        <>
+          <div className="rm-menu-backdrop" onClick={() => setMenu(null)} onContextMenu={e => { e.preventDefault(); setMenu(null) }} />
+          <div className="rm-menu" style={{ left: menu.x, top: menu.y, transform: 'translateX(-100%)' }} onClick={e => e.stopPropagation()}>
+            <div className="rm-menu-item" onClick={() => { handleOpen(menu.path, menuTarget.name, menuTarget.branch); setMenu(null) }}>
+              <IconOpenExternal />리포지토리로 이동
+            </div>
+            <div className="rm-menu-sep" />
+            <div className="rm-menu-label">워크스페이스</div>
+            {workspaces.length === 0 && <div className="rm-menu-hint">아직 워크스페이스가 없습니다.</div>}
+            {workspaces.map(w => {
+              const inWs = w.paths.includes(menu.path)
+              return (
+                <div key={w.id} className="rm-menu-item rm-menu-check" onClick={() => onToggleRepoInWorkspace(w.id, menu.path)}>
+                  <span className={`rm-check${inWs ? ' on' : ''}`}>{inWs ? '✓' : ''}</span>
+                  <span className="rm-menu-wsname">{w.name}</span>
+                </div>
+              )
+            })}
+            <div className="rm-menu-item rm-menu-sub" onClick={() => { const p = menu.path; setMenu(null); setWsModal({ pendingPath: p }) }}>
+              <IconPlus />새 워크스페이스…
+            </div>
+            <div className="rm-menu-sep" />
+            <div className="rm-menu-item danger" onClick={() => { onRemoveRepo(menu.path); setMenu(null) }}>
+              <IconTrash />GitGrove에서 제거
+            </div>
+          </div>
+        </>
+      )}
+
+      {wsModal && (
+        <NewWorkspaceModal onCreate={handleCreateWorkspace} onClose={() => setWsModal(null)} />
+      )}
+      {cloneOpen && (
+        <CloneModal
+          onClone={async url => { const ok = await onClone(url); return ok }}
+          onClose={() => setCloneOpen(false)}
+        />
+      )}
     </div>
   )
 }

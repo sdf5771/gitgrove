@@ -4,7 +4,7 @@ import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
 import https from 'node:https'
-import simpleGit from 'simple-git'
+import simpleGit, { CheckRepoActions } from 'simple-git'
 
 // macOS GPU 프로세스 크래시 억제
 app.commandLine.appendSwitch('disable-gpu-sandbox')
@@ -238,6 +238,52 @@ ipcMain.handle('git:open-dialog', async () => {
     title: 'Open Git Repository',
   })
   return result.canceled ? null : result.filePaths[0]
+})
+
+// git:pick-directory — 범용 폴더 선택 다이얼로그 (Clone 대상 부모 폴더 등)
+ipcMain.handle('git:pick-directory', async (_event, title?: string) => {
+  if (!win) return null
+  const result = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: title || 'Select Folder',
+  })
+  return result.canceled ? null : result.filePaths[0]
+})
+
+// git:is-repo — 경로가 실제 Git 저장소 루트인지 검사(.git 존재 여부).
+// 빈 디렉토리·.git 삭제된 폴더·존재하지 않는 경로를 모두 false로 거른다.
+// IS_REPO_ROOT를 써서 상위 폴더의 .git을 잘못 잡는(false positive) 것도 방지.
+ipcMain.handle('git:is-repo', async (_event, repoPath: string): Promise<boolean> => {
+  try {
+    if (!repoPath || !fs.existsSync(repoPath)) return false
+    return await simpleGit(repoPath).checkIsRepo(CheckRepoActions.IS_REPO_ROOT)
+  } catch {
+    return false
+  }
+})
+
+// 원격 URL(https / ssh)에서 저장소 이름(.git 제외)을 추출
+function deriveRepoName(url: string): string {
+  const trimmed = url.trim().replace(/\/+$/, '').replace(/\.git$/i, '')
+  const seg = trimmed.split(/[/:]/).pop() ?? ''
+  return seg.trim()
+}
+
+// git:clone — 원격 저장소를 parentDir 아래의 동명 폴더로 클론
+ipcMain.handle('git:clone', async (_event, url: string, parentDir: string, opts?: { shallow?: boolean }): Promise<{ path: string; name: string }> => {
+  const name = deriveRepoName(url)
+  if (!name) throw new Error('저장소 URL에서 이름을 추출할 수 없습니다.')
+  const target = path.join(parentDir, name)
+  if (fs.existsSync(target)) throw new Error(`이미 '${name}' 폴더가 존재합니다.`)
+  try {
+    const cloneArgs = opts?.shallow ? ['--depth', '1'] : []
+    await simpleGit().clone(url, target, cloneArgs)
+    return { path: target, name }
+  } catch (err) {
+    // 실패 시 부분 클론 잔여 폴더 정리
+    try { if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true }) } catch { /* ignore */ }
+    throw new Error(err instanceof Error ? err.message : String(err))
+  }
 })
 
 // git:log — 커밋 로그 조회 (최대 50개)

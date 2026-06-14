@@ -13,9 +13,10 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props)
   const [tab, setTab] = useState<'local' | 'clone'>('local')
   const [localPath, setLocalPath] = useState('')
   const [cloneUrl, setCloneUrl] = useState('')
-  const [cloneDest, setCloneDest] = useState('~/dev/')
+  const [cloneDest, setCloneDest] = useState('')
   const [cloneShallow, setCloneShallow] = useState(false)
   const [cloning, setCloning] = useState(false)
+  const [cloneErr, setCloneErr] = useState<string | null>(null)
   const [isDone, setIsDone] = useState(false)
 
   const openLocal = (path: string) => {
@@ -34,15 +35,27 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props)
     if (picked) setLocalPath(picked)
   }
 
-  const clone = () => {
-    if (!cloneUrl) return
-    setCloning(true)
-    setTimeout(() => {
+  const handleCloneBrowse = async () => {
+    const picked = await window.gitAPI?.pickDirectory('Clone 대상 폴더 선택')
+    if (picked) setCloneDest(picked)
+  }
+
+  const clone = async () => {
+    if (!cloneUrl.trim() || !cloneDest.trim() || cloning) return
+    setCloning(true); setCloneErr(null)
+    try {
+      const res = await window.gitAPI!.clone(cloneUrl.trim(), cloneDest.trim(), { shallow: cloneShallow })
       setCloning(false); setIsDone(true)
-      const name = cloneUrl.split('/').pop()?.replace('.git', '') || 'repo'
-      onAdd({ id: String(Date.now()), name, path: cloneDest + name, branch: 'main', dirty: false, ahead: 0, behind: 0 })
-      setTimeout(() => onClose(), 1200)
-    }, 1800)
+      // 성공 표시를 잠깐 보여준 뒤 클론한 레포를 새 탭으로 연다.
+      setTimeout(() => {
+        if (onOpenPath) onOpenPath(res.path)
+        else { onAdd({ id: String(Date.now()), name: res.name, path: res.path, branch: 'main', dirty: false, ahead: 0, behind: 0 }) }
+        onClose()
+      }, 900)
+    } catch (err) {
+      setCloning(false)
+      setCloneErr(err instanceof Error ? err.message : String(err))
+    }
   }
 
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
@@ -95,19 +108,20 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props)
                 <input className="mselect" placeholder="git@github.com:user/repo.git" value={cloneUrl} onChange={e => setCloneUrl(e.target.value)} />
               </div>
               <div className="mfield">
-                <label>Destination</label>
+                <label>Destination (parent folder)</label>
                 <div className="repo-browse-row">
-                  <input className="mselect" style={{ flex: 1 }} value={cloneDest} onChange={e => setCloneDest(e.target.value)} />
-                  <button className="repo-browse-btn">Browse…</button>
+                  <input className="mselect" style={{ flex: 1 }} placeholder="Browse… 로 부모 폴더 선택" value={cloneDest} onChange={e => setCloneDest(e.target.value)} />
+                  <button className="repo-browse-btn" onClick={handleCloneBrowse}>Browse…</button>
                 </div>
               </div>
               <div className="repo-clone-opt" onClick={() => setCloneShallow(v => !v)} style={{ cursor: 'pointer' }}>
                 <input type="checkbox" checked={cloneShallow} readOnly style={{ pointerEvents: 'none', accentColor: 'var(--c-gold-400)' }} />
                 <span>Shallow clone (depth 1) — faster for large repos</span>
               </div>
+              {cloneErr && <div style={{ fontSize: 11.5, color: 'var(--c-danger)', lineHeight: 1.5 }}>{cloneErr}</div>}
               <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
                 <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
-                <button className={`mbtn-ok${cloning ? ' doing' : ''}`} onClick={clone} disabled={!cloneUrl || cloning}>
+                <button className={`mbtn-ok${cloning ? ' doing' : ''}`} onClick={() => void clone()} disabled={!cloneUrl.trim() || !cloneDest.trim() || cloning}>
                   {cloning ? <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Cloning…</span> : 'Clone →'}
                 </button>
               </div>

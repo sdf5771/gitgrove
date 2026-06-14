@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
 // --------- Expose gitAPI to the Renderer process ---------
 contextBridge.exposeInMainWorld('gitAPI', {
   openDialog: () => ipcRenderer.invoke('git:open-dialog'),
+  pickDirectory: (title?: string) => ipcRenderer.invoke('git:pick-directory', title),
+  isRepo: (repoPath: string) => ipcRenderer.invoke('git:is-repo', repoPath),
+  clone: (url: string, parentDir: string, opts?: { shallow?: boolean }) => ipcRenderer.invoke('git:clone', url, parentDir, opts),
   getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => ipcRenderer.invoke('git:log', repoPath, opts),
   getBranches: (repoPath: string) => ipcRenderer.invoke('git:branches', repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke('git:status', repoPath),

@@ -37,7 +37,7 @@ import { SettingsPanel } from './components/modals/SettingsPanel'
 import { AddRepoModal } from './components/modals/AddRepoModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
 import { RepoManager } from './components/RepoManager'
-import { loadFavorites, saveFavorites, loadRecents, pushRecent, type RecentRepoEntry } from './utils/repoStore'
+import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loadWorkspaces, saveWorkspaces, createWorkspaceId, type RecentRepoEntry, type Workspace } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
 
 type View = 'history' | 'commit' | 'diff' | 'blame' | 'pr'
@@ -142,6 +142,7 @@ export default function App() {
   const [showRepoManager, setShowRepoManager] = useState(false)
   const [favorites, setFavorites] = useState<string[]>(() => loadFavorites())
   const [recents, setRecents] = useState<RecentRepoEntry[]>(() => loadRecents())
+  const [workspaces, setWorkspaces] = useState<Workspace[]>(() => loadWorkspaces())
 
   const toggleFavorite = useCallback((path: string) => {
     setFavorites(prev => {
@@ -150,6 +151,37 @@ export default function App() {
       return next
     })
   }, [])
+
+  // ── 워크스페이스 CRUD (변경 시 localStorage 영속) ──
+  const persistWorkspaces = useCallback((updater: (prev: Workspace[]) => Workspace[]) => {
+    setWorkspaces(prev => {
+      const next = updater(prev)
+      saveWorkspaces(next)
+      return next
+    })
+  }, [])
+
+  const createWorkspace = useCallback((name: string): string => {
+    const id = createWorkspaceId()
+    persistWorkspaces(prev => [...prev, { id, name: name.trim(), paths: [] }])
+    return id
+  }, [persistWorkspaces])
+
+  const renameWorkspace = useCallback((id: string, name: string) => {
+    persistWorkspaces(prev => prev.map(w => (w.id === id ? { ...w, name: name.trim() } : w)))
+  }, [persistWorkspaces])
+
+  const deleteWorkspace = useCallback((id: string) => {
+    persistWorkspaces(prev => prev.filter(w => w.id !== id))
+  }, [persistWorkspaces])
+
+  const toggleRepoInWorkspace = useCallback((id: string, path: string) => {
+    persistWorkspaces(prev => prev.map(w => {
+      if (w.id !== id) return w
+      const has = w.paths.includes(path)
+      return { ...w, paths: has ? w.paths.filter(p => p !== path) : [...w.paths, path] }
+    }))
+  }, [persistWorkspaces])
 
   // ── 사이드바 너비 ──
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -314,6 +346,19 @@ export default function App() {
     loadingPathRef.current = path
     if (!silent) setIsLoading(true)
     setLoadError(null)
+
+    // ── 유효성 검사 ── .git 없는 빈/삭제된 디렉토리를 broken 상태로 만들지 않는다.
+    // (Browse·Clone·최근목록·탭전환·.git 중도삭제 등 모든 진입점을 한곳에서 방어)
+    const valid = await window.gitAPI?.isRepo?.(path)
+    if (valid === false) {
+      if (mySeq === loadSeqRef.current) {
+        notify('error', 'Git 저장소가 아닙니다', `${path}\n.git 폴더가 없거나 삭제되었습니다.`)
+        loadingPathRef.current = null
+        if (!silent) setIsLoading(false)
+      }
+      return false
+    }
+
     try {
       const limit = logLimitRef.current
       const [gitCommits, gitBranches, gitStatus] = await Promise.all([
@@ -325,7 +370,7 @@ export default function App() {
       // ── 레이스 가드 ── 응답이 도착한 시점에 더 늦은 loadRepo 호출이 있었다면
       // 이 응답은 stale이다. 모든 setState(활성 탭 포함)를 스킵하고 조기 return해
       // last-write-wins 덮어쓰기와 activate 되돌림을 모두 차단한다.
-      if (mySeq !== loadSeqRef.current) return
+      if (mySeq !== loadSeqRef.current) return false
 
       const hashes = gitCommits.map(c => c.id)
       const laneMap = computeLanes(gitCommits)
@@ -375,14 +420,16 @@ export default function App() {
         const existingIdx = list.findIndex(r => r.path === path)
         setActiveRepo(existingIdx >= 0 ? existingIdx : list.length)
       }
+      return true
     } catch (err) {
       if (mySeq === loadSeqRef.current) setLoadError(err instanceof Error ? err.message : String(err))
+      return false
     } finally {
       // 최신 호출일 때만 in-flight 표식을 해제한다(나보다 늦은 호출이 진행 중이면 그쪽이 소유).
       if (mySeq === loadSeqRef.current) loadingPathRef.current = null
       if (!silent) setIsLoading(false)
     }
-  }, [])
+  }, [notify])
 
   const handleOpenRepo = useCallback(async () => {
     const picked = await window.gitAPI?.openDialog()
@@ -418,6 +465,41 @@ export default function App() {
       void loadRepo(remaining[newIdx].path, { silent: true })
     }
   }, [repos, activeRepo, repoPath, closeRepo, loadRepo])
+
+  // ── GitGrove에서 레포 완전 제거(디스크 파일은 보존) ──
+  // 열려 있으면 탭을 닫고, 최근/즐겨찾기/모든 워크스페이스에서 path를 제거한다.
+  const removeRepoFromGitgrove = useCallback((path: string) => {
+    const idx = repos.findIndex(r => r.path === path)
+    if (idx >= 0) handleCloseRepoTab(idx)
+    setRecents(prev => {
+      const next = prev.filter(r => r.path !== path)
+      saveRecents(next)
+      return next
+    })
+    setFavorites(prev => {
+      const next = prev.filter(p => p !== path)
+      saveFavorites(next)
+      return next
+    })
+    persistWorkspaces(prev => prev.map(w => ({ ...w, paths: w.paths.filter(p => p !== path) })))
+  }, [repos, handleCloseRepoTab, persistWorkspaces])
+
+  // ── 원격 저장소 Clone (부모 폴더 선택 → git clone → 활성화) ──
+  const handleClone = useCallback(async (url: string): Promise<boolean> => {
+    const parent = await window.gitAPI?.pickDirectory('Clone 대상 폴더 선택')
+    if (!parent) return false // 사용자가 폴더 선택을 취소 → 모달 유지
+    notify('info', 'Clone 시작', `${url}`)
+    try {
+      const res = await window.gitAPI!.clone(url, parent)
+      notify('success', 'Clone 완료', res.name)
+      setShowRepoManager(false)
+      await loadRepo(res.path, { activate: true })
+      return true
+    } catch (err) {
+      notify('error', 'Clone 실패', err instanceof Error ? err.message : String(err))
+      return false
+    }
+  }, [loadRepo, notify])
 
   // ── 원격 연산 핸들러 ──
   const handlePull = useCallback(async () => {
@@ -484,16 +566,25 @@ export default function App() {
   // 실제 데이터 로드는 탭전환 effect에 일임한다. 목록에 없을 때만 loadRepo로 추가/활성화.
   useEffect(() => {
     const lastPath = localStorage.getItem(STORAGE_KEYS.lastRepoPath)
-    if (!lastPath) return
-    const idx = reposRef.current.findIndex(r => r.path === lastPath)
-    if (idx >= 0) {
-      // 탭전환 effect가 repos[activeRepo]를 로드한다.
-      setActiveRepo(idx)
-    } else {
-      loadRepo(lastPath, { silent: true, activate: true }).catch(() => {
-        try { localStorage.removeItem(STORAGE_KEYS.lastRepoPath) } catch { /* ignore */ }
-      })
+    const list = reposRef.current
+    if (lastPath) {
+      const idx = list.findIndex(r => r.path === lastPath)
+      if (idx >= 0) {
+        // 탭전환 effect가 repos[activeRepo]를 로드한다.
+        setActiveRepo(idx)
+      } else {
+        // lastPath가 탭에 없으면 로드해서 복원. 실패(.git 삭제 등)하고 남은 탭도 없으면 매니저로.
+        void loadRepo(lastPath, { silent: true, activate: true }).then(ok => {
+          if (!ok) {
+            try { localStorage.removeItem(STORAGE_KEYS.lastRepoPath) } catch { /* ignore */ }
+            if (reposRef.current.length === 0) setShowRepoManager(true)
+          }
+        })
+      }
+      return
     }
+    // 복원할 레포가 전혀 없으면(최초 실행/모두 닫힌 상태) 리포지토리 매니저를 랜딩 화면으로.
+    if (list.length === 0) setShowRepoManager(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 마운트 시 1회만
 
@@ -988,16 +1079,21 @@ export default function App() {
             githubConnected={!!githubToken}
             recents={recents}
             favorites={favorites}
+            workspaces={workspaces}
             onToggleFavorite={toggleFavorite}
             onOpenPath={(path) => { setShowRepoManager(false); void loadRepo(path, { activate: true }) }}
-            onCloseRepo={handleCloseRepoTab}
+            onRemoveRepo={removeRepoFromGitgrove}
+            onCreateWorkspace={createWorkspace}
+            onRenameWorkspace={renameWorkspace}
+            onDeleteWorkspace={deleteWorkspace}
+            onToggleRepoInWorkspace={toggleRepoInWorkspace}
+            onClone={handleClone}
             onBrowse={() => {
               void (async () => {
                 const picked = await window.gitAPI?.openDialog()
                 if (picked) { setShowRepoManager(false); await loadRepo(picked, { activate: true }) }
               })()
             }}
-            onClose={() => setShowRepoManager(false)}
             notify={notify}
           />
         ) : isLoading ? renderLoading() : !repoPath ? renderEmptyState() : (
