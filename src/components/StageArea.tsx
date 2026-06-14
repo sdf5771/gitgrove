@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileEntry, INIT_UNSTAGED, INIT_STAGED } from '../data/mockData'
+import { FileEntry } from '../data/mockData'
 import { FilePath } from './FilePath'
 
 interface Props {
@@ -11,8 +11,8 @@ interface Props {
 }
 
 export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoPath, onCommitDone }: Props) {
-  const [unstaged, setUnstaged] = useState<FileEntry[]>(initialUnstaged ?? INIT_UNSTAGED)
-  const [staged, setStaged] = useState<FileEntry[]>(initialStaged ?? INIT_STAGED)
+  const [unstaged, setUnstaged] = useState<FileEntry[]>(initialUnstaged ?? [])
+  const [staged, setStaged] = useState<FileEntry[]>(initialStaged ?? [])
   const [selU, setSelU] = useState<number | null>(null)
   const [selS, setSelS] = useState<number>(0)
   const [msg, setMsg] = useState('')

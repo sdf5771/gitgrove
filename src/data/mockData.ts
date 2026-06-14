@@ -56,16 +56,6 @@ export const LOCAL_BRANCHES: Branch[] = [
 export const REMOTE_BRANCHES = [{name:'origin/main'},{name:'origin/feature/auth'}]
 export const TAGS = [{name:'v1.0.0'},{name:'v0.9.2'}]
 
-export const INIT_UNSTAGED: FileEntry[] = [
-  {p:'src/auth/oauth.ts',s:'M',a:87,d:12},
-  {p:'src/api/routes.ts',s:'M',a:23,d:4},
-  {p:'src/components/Button.tsx',s:'M',a:18,d:7},
-]
-export const INIT_STAGED: FileEntry[] = [
-  {p:'src/auth/jwt.ts',s:'M',a:31,d:6},
-  {p:'package.json',s:'M',a:3,d:3},
-  {p:'README.md',s:'M',a:12,d:2},
-]
 export const INIT_STASHES: Stash[] = [
   {idx:0,msg:'WIP: auth refactor — token refresh',branch:'feature/auth',files:3,time:'35m ago'},
   {idx:1,msg:'stash@{1}: WIP on main: bump deps',branch:'main',files:2,time:'2h ago'},

@@ -1183,8 +1183,8 @@ export default function App() {
                     <StageArea
                       key={stageRefreshKey}
                       onSelDiffFile={handleSelDiffFile}
-                      initialUnstaged={realUnstaged.length > 0 || realStaged.length > 0 ? realUnstaged : undefined}
-                      initialStaged={realUnstaged.length > 0 || realStaged.length > 0 ? realStaged : undefined}
+                      initialUnstaged={realUnstaged}
+                      initialStaged={realStaged}
                       repoPath={repoPath}
                       onCommitDone={async () => {
                         if (repoPath) {
