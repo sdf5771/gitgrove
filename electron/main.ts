@@ -564,7 +564,27 @@ ipcMain.handle('git:commit', async (_event, repoPath: string, message: string): 
 ipcMain.handle('git:file-diff', async (_event, repoPath: string, filePath: string, staged: boolean): Promise<string> => {
   const git = simpleGit(repoPath)
   const args = staged ? ['--cached', '--', filePath] : ['--', filePath]
-  return git.diff(args)
+  const diff = await git.diff(args)
+  if (diff) return diff
+
+  // diff가 비었고 unstaged 조회인 경우, 신규(untracked) 파일일 수 있음 →
+  // index에 없어 일반 diff가 빈 문자열을 반환하므로 전체 내용을 added(+) diff로 생성.
+  if (!staged) {
+    const status = await git.status()
+    if (status.not_added.includes(filePath)) {
+      // --no-index는 차이가 있으면 exit code 1을 내며 simple-git이 reject하지만,
+      // 그 에러 객체에 diff 본문이 담겨 오므로 회수한다. /dev/null과 비교해 전체를 added로 표현.
+      try {
+        return await git.raw(['diff', '--no-index', '--', '/dev/null', filePath])
+      } catch (err: unknown) {
+        const e = err as { stdout?: string; message?: string }
+        if (typeof e.stdout === 'string' && e.stdout) return e.stdout
+        if (typeof e.message === 'string' && e.message) return e.message
+        throw err
+      }
+    }
+  }
+  return diff
 })
 
 // unified diff 원본에서 헤더 + 지정 인덱스의 단일 hunk만 추출해 패치 생성

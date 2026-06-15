@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { PR_DATA } from '../data/mockData'
 import type { PullRequest } from '../data/mockData'
 import { FilePath } from './FilePath'
@@ -59,50 +59,56 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
     }
   }, [])
 
-  useEffect(() => {
-    if (!repoPath) return
-    if (!token) return
+  // PR 목록 fetch — 자동(repo/token 변경) + 수동 새로고침 버튼(B16)에서 공유.
+  const loadPRs = useCallback(async () => {
+    if (!repoPath || !token) return
+    try {
+      const remotes = await window.gitAPI?.getRemotes(repoPath) ?? []
+      const origin = remotes.find(r => r.name === 'origin')
+      if (!origin) return
+      const info = parseGitHubRepo(origin.url)
+      if (!info) return
+      setGhInfo(info)
 
-    window.gitAPI?.getRemotes(repoPath)
-      .then(remotes => {
-        const origin = remotes.find(r => r.name === 'origin')
-        if (!origin) return
-        const info = parseGitHubRepo(origin.url)
-        if (!info) return
-        setGhInfo(info)
-
-        setPRLoading(true)
-        return fetchGitHubPRs(info.owner, info.repo, token)
-          .then(prs => {
-            setRealPRs(prs.map(pr => ({
-              id: pr.number,
-              title: pr.title,
-              author: pr.user.login,
-              initials: pr.user.login.slice(0, 2).toUpperCase(),
-              ac: '#5fb8e6',
-              from: pr.head.ref,
-              to: pr.base.ref,
-              status: pr.merged_at ? 'merged' : pr.state === 'closed' ? 'closed' : 'open',
-              created: new Date(pr.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
-              comments: pr.comments,
-              additions: 0,
-              deletions: 0,
-              labels: pr.labels.map(l => l.name),
-              body: pr.body ?? '',
-              reviewers: [],
-              checks: [],
-              files: [],
-              threads: [],
-            } as PullRequest)))
-            setPRError(null)
-          })
-          .catch(err => setPRError((err as Error).message))
-          .finally(() => setPRLoading(false))
-      })
-      .catch(() => {})
+      setPRLoading(true)
+      try {
+        const prs = await fetchGitHubPRs(info.owner, info.repo, token)
+        setRealPRs(prs.map(pr => ({
+          id: pr.number,
+          title: pr.title,
+          author: pr.user.login,
+          initials: pr.user.login.slice(0, 2).toUpperCase(),
+          ac: '#5fb8e6',
+          from: pr.head.ref,
+          to: pr.base.ref,
+          status: pr.merged_at ? 'merged' : pr.state === 'closed' ? 'closed' : 'open',
+          created: new Date(pr.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
+          comments: pr.comments,
+          additions: 0,
+          deletions: 0,
+          labels: pr.labels.map(l => l.name),
+          body: pr.body ?? '',
+          reviewers: [],
+          checks: [],
+          files: [],
+          threads: [],
+        } as PullRequest)))
+        setPRError(null)
+      } catch (err) {
+        setPRError((err as Error).message)
+      } finally {
+        setPRLoading(false)
+      }
+    } catch {
+      // getRemotes 실패는 조용히 무시(비-GitHub 레포 등)
+    }
   }, [repoPath, token])
 
-  if (prLoading) {
+  useEffect(() => { void loadPRs() }, [loadPRs])
+
+  // 최초 로드(아직 PR 없음)에는 전체화면 로더. 수동 새로고침(B16)은 목록을 유지한 채
+  // 헤더의 ⟳ 버튼만 회전시킨다.
+  if (prLoading && !realPRs) {
     return (
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--c-text-muted)' }}>
         <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite', fontSize: 16 }}>⟳</span>
@@ -145,10 +151,19 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
   return (
     <div className="pr-wrap">
       <div className="pr-list-pane">
-        {ghInfo && realPRs && (
+        {ghInfo && (
           <div style={{ padding: '6px 12px', fontSize: 11, color: 'var(--c-text-faint)', borderBottom: '1px solid var(--c-border)', display: 'flex', alignItems: 'center', gap: 4 }}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
             {ghInfo.owner}/{ghInfo.repo}
+            <button
+              className="pr-refresh-btn"
+              onClick={() => void loadPRs()}
+              disabled={prLoading}
+              title="PR 목록 새로고침"
+              style={{ marginLeft: 'auto' }}
+            >
+              <span style={prLoading ? { display: 'inline-block', animation: 'spin 600ms linear infinite' } : undefined}>⟳</span>
+            </button>
           </div>
         )}
         <div className="pr-filters">

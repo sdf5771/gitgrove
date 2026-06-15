@@ -1,22 +1,30 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FileEntry } from '../data/mockData'
 import { FilePath } from './FilePath'
 
 interface Props {
   onSelDiffFile: (f: FileEntry, staged: boolean) => void
-  initialUnstaged?: FileEntry[]
-  initialStaged?: FileEntry[]
+  unstaged?: FileEntry[]
+  staged?: FileEntry[]
   repoPath?: string | null      // 실제 IPC 호출에 사용
   onCommitDone?: () => void     // 커밋 완료 후 콜백 (상태 새로고침)
 }
 
-export function StageArea({ onSelDiffFile, initialUnstaged, initialStaged, repoPath, onCommitDone }: Props) {
-  const [unstaged, setUnstaged] = useState<FileEntry[]>(initialUnstaged ?? [])
-  const [staged, setStaged] = useState<FileEntry[]>(initialStaged ?? [])
+export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone }: Props) {
+  // controlled: props(unstaged/staged)를 단일 소스로 소비하되, stage/unstage 클릭은
+  // 즉시 반영(낙관적)을 위해 로컬 state에 담는다. 이후 props가 바뀌면(=loadRepo 확정
+  // 결과 도착) 그 값으로 재동기화 → 낙관 → 서버확정 순서가 자연스럽게 이어진다.
+  // 포커스 복귀·커밋·머지/리베이스 등 모든 loadRepo 후 prop 변경이 화면에 반영됨.
+  const [unstaged, setUnstaged] = useState<FileEntry[]>(unstagedProp ?? [])
+  const [staged, setStaged] = useState<FileEntry[]>(stagedProp ?? [])
   const [selU, setSelU] = useState<number | null>(null)
   const [selS, setSelS] = useState<number>(0)
   const [msg, setMsg] = useState('')
   const [committing, setCommitting] = useState(false)
+
+  // prop이 바뀌면(authoritative loadRepo 결과) 로컬 state를 동기화한다.
+  useEffect(() => { setUnstaged(unstagedProp ?? []) }, [unstagedProp])
+  useEffect(() => { setStaged(stagedProp ?? []) }, [stagedProp])
 
   const stageFile = async (f: FileEntry) => {
     if (repoPath) {
