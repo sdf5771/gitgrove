@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { getUser, getRateLimit, GithubApiError } from '../../utils/githubClient'
 
 type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github'
 
@@ -161,25 +162,12 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
     if (!token) { setVerifyState('error'); setVerifyError('토큰을 입력하세요.'); return }
     setVerifyState('verifying'); setVerifyError(''); setVerifyResult(null)
     try {
-      const res = await fetch('https://api.github.com/user', {
-        headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
-      })
-      const scopesHeader = res.headers.get('X-OAuth-Scopes') ?? ''
+      // 공용 클라이언트로 일원화(B8). 토큰 검증은 항상 최신이어야 하므로 cache:false.
+      // 비-ok 응답은 GithubApiError로 throw → 아래 catch에서 status별 메시지 매핑.
+      const { data: user, headers } = await getUser<{ login: string; avatar_url: string }>(token, { cache: false })
+
+      const scopesHeader = headers.get('X-OAuth-Scopes') ?? ''
       const scopes = scopesHeader.split(',').map(s => s.trim()).filter(Boolean)
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          setVerifyError('토큰이 유효하지 않습니다 (401). 만료되었거나 잘못된 토큰입니다.')
-        } else if (res.status === 403) {
-          setVerifyError('접근이 거부되었습니다 (403). rate limit 또는 권한 부족일 수 있습니다.')
-        } else {
-          setVerifyError(`검증 실패 (HTTP ${res.status}).`)
-        }
-        setVerifyState('error')
-        return
-      }
-
-      const user = await res.json() as { login: string; avatar_url: string }
 
       // scope 부족 점검 (classic 토큰은 X-OAuth-Scopes 노출, fine-grained는 비어있을 수 있음)
       const hasScopeHeader = scopesHeader.length > 0
@@ -189,16 +177,11 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
         return
       }
 
-      // rate limit 조회 (실패해도 검증 자체는 성공으로 취급)
+      // rate limit 조회 (실패해도 검증 자체는 성공으로 취급). 항상 최신 → cache:false.
       let rate: VerifyResult['rate'] = null
       try {
-        const rl = await fetch('https://api.github.com/rate_limit', {
-          headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' },
-        })
-        if (rl.ok) {
-          const data = await rl.json() as { rate?: { remaining: number; limit: number } }
-          if (data.rate) rate = { remaining: data.rate.remaining, limit: data.rate.limit }
-        }
+        const { data } = await getRateLimit<{ rate?: { remaining: number; limit: number } }>(token, { cache: false })
+        if (data.rate) rate = { remaining: data.rate.remaining, limit: data.rate.limit }
       } catch { /* rate 조회 실패 무시 */ }
 
       setVerifyResult({ login: user.login, avatarUrl: user.avatar_url, scopes, rate })
@@ -206,9 +189,19 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
       // 검증 성공 토큰은 즉시 영속화 + 구독부 갱신
       await persistToken(token)
       window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
-    } catch {
+    } catch (err) {
       setVerifyState('error')
-      setVerifyError('네트워크 오류로 검증에 실패했습니다.')
+      if (err instanceof GithubApiError) {
+        if (err.status === 401) {
+          setVerifyError('토큰이 유효하지 않습니다 (401). 만료되었거나 잘못된 토큰입니다.')
+        } else if (err.status === 403) {
+          setVerifyError('접근이 거부되었습니다 (403). rate limit 또는 권한 부족일 수 있습니다.')
+        } else {
+          setVerifyError(`검증 실패 (HTTP ${err.status}).`)
+        }
+      } else {
+        setVerifyError('네트워크 오류로 검증에 실패했습니다.')
+      }
     }
   }
 

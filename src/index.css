@@ -838,6 +838,25 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-row-action-btn svg{width:13px;height:13px;}
 .rm-empty-section{padding:16px;font-size:12px;color:var(--c-text-faint);font-style:italic;}
 
+/* GitHub 레포 브라우저 (B18) */
+.rm-gh-count{font-size:11px;color:var(--c-text-faint);font-family:var(--font-mono);margin-left:2px;}
+.rm-gh-status{display:flex;align-items:center;gap:8px;padding:24px 8px;font-size:12.5px;color:var(--c-text-muted);}
+.rm-gh-error{color:var(--c-danger);font-style:normal;}
+.rm-gh-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:6px;border:1px solid transparent;transition:background 120ms,border-color 120ms;}
+.rm-gh-row:hover{background:var(--c-gold-bg-soft);border-color:rgba(45,53,81,.8);}
+.rm-gh-row+.rm-gh-row{margin-top:2px;}
+.rm-gh-info{flex:1;min-width:0;}
+.rm-gh-title{display:flex;align-items:center;gap:7px;}
+.rm-gh-name{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--c-text-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rm-gh-meta-ic{display:inline-flex;color:var(--c-text-faint);}
+.rm-gh-meta-ic svg{width:12px;height:12px;}
+.rm-gh-tag{font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;padding:1px 6px;border-radius:999px;background:var(--c-bg-elevated);color:var(--c-text-faint);border:1px solid var(--c-border);}
+.rm-gh-sub{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11.5px;color:var(--c-text-muted);font-family:var(--font-mono);}
+.rm-gh-full{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;}
+.rm-gh-dot{color:var(--c-text-faint);}
+.rm-gh-action{flex-shrink:0;}
+.rm-gh-action .rm-action-btn{min-width:72px;justify-content:center;}
+
 /* Workspaces (사이드바) */
 .rm-sidebar-label{display:flex;align-items:center;}
 .rm-ws-add{margin-left:auto;width:18px;height:18px;display:flex;align-items:center;justify-content:center;border:none;background:none;color:var(--c-text-faint);cursor:pointer;border-radius:4px;padding:0;}

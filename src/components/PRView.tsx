@@ -5,6 +5,7 @@ import { FilePath } from './FilePath'
 import { Markdown } from './Markdown'
 import { parseGitHubRepo } from '../utils/github'
 import { getGithubToken } from '../utils/githubToken'
+import { getPulls } from '../utils/githubClient'
 
 interface GHPullRequest {
   number: number
@@ -20,13 +21,11 @@ interface GHPullRequest {
   labels: Array<{ name: string }>
 }
 
+// 공용 클라이언트로 일원화(B8). PR 목록은 수동 새로고침(B16)에서 항상 최신이어야
+// 하므로 cache:false로 bypass한다. 에러는 기존과 동일하게 throw → setPRError가 처리.
 async function fetchGitHubPRs(owner: string, repo: string, token: string): Promise<GHPullRequest[]> {
-  const res = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/pulls?state=all&per_page=20`,
-    { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
-  )
-  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`)
-  return res.json() as Promise<GHPullRequest[]>
+  const { data } = await getPulls<GHPullRequest[]>(owner, repo, token, { cache: false })
+  return data
 }
 
 interface Props {
