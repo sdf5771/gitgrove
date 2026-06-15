@@ -157,6 +157,63 @@ export function getRateLimit<T = unknown>(token: string, opts?: Partial<GhReques
   return ghRequest<T>('/rate_limit', { token, ...opts })
 }
 
+// ── 내 레포 둘러보기 (B18) ──
+
+/** GET /user/repos 응답 중 UI가 쓰는 필드만 추린 타입 */
+export interface GithubRepoSummary {
+  id: number
+  name: string
+  full_name: string
+  owner: { login: string }
+  private: boolean
+  description: string | null
+  default_branch: string
+  clone_url: string
+  ssh_url: string
+  html_url: string
+  updated_at: string
+  language: string | null
+  stargazers_count: number
+  archived: boolean
+  fork: boolean
+}
+
+export interface GetUserReposOptions extends Partial<GhRequestOptions> {
+  /** 페이지당 항목 수(기본 100, GitHub 상한) */
+  perPage?: number
+  /** 가져올 최대 페이지 수(기본 3, 약 300개에서 캡) */
+  maxPages?: number
+}
+
+/**
+ * GET /user/repos — 본인 소유 + 협력 + 조직 멤버 레포를 updated 내림차순으로.
+ * Link 헤더 `rel="next"`를 따라가며 maxPages 상한까지 페이지네이션한다.
+ * `cache: false`로 수동 새로고침 시 bypass 가능(B8 캐시 재사용).
+ */
+export async function getUserRepos(
+  token: string,
+  opts?: GetUserReposOptions,
+): Promise<GithubRepoSummary[]> {
+  const perPage = opts?.perPage ?? 100
+  const maxPages = opts?.maxPages ?? 3
+  const { perPage: _p, maxPages: _m, ...reqOpts } = opts ?? {}
+  void _p; void _m
+
+  const out: GithubRepoSummary[] = []
+  for (let page = 1; page <= maxPages; page++) {
+    const path =
+      `/user/repos?affiliation=owner,collaborator,organization_member` +
+      `&sort=updated&per_page=${perPage}&page=${page}`
+    const res = await ghRequest<GithubRepoSummary[]>(path, { token, ...reqOpts })
+    out.push(...res.data)
+    // 다음 페이지 없음(Link 헤더에 rel="next" 부재) 또는 부분 페이지면 종료
+    const link = res.headers.get('Link') ?? ''
+    const hasNext = /\brel="next"/.test(link)
+    if (!hasNext || res.data.length < perPage) break
+  }
+  return out
+}
+
 /** 테스트/연결해제 시 캐시 초기화용 */
 export function clearGithubCache(): void {
   cache.clear()

@@ -4,6 +4,7 @@ import {
   getUser,
   getPulls,
   getRateLimit,
+  getUserRepos,
   clearGithubCache,
   GithubApiError,
 } from './githubClient'
@@ -186,5 +187,65 @@ describe('githubClient', () => {
     const res = await getUser('tok')
     expect(res.rateLimit).toBeNull()
     expect(res.scopes).toEqual([])
+  })
+
+  describe('getUserRepos (B18)', () => {
+    function repo(id: number, name: string) {
+      return { id, name, full_name: `octo/${name}`, owner: { login: 'octo' } }
+    }
+
+    it('올바른 쿼리(affiliation/sort/per_page/page)로 /user/repos 호출', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse([repo(1, 'a')]))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await getUserRepos('tok')
+      const url = fetchMock.mock.calls[0][0] as string
+      expect(url).toContain('/user/repos?')
+      expect(url).toContain('affiliation=owner,collaborator,organization_member')
+      expect(url).toContain('sort=updated')
+      expect(url).toContain('per_page=100')
+      expect(url).toContain('page=1')
+    })
+
+    it('Link 헤더 rel="next"를 따라 페이지네이션하고 합쳐서 반환', async () => {
+      const page1 = Array.from({ length: 100 }, (_, i) => repo(i + 1, `r${i + 1}`))
+      const page2 = [repo(101, 'r101'), repo(102, 'r102')]
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          mockResponse(page1, {
+            headers: { Link: '<https://api.github.com/user/repos?page=2>; rel="next"' },
+          }),
+        )
+        .mockResolvedValueOnce(mockResponse(page2))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const all = await getUserRepos('tok', { cache: false })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(all).toHaveLength(102)
+      expect(all[101].name).toBe('r102')
+    })
+
+    it('rel="next"가 없으면 한 페이지에서 멈춘다', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse([repo(1, 'only')]))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const all = await getUserRepos('tok', { cache: false })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(all).toHaveLength(1)
+    })
+
+    it('maxPages 상한에서 캡한다', async () => {
+      const full = Array.from({ length: 100 }, (_, i) => repo(i + 1, `r${i + 1}`))
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse(full, {
+          headers: { Link: '<https://api.github.com/user/repos?page=99>; rel="next"' },
+        }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await getUserRepos('tok', { cache: false, maxPages: 2, perPage: 100 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
   })
 })

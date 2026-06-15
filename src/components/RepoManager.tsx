@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Repo } from '../data/mockData'
 import type { RecentRepoEntry, Workspace } from '../utils/repoStore'
 import { parseGitHubRepo } from '../utils/github'
+import { getUserRepos, GithubApiError, type GithubRepoSummary } from '../utils/githubClient'
 import { ModalShell } from './modals/ModalShell'
 import { ConfirmModal } from './modals/ConfirmModal'
 
@@ -48,7 +49,10 @@ const IconGitLab = () => (
 
 // 사이드바 선택: 내장 보기('all'/'favorites'/'recent') 또는 사용자 워크스페이스(id)
 type View = 'all' | 'favorites' | 'recent'
-type Selection = { kind: 'view'; view: View } | { kind: 'workspace'; id: string }
+type Selection =
+  | { kind: 'view'; view: View }
+  | { kind: 'workspace'; id: string }
+  | { kind: 'github' }
 
 // path → 표시용 레포 정보(이름/브랜치). 열린 레포가 우선, 없으면 최근 캐시, 둘 다 없으면 폴더명.
 interface RepoDesc { name: string; branch: string; dirty?: number; open: boolean }
@@ -218,10 +222,103 @@ function CloneModal({ onClone, onClose }: { onClone: (url: string) => Promise<bo
   )
 }
 
+// ── GitHub 레포 브라우저 (B18) ──
+const IconLock = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3.5" y="7" width="9" height="6" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+)
+
+interface GithubBrowserProps {
+  repos: GithubRepoSummary[]
+  total: number
+  loading: boolean
+  error: string | null
+  query: string
+  cloningFullName: string | null
+  isLocal: (fullName: string) => boolean
+  onQueryChange: (q: string) => void
+  onRefresh: () => void
+  onAction: (repo: GithubRepoSummary) => void
+}
+function GithubBrowser({
+  repos, total, loading, error, query, cloningFullName,
+  isLocal, onQueryChange, onRefresh, onAction,
+}: GithubBrowserProps) {
+  return (
+    <>
+      <div className="rm-filter-bar">
+        <div className="rm-search-wrap">
+          <IconSearch />
+          <input
+            type="text"
+            placeholder="GitHub 레포 검색 (이름 / owner/name)…"
+            value={query}
+            onChange={e => onQueryChange(e.target.value)}
+          />
+        </div>
+        <button
+          className="pr-refresh-btn"
+          title="새로고침"
+          disabled={loading}
+          onClick={onRefresh}
+        >
+          <span style={loading ? { display: 'inline-block', animation: 'spin 600ms linear infinite' } : undefined}>⟳</span>
+        </button>
+        {total > 0 && <span className="rm-gh-count">{repos.length} / {total}</span>}
+      </div>
+
+      <div className="rm-list">
+        {loading && repos.length === 0 ? (
+          <div className="rm-gh-status"><span className="sett-spinner" /> 레포 목록 불러오는 중…</div>
+        ) : error ? (
+          <div className="rm-gh-status rm-gh-error">{error}</div>
+        ) : repos.length === 0 ? (
+          <div className="rm-empty-section">
+            {total === 0 ? '표시할 GitHub 레포가 없습니다.' : '검색 결과가 없습니다.'}
+          </div>
+        ) : (
+          repos.map(repo => {
+            const local = isLocal(repo.full_name)
+            const cloning = cloningFullName === repo.full_name
+            return (
+              <div key={repo.id} className="rm-gh-row">
+                <div className="rm-gh-info">
+                  <div className="rm-gh-title">
+                    <span className="rm-gh-name">{repo.name}</span>
+                    {repo.private && <span className="rm-gh-meta-ic" title="비공개"><IconLock /></span>}
+                    {repo.archived && <span className="rm-gh-tag">archived</span>}
+                    {repo.fork && <span className="rm-gh-tag">fork</span>}
+                  </div>
+                  <div className="rm-gh-sub">
+                    <span className="rm-gh-full">{repo.full_name}</span>
+                    {repo.language && <span className="rm-gh-dot">·</span>}
+                    {repo.language && <span>{repo.language}</span>}
+                    {repo.stargazers_count > 0 && <span className="rm-gh-dot">·</span>}
+                    {repo.stargazers_count > 0 && <span>★ {repo.stargazers_count}</span>}
+                  </div>
+                </div>
+                <div className="rm-gh-action">
+                  <button
+                    className={`rm-action-btn${local ? '' : ' rm-primary'}`}
+                    disabled={cloning}
+                    onClick={() => onAction(repo)}
+                  >
+                    {cloning ? <span className="sett-spinner" /> : local ? '열기' : 'Clone'}
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </>
+  )
+}
+
 export interface RepoManagerProps {
   repos: Repo[]
   activeRepo: number
   githubConnected: boolean
+  githubToken: string
   recents: RecentRepoEntry[]
   favorites: string[]
   workspaces: Workspace[]
@@ -238,7 +335,7 @@ export interface RepoManagerProps {
 }
 
 export function RepoManager({
-  repos, activeRepo, githubConnected, recents, favorites, workspaces,
+  repos, activeRepo, githubConnected, githubToken, recents, favorites, workspaces,
   onToggleFavorite, onOpenPath, onRemoveRepo, onCreateWorkspace, onRenameWorkspace,
   onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, notify,
 }: RepoManagerProps) {
@@ -257,6 +354,15 @@ export function RepoManager({
   // 워크스페이스 인라인 이름변경
   const [renamingWs, setRenamingWs] = useState<string | null>(null)
   const [renameVal, setRenameVal] = useState('')
+
+  // ── GitHub 레포 브라우저 상태 (B18) ──
+  // path → "owner/name"(소문자). 로컬 매칭 판정용. 열린 레포 + 최근 캐시 모두 lazy 해석.
+  const [ghLocal, setGhLocal] = useState<Record<string, string>>({})
+  const [ghRepos, setGhRepos] = useState<GithubRepoSummary[] | null>(null)
+  const [ghLoading, setGhLoading] = useState(false)
+  const [ghError, setGhError] = useState<string | null>(null)
+  const [ghQuery, setGhQuery] = useState('')
+  const [ghCloning, setGhCloning] = useState<string | null>(null)
 
   const favSet = useMemo(() => new Set(favorites), [favorites])
 
@@ -283,6 +389,76 @@ export function RepoManager({
     })
     return () => { cancelled = true }
   }, [repos, owners])
+
+  // ── 로컬 레포의 "owner/name" 해석 (열린 레포 + 최근, remote에서 lazy) ──
+  // GitHub 브라우저의 열기 vs Clone 판정에 사용. 원격 호출 없이 getRemotes만.
+  useEffect(() => {
+    let cancelled = false
+    const paths = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path)])
+    paths.forEach(path => {
+      if (ghLocal[path] !== undefined) return
+      window.gitAPI?.getRemotes(path)
+        .then(remotes => {
+          if (cancelled) return
+          const origin = remotes.find(rm => rm.name === 'origin') ?? remotes[0]
+          const info = origin && parseGitHubRepo(origin.url)
+          setGhLocal(prev => ({ ...prev, [path]: info ? `${info.owner}/${info.repo}`.toLowerCase() : '' }))
+        })
+        .catch(() => { if (!cancelled) setGhLocal(prev => ({ ...prev, [path]: '' })) })
+    })
+    return () => { cancelled = true }
+  }, [repos, recents, ghLocal])
+
+  // full_name(소문자) → 로컬 path 매핑
+  const localByFullName = useMemo(() => {
+    const m = new Map<string, string>()
+    Object.entries(ghLocal).forEach(([path, fullName]) => {
+      if (fullName) m.set(fullName, path)
+    })
+    return m
+  }, [ghLocal])
+
+  // ── GitHub 레포 목록 fetch (마운트/선택/수동 새로고침) ──
+  const loadGithubRepos = useMemo(() => {
+    return async (force: boolean) => {
+      if (!githubToken) return
+      setGhLoading(true)
+      setGhError(null)
+      try {
+        const list = await getUserRepos(githubToken, force ? { cache: false } : undefined)
+        setGhRepos(list)
+      } catch (err) {
+        const msg = err instanceof GithubApiError
+          ? err.message
+          : err instanceof Error ? err.message : String(err)
+        setGhError(msg)
+      } finally {
+        setGhLoading(false)
+      }
+    }
+  }, [githubToken])
+
+  useEffect(() => {
+    if (sel.kind === 'github' && ghRepos === null && !ghLoading && !ghError) {
+      void loadGithubRepos(false)
+    }
+  }, [sel, ghRepos, ghLoading, ghError, loadGithubRepos])
+
+  const handleGhAction = async (repo: GithubRepoSummary) => {
+    const localPath = localByFullName.get(repo.full_name.toLowerCase())
+    if (localPath) {
+      onOpenPath(localPath, repo.name, repo.default_branch)
+      return
+    }
+    if (ghCloning) return
+    setGhCloning(repo.full_name)
+    try {
+      const ok = await onClone(repo.clone_url)
+      if (!ok) setGhCloning(null) // 성공 시 매니저가 닫히며 언마운트
+    } catch {
+      setGhCloning(null)
+    }
+  }
 
   // path → 표시정보 조회 (열린 레포 우선 → 최근 → 폴더명)
   const repoByPath = useMemo(() => {
@@ -336,6 +512,15 @@ export function RepoManager({
   const activeWs = sel.kind === 'workspace' ? workspaces.find(w => w.id === sel.id) ?? null : null
   const wsPaths = activeWs ? activeWs.paths.filter(p => matchesQuery(describe(p).name)) : []
   const menuTarget = menu ? describe(menu.path) : null
+  const isGithub = sel.kind === 'github'
+
+  const ghFiltered = useMemo(() => {
+    if (!ghRepos) return []
+    const q = ghQuery.trim().toLowerCase()
+    if (!q) return ghRepos
+    return ghRepos.filter(r =>
+      r.name.toLowerCase().includes(q) || r.full_name.toLowerCase().includes(q))
+  }, [ghRepos, ghQuery])
 
   return (
     <div className="rm-body">
@@ -406,10 +591,20 @@ export function RepoManager({
         <div className="rm-sidebar-divider" />
         <div className="rm-sidebar-label">서비스 연결</div>
         <div className="rm-sidebar-section">
-          <div className="rm-sidebar-item rm-disabled" title="준비 중">
-            <IconGitHub />GitHub
-            {githubConnected && <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--c-success)' }}>●</span>}
-          </div>
+          {githubConnected ? (
+            <div
+              className={`rm-sidebar-item${isGithub ? ' active' : ''}`}
+              title="내 GitHub 레포 둘러보기"
+              onClick={() => setSel({ kind: 'github' })}
+            >
+              <IconGitHub />GitHub
+              <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--c-success)' }}>●</span>
+            </div>
+          ) : (
+            <div className="rm-sidebar-item rm-disabled" title="GitHub 연결 필요 (설정에서 토큰 등록)">
+              <IconGitHub />GitHub
+            </div>
+          )}
           <div className="rm-sidebar-item rm-disabled" title="준비 중">
             <IconGitLab />GitLab
           </div>
@@ -445,6 +640,21 @@ export function RepoManager({
           </div>
         </div>
 
+        {isGithub ? (
+          <GithubBrowser
+            repos={ghFiltered}
+            total={ghRepos?.length ?? 0}
+            loading={ghLoading}
+            error={ghError}
+            query={ghQuery}
+            cloningFullName={ghCloning}
+            isLocal={fullName => localByFullName.has(fullName.toLowerCase())}
+            onQueryChange={setGhQuery}
+            onRefresh={() => void loadGithubRepos(true)}
+            onAction={repo => void handleGhAction(repo)}
+          />
+        ) : (
+        <>
         {/* Filter bar */}
         <div className="rm-filter-bar">
           <div className="rm-search-wrap">
@@ -552,6 +762,8 @@ export function RepoManager({
             </Section>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* ── 행 케밥 메뉴 ── */}

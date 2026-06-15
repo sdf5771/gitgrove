@@ -1106,6 +1106,7 @@ export default function App() {
             repos={repos}
             activeRepo={activeRepo}
             githubConnected={!!githubToken}
+            githubToken={githubToken}
             recents={recents}
             favorites={favorites}
             workspaces={workspaces}
