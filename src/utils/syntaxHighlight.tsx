@@ -16,7 +16,7 @@ export function HL({ s }: { s: string }) {
     else if (BUILTIN.has(tk))                         col = '#5fb8e6'
     else if (tk[0] === "'" || tk[0] === '"' || tk[0] === '`') col = '#93c5a8'
     else if (/^\d+$/.test(tk))                        col = '#e6a536'
-    else if (/^[{}\[\]();,=<>!&|+\-*/^~:?]+$/.test(tk)) col = '#6d8099'
+    else if (/^[{}[\]();,=<>!&|+\-*/^~:?]+$/.test(tk)) col = '#6d8099'
     tokens.push(col ? <span key={i++} style={{ color: col }}>{tk}</span> : <span key={i++}>{tk}</span>)
   }
   return <>{tokens}</>

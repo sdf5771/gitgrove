@@ -319,7 +319,7 @@ export default function App() {
       document.body.style.cursor = ''
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
-      try { localStorage.setItem(STORAGE_KEYS.rpanelWidth, String(rpanelWidthRef.current)) } catch {}
+      try { localStorage.setItem(STORAGE_KEYS.rpanelWidth, String(rpanelWidthRef.current)) } catch { /* ignore */ }
     }
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
@@ -924,7 +924,7 @@ export default function App() {
       'settings':      () => setShowSettings(true),
     }
     M[id]?.()
-  }, [notify, handlePull, handlePush, handleFetch])
+  }, [handlePull, handlePush, handleFetch])
 
   const handleCtxAction = useCallback((action: string) => {
     if (action === 'cherry-pick') setShowCherryPick(true)
@@ -957,7 +957,7 @@ export default function App() {
           .catch(err => notify('error', 'Tag 실패', err instanceof Error ? err.message : String(err)))
       }
     }
-  }, [ctxMenu, notify])
+  }, [ctxMenu, notify, repoPath, loadRepo])
 
   const handleBranchAction = useCallback((mode: BranchTab) => { setBranchTab(mode); setShowBranch(true) }, [])
 

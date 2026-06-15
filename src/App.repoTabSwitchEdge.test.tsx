@@ -119,7 +119,6 @@ describe('레포 탭 전환 — 진단/계측', () => {
     await waitFor(() => expect(screen.queryAllByText(FIXTURES['/repo/b'].commitMsg).length).toBeGreaterThan(0), { timeout: 3000 })
 
     // 진단: getLog 호출 순서 출력
-    // eslint-disable-next-line no-console
     console.log('GETLOG_CALLS', JSON.stringify(gitAPI.getLog.mock.calls.map(c => c[0])))
   })
 
@@ -134,7 +133,6 @@ describe('레포 탭 전환 — 진단/계측', () => {
     await waitFor(() => expect(screen.queryAllByText(FIXTURES['/repo/a'].commitMsg).length).toBeGreaterThan(0))
     // 마운트 후 repos가 localStorage에 어떤 id로 저장됐는지 (Date.now() churn 확인)
     const saved = JSON.parse(localStorage.getItem('gitgrove:repos')!)
-    // eslint-disable-next-line no-console
     console.log('SAVED_REPOS', JSON.stringify(saved))
     expect(saved[0].path).toBe('/repo/a')
   })

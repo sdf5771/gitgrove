@@ -5,7 +5,6 @@ type BranchAction = 'create' | 'rename' | 'delete'
 
 interface Props {
   activeBranch: string
-  onBranch?: (name: string) => void
   onBranchAction: (mode: BranchAction, name?: string) => void
   onBranchContextMenu?: (
     e: React.MouseEvent,
@@ -19,7 +18,7 @@ interface Props {
   style?: React.CSSProperties
 }
 
-export function BranchSidebar({ activeBranch, onBranch: _onBranch, onBranchAction, onBranchContextMenu, localBranches, remoteBranches, tags, style }: Props) {
+export function BranchSidebar({ activeBranch, onBranchAction, onBranchContextMenu, localBranches, remoteBranches, tags, style }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [query, setQuery] = useState('')
   const toggle = (k: string) => setCollapsed(p => ({ ...p, [k]: !p[k] }))
