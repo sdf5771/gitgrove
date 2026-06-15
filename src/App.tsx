@@ -226,9 +226,10 @@ export default function App() {
   const showAllBranchesRef = useRef(showAllBranches)
   useEffect(() => { logLimitRef.current = logLimit }, [logLimit])
   useEffect(() => { showAllBranchesRef.current = showAllBranches }, [showAllBranches])
-  // hunk 단위 stage/unstage 진행 상태 + StageArea 재마운트 키
+  // hunk 단위 stage/unstage 진행 상태
+  // (StageArea는 controlled — realUnstaged/realStaged prop 변경으로 자동 반영되므로
+  //  더 이상 remount key 트릭에 의존하지 않는다. B14)
   const [applyingHunk, setApplyingHunk] = useState<number | null>(null)
-  const [stageRefreshKey, setStageRefreshKey] = useState(0)
   const [diffFileStaged, setDiffFileStaged] = useState(false)
   const [realRemotes, setRealRemotes] = useState<string[]>([])
   const [realTags, setRealTags] = useState<string[]>([])
@@ -242,6 +243,9 @@ export default function App() {
   // ── diff 내용 (git:diff IPC) ──
   const [diffContent, setDiffContent] = useState<string>('')
   const [loadingDiff, setLoadingDiff] = useState(false)
+  // 포커스 복귀 자동 새로고침 시 열려있는 diff를 재로딩하기 위한 ref (B15)
+  const diffFileRef = useRef<FileEntry | null>(null)
+  const diffFileStagedRef = useRef(false)
 
   // ── CommitDetail 파일 diff 미리보기 ──
   const [commitDiffPreview, setCommitDiffPreview] = useState<string>('')
@@ -677,15 +681,6 @@ export default function App() {
     return () => { cancelled = true }
   }, [repoPath, githubToken])
 
-  // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
-  useEffect(() => {
-    const handleFocus = () => {
-      if (repoPath) loadRepo(repoPath, { silent: true })
-    }
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [repoPath, loadRepo])
-
   // ── 사이드바 리사이저 핸들러 ──
   const handleResizerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -719,6 +714,8 @@ export default function App() {
   const handleSelDiffFile = useCallback(async (f: FileEntry, staged = false) => {
     setDiffFile(f)
     setDiffFileStaged(staged)
+    diffFileRef.current = f
+    diffFileStagedRef.current = staged
     if (!repoPath) return
     setLoadingDiff(true)
     try {
@@ -732,15 +729,41 @@ export default function App() {
     }
   }, [repoPath])
 
+  // ── 열려있는 diff 재로딩 (B15) ──
+  // 포커스 복귀 자동 새로고침 시 외부 편집 결과를 반영한다. 스피너는 띄우지 않고
+  // (silent) 조용히 내용만 교체한다. 파일이 더 이상 변경목록에 없으면 빈 diff가 와
+  // 자연스럽게 빈 상태가 된다.
+  const refreshOpenDiff = useCallback(async () => {
+    const f = diffFileRef.current
+    if (!f || !repoPathRef.current) return
+    try {
+      const raw = await window.gitAPI?.getFileDiff(repoPathRef.current, f.p, diffFileStagedRef.current) ?? ''
+      setDiffContent(raw)
+    } catch (e) {
+      console.error('refreshOpenDiff failed:', e)
+    }
+  }, [])
+
+  // ── 윈도우 포커스 복귀 시 자동 새로고침 ──
+  useEffect(() => {
+    const handleFocus = () => {
+      if (!repoPath) return
+      // status/목록 갱신(Stage 목록은 controlled prop으로 자동 반영) + 열려있는 diff 재로딩(B15)
+      loadRepo(repoPath, { silent: true }).then(() => refreshOpenDiff())
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [repoPath, loadRepo, refreshOpenDiff])
+
   // ── hunk 단위 stage/unstage ──
   const handleApplyHunk = useCallback(async (hunkIndex: number) => {
     if (!repoPath || !diffFile || applyingHunk != null) return
     setApplyingHunk(hunkIndex)
     try {
       await window.gitAPI?.applyHunk(repoPath, diffFile.p, hunkIndex, diffFileStaged)
-      // 실제 git 상태 갱신 후 StageArea 재마운트 + 현재 파일 diff 재로딩
+      // 실제 git 상태 갱신 → StageArea는 realUnstaged/realStaged prop 변경으로 자동 반영.
+      // 현재 파일 diff도 재로딩.
       await loadRepo(repoPath, { silent: true })
-      setStageRefreshKey(k => k + 1)
       const raw = await window.gitAPI?.getFileDiff(repoPath, diffFile.p, diffFileStaged) ?? ''
       setDiffContent(raw)
       notify('success', diffFileStaged ? 'Hunk unstaged' : 'Hunk staged', diffFile.p)
@@ -1181,10 +1204,9 @@ export default function App() {
                     </>
                   ) : (
                     <StageArea
-                      key={stageRefreshKey}
                       onSelDiffFile={handleSelDiffFile}
-                      initialUnstaged={realUnstaged}
-                      initialStaged={realStaged}
+                      unstaged={realUnstaged}
+                      staged={realStaged}
                       repoPath={repoPath}
                       onCommitDone={async () => {
                         if (repoPath) {

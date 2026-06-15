@@ -80,7 +80,9 @@ export function DiffPanel({ file, rawDiff, loading, staged, onApplyHunk, applyin
           </div>
         ) : lines.length === 0 ? (
           <div style={{ padding: '24px', color: 'var(--c-text-faint)', fontSize: 12, textAlign: 'center' }}>
-            {rawDiff !== undefined ? 'diff 없음' : '파일을 선택하세요'}
+            {rawDiff !== undefined
+              ? (file?.s === 'A' ? '빈 파일 (변경 내용 없음)' : 'diff 없음')
+              : '파일을 선택하세요'}
           </div>
         ) : (
           <>
