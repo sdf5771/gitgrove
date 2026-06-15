@@ -3,6 +3,7 @@ import type { Repo } from '../data/mockData'
 import type { RecentRepoEntry, Workspace } from '../utils/repoStore'
 import { parseGitHubRepo } from '../utils/github'
 import { ModalShell } from './modals/ModalShell'
+import { ConfirmModal } from './modals/ConfirmModal'
 
 // ── 아이콘 (디자인 핸드오프 SVG 재현) ──
 const IconAllRepos = () => (
@@ -250,6 +251,9 @@ export function RepoManager({
   const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null)
   const [wsModal, setWsModal] = useState<{ pendingPath: string | null } | null>(null)
   const [cloneOpen, setCloneOpen] = useState(false)
+  // 파괴적 액션 확인 모달
+  const [deleteWsConfirm, setDeleteWsConfirm] = useState<Workspace | null>(null)
+  const [removeRepoConfirm, setRemoveRepoConfirm] = useState<{ path: string; name: string } | null>(null)
   // 워크스페이스 인라인 이름변경
   const [renamingWs, setRenamingWs] = useState<string | null>(null)
   const [renameVal, setRenameVal] = useState('')
@@ -392,7 +396,7 @@ export function RepoManager({
                 <button
                   className="rm-ws-del"
                   title="워크스페이스 삭제"
-                  onClick={e => { e.stopPropagation(); onDeleteWorkspace(w.id); notify('info', '워크스페이스 삭제', `'${w.name}' 삭제됨 (저장소는 보존)`) }}
+                  onClick={e => { e.stopPropagation(); setDeleteWsConfirm(w) }}
                 ><IconTrash /></button>
               </div>
             )
@@ -574,7 +578,7 @@ export function RepoManager({
               <IconPlus />새 워크스페이스…
             </div>
             <div className="rm-menu-sep" />
-            <div className="rm-menu-item danger" onClick={() => { onRemoveRepo(menu.path); setMenu(null) }}>
+            <div className="rm-menu-item danger" onClick={() => { setRemoveRepoConfirm({ path: menu.path, name: menuTarget.name }); setMenu(null) }}>
               <IconTrash />GitGrove에서 제거
             </div>
           </div>
@@ -588,6 +592,33 @@ export function RepoManager({
         <CloneModal
           onClone={async url => { const ok = await onClone(url); return ok }}
           onClose={() => setCloneOpen(false)}
+        />
+      )}
+      {deleteWsConfirm && (
+        <ConfirmModal
+          title="워크스페이스 삭제"
+          message={`'${deleteWsConfirm.name}' 워크스페이스를 삭제합니다. 저장소 파일은 삭제되지 않습니다.`}
+          confirmLabel="삭제"
+          danger={true}
+          onConfirm={() => {
+            onDeleteWorkspace(deleteWsConfirm.id)
+            notify('info', '워크스페이스 삭제', `'${deleteWsConfirm.name}' 삭제됨 (저장소는 보존)`)
+            setDeleteWsConfirm(null)
+          }}
+          onCancel={() => setDeleteWsConfirm(null)}
+        />
+      )}
+      {removeRepoConfirm && (
+        <ConfirmModal
+          title="GitGrove에서 제거"
+          message={`'${removeRepoConfirm.name}'을(를) 최근/즐겨찾기/워크스페이스에서 제거합니다. 디스크의 파일은 삭제되지 않습니다.`}
+          confirmLabel="제거"
+          danger={true}
+          onConfirm={() => {
+            onRemoveRepo(removeRepoConfirm.path)
+            setRemoveRepoConfirm(null)
+          }}
+          onCancel={() => setRemoveRepoConfirm(null)}
         />
       )}
     </div>

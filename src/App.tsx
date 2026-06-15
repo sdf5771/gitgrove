@@ -105,18 +105,26 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-      <div className="repo-tabs">
+      <div className="repo-tabs" role="tablist">
         {repos.map((r, i) => (
-          <div key={r.id} className={`repo-tab${i === active ? ' on' : ''}`} onClick={() => onSelect(i)}>
+          <div
+            key={r.id}
+            className={`repo-tab${i === active ? ' on' : ''}`}
+            role="tab"
+            tabIndex={0}
+            aria-selected={i === active}
+            onClick={() => onSelect(i)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i) } }}
+          >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .7, flexShrink: 0 }}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
             {r.dirty && <span className="repo-tab-dirty" title="Uncommitted changes" />}
             <span>{r.name}</span>
             {r.behind > 0 && <span style={{ fontSize: 9, color: 'var(--c-warning)', fontFamily: 'var(--font-mono)' }}>↓{r.behind}</span>}
-            <button className="repo-tab-close" onClick={e => { e.stopPropagation(); onClose(i) }}>×</button>
+            <button className="repo-tab-close" aria-label={`${r.name} 탭 닫기`} onClick={e => { e.stopPropagation(); onClose(i) }}>×</button>
           </div>
         ))}
       </div>
-      <button className="repo-tab-add" onClick={onAdd} title="Add repository">+</button>
+      <button className="repo-tab-add" onClick={onAdd} aria-label="저장소 추가" title="Add repository">+</button>
     </div>
   )
 }
