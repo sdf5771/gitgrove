@@ -23,7 +23,9 @@ import { BlameView } from './components/BlameView'
 import { PRView } from './components/PRView'
 import { StatusBar, type GithubUser } from './components/StatusBar'
 import { parseGitHubRepo, permissionToRole } from './utils/github'
+import type { RepoPermissions } from './utils/github'
 import { getGithubToken } from './utils/githubToken'
+import { getUser, getRepo } from './utils/githubClient'
 import { NotificationStack } from './components/NotificationStack'
 import { ContextMenu } from './components/ContextMenu'
 import { BranchContextMenu, type BranchMenuAction } from './components/BranchContextMenu'
@@ -639,11 +641,9 @@ export default function App() {
   const fetchGithubUser = useCallback(async () => {
     const token = await getGithubToken()
     if (!token) { setGithubUser(null); return }
-    fetch('https://api.github.com/user', {
-      headers: { Authorization: `token ${token}` }
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => setGithubUser(data ? {
+    // 공용 클라이언트로 일원화(B8). 기존 동작 유지: 실패/비-ok 시 null.
+    getUser<GithubUser & Record<string, unknown>>(token)
+      .then(({ data }) => setGithubUser(data ? {
         login: data.login,
         avatar_url: data.avatar_url,
         name: data.name,
@@ -679,11 +679,9 @@ export default function App() {
         const origin = remotes.find(r => r.name === 'origin') ?? remotes[0]
         const info = origin && parseGitHubRepo(origin.url)
         if (!info) { setRepoRole(null); return }
-        return fetch(`https://api.github.com/repos/${info.owner}/${info.repo}`, {
-          headers: { Authorization: `token ${githubToken}` },
-        })
-          .then(r => r.ok ? r.json() : null)
-          .then(data => { if (!cancelled) setRepoRole(permissionToRole(data?.permissions)) })
+        // 공용 클라이언트로 일원화(B8). 권한 배지는 자주 안 바뀌므로 캐시 허용.
+        return getRepo<{ permissions?: RepoPermissions }>(info.owner, info.repo, githubToken)
+          .then(({ data }) => { if (!cancelled) setRepoRole(permissionToRole(data?.permissions)) })
       })
       .catch(() => { if (!cancelled) setRepoRole(null) })
     return () => { cancelled = true }
