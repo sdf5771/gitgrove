@@ -214,6 +214,102 @@ export async function getUserRepos(
   return out
 }
 
+// ── cross-repo PR/이슈 인박스 (B19) ──
+
+/**
+ * GET /search/issues 응답 중 UI가 쓰는 필드만 추린 타입.
+ * search/issues 응답엔 repo full_name이 직접 없고 `repository_url`
+ * (`https://api.github.com/repos/{owner}/{repo}`)만 있으므로,
+ * owner/name은 `parseRepoFromUrl`로 파싱한다.
+ */
+export interface GithubIssueSearchItem {
+  id: number
+  number: number
+  title: string
+  html_url: string
+  state: string
+  repository_url: string
+  /** 있으면 PR(없으면 이슈) */
+  pull_request?: { html_url?: string }
+  user: { login: string } | null
+  updated_at: string
+  comments: number
+  labels: Array<{ name: string; color?: string }>
+}
+
+export interface GithubSearchIssuesResponse {
+  total_count: number
+  incomplete_results: boolean
+  items: GithubIssueSearchItem[]
+}
+
+export interface GetSearchIssuesOptions extends Partial<GhRequestOptions> {
+  /** 페이지당 항목 수(기본 50) */
+  perPage?: number
+}
+
+/**
+ * `repository_url`(`.../repos/{owner}/{repo}`)에서 owner/name을 파싱한다.
+ * 형식이 안 맞으면 null.
+ */
+export function parseRepoFromUrl(repositoryUrl: string): { owner: string; repo: string; fullName: string } | null {
+  const m = repositoryUrl.match(/\/repos\/([^/]+)\/([^/]+)\/?$/)
+  if (!m) return null
+  const owner = m[1]
+  const repo = m[2]
+  return { owner, repo, fullName: `${owner}/${repo}` }
+}
+
+/**
+ * GET /search/issues?q=<encoded>&per_page=50&sort=updated
+ * search API는 별도 rate-limit(분당 30)이라 캐시를 허용한다(짧은 TTL).
+ * 수동 새로고침 시 `cache: false`로 bypass.
+ */
+export async function getSearchIssues(
+  token: string,
+  q: string,
+  opts?: GetSearchIssuesOptions,
+): Promise<GithubSearchIssuesResponse> {
+  const perPage = opts?.perPage ?? 50
+  const { perPage: _p, ...reqOpts } = opts ?? {}
+  void _p
+  const path = `/search/issues?q=${encodeURIComponent(q)}&per_page=${perPage}&sort=updated`
+  const res = await ghRequest<GithubSearchIssuesResponse>(path, { token, ttl: 30_000, ...reqOpts })
+  return res.data
+}
+
+// ── 글로벌 알림 (B20) ──
+
+/** GET /notifications 응답 중 UI가 쓰는 필드만 추린 타입 */
+export interface GithubNotification {
+  id: string
+  reason: string
+  unread: boolean
+  updated_at: string
+  subject: { title: string; type: string; url: string | null }
+  repository: { full_name: string; html_url?: string }
+}
+
+export interface GetNotificationsOptions extends Partial<GhRequestOptions> {
+  /** 페이지당 항목 수(기본 30) */
+  perPage?: number
+}
+
+/**
+ * GET /notifications?per_page=30 — 기본은 unread만 반환한다.
+ * 폴링 빈도가 낮아도 항상 최신을 보고 싶으므로 호출부에서 cache:false 권장.
+ */
+export async function getNotifications(
+  token: string,
+  opts?: GetNotificationsOptions,
+): Promise<GithubNotification[]> {
+  const perPage = opts?.perPage ?? 30
+  const { perPage: _p, ...reqOpts } = opts ?? {}
+  void _p
+  const res = await ghRequest<GithubNotification[]>(`/notifications?per_page=${perPage}`, { token, ...reqOpts })
+  return res.data
+}
+
 /** 테스트/연결해제 시 캐시 초기화용 */
 export function clearGithubCache(): void {
   cache.clear()

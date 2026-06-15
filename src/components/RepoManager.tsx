@@ -5,6 +5,7 @@ import { parseGitHubRepo } from '../utils/github'
 import { getUserRepos, GithubApiError, type GithubRepoSummary } from '../utils/githubClient'
 import { ModalShell } from './modals/ModalShell'
 import { ConfirmModal } from './modals/ConfirmModal'
+import { GithubInbox } from './GithubInbox'
 
 // ── 아이콘 (디자인 핸드오프 SVG 재현) ──
 const IconAllRepos = () => (
@@ -46,6 +47,9 @@ const IconGitHub = () => (
 const IconGitLab = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="5" width="5" height="8" rx="1"/><rect x="9" y="3" width="5" height="10" rx="1"/><path d="M7 9h2"/></svg>
 )
+const IconInbox = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 9l2-6h8l2 6M2 9v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9M2 9h3l1 2h4l1-2h3"/></svg>
+)
 
 // 사이드바 선택: 내장 보기('all'/'favorites'/'recent') 또는 사용자 워크스페이스(id)
 type View = 'all' | 'favorites' | 'recent'
@@ -53,6 +57,7 @@ type Selection =
   | { kind: 'view'; view: View }
   | { kind: 'workspace'; id: string }
   | { kind: 'github' }
+  | { kind: 'inbox' }
 
 // path → 표시용 레포 정보(이름/브랜치). 열린 레포가 우선, 없으면 최근 캐시, 둘 다 없으면 폴더명.
 interface RepoDesc { name: string; branch: string; dirty?: number; open: boolean }
@@ -319,6 +324,8 @@ export interface RepoManagerProps {
   activeRepo: number
   githubConnected: boolean
   githubToken: string
+  /** 본인 GitHub login (인박스 검색 쿼리용). 미연결이면 null */
+  githubLogin: string | null
   recents: RecentRepoEntry[]
   favorites: string[]
   workspaces: Workspace[]
@@ -331,13 +338,15 @@ export interface RepoManagerProps {
   onToggleRepoInWorkspace: (id: string, path: string) => void
   onClone: (url: string) => Promise<boolean>
   onBrowse: () => void
+  /** 외부 브라우저로 URL 열기 (인박스 항목 클릭) */
+  onOpenUrl: (url: string) => void
   notify: (type: 'info' | 'success' | 'warning' | 'error', title: string, body: string) => void
 }
 
 export function RepoManager({
-  repos, activeRepo, githubConnected, githubToken, recents, favorites, workspaces,
+  repos, activeRepo, githubConnected, githubToken, githubLogin, recents, favorites, workspaces,
   onToggleFavorite, onOpenPath, onRemoveRepo, onCreateWorkspace, onRenameWorkspace,
-  onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, notify,
+  onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, onOpenUrl, notify,
 }: RepoManagerProps) {
   const [sel, setSel] = useState<Selection>({ kind: 'view', view: 'all' })
   const [query, setQuery] = useState('')
@@ -513,6 +522,7 @@ export function RepoManager({
   const wsPaths = activeWs ? activeWs.paths.filter(p => matchesQuery(describe(p).name)) : []
   const menuTarget = menu ? describe(menu.path) : null
   const isGithub = sel.kind === 'github'
+  const isInbox = sel.kind === 'inbox'
 
   const ghFiltered = useMemo(() => {
     if (!ghRepos) return []
@@ -591,6 +601,19 @@ export function RepoManager({
         <div className="rm-sidebar-divider" />
         <div className="rm-sidebar-label">서비스 연결</div>
         <div className="rm-sidebar-section">
+          {githubConnected && githubLogin ? (
+            <div
+              className={`rm-sidebar-item${isInbox ? ' active' : ''}`}
+              title="모든 레포의 내 PR/이슈 모아보기"
+              onClick={() => setSel({ kind: 'inbox' })}
+            >
+              <IconInbox />내 작업
+            </div>
+          ) : (
+            <div className="rm-sidebar-item rm-disabled" title="내 작업 — GitHub 연결 필요 (설정에서 토큰 등록)">
+              <IconInbox />내 작업
+            </div>
+          )}
           {githubConnected ? (
             <div
               className={`rm-sidebar-item${isGithub ? ' active' : ''}`}
@@ -640,7 +663,13 @@ export function RepoManager({
           </div>
         </div>
 
-        {isGithub ? (
+        {isInbox ? (
+          <GithubInbox
+            githubToken={githubToken}
+            githubLogin={githubLogin}
+            onOpenUrl={onOpenUrl}
+          />
+        ) : isGithub ? (
           <GithubBrowser
             repos={ghFiltered}
             total={ghRepos?.length ?? 0}

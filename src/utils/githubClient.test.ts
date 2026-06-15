@@ -5,6 +5,9 @@ import {
   getPulls,
   getRateLimit,
   getUserRepos,
+  getSearchIssues,
+  getNotifications,
+  parseRepoFromUrl,
   clearGithubCache,
   GithubApiError,
 } from './githubClient'
@@ -246,6 +249,70 @@ describe('githubClient', () => {
 
       await getUserRepos('tok', { cache: false, maxPages: 2, perPage: 100 })
       expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('parseRepoFromUrl (B19)', () => {
+    it('repository_url에서 owner/repo/fullName을 파싱한다', () => {
+      expect(parseRepoFromUrl('https://api.github.com/repos/octo/hello-world')).toEqual({
+        owner: 'octo',
+        repo: 'hello-world',
+        fullName: 'octo/hello-world',
+      })
+    })
+
+    it('끝 슬래시도 허용한다', () => {
+      expect(parseRepoFromUrl('https://api.github.com/repos/a/b/')?.fullName).toBe('a/b')
+    })
+
+    it('형식이 안 맞으면 null', () => {
+      expect(parseRepoFromUrl('https://api.github.com/user')).toBeNull()
+      expect(parseRepoFromUrl('')).toBeNull()
+    })
+  })
+
+  describe('getSearchIssues (B19)', () => {
+    it('q를 인코딩하고 per_page/sort를 붙여 /search/issues를 호출, items를 반환', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse({ total_count: 1, incomplete_results: false, items: [{ id: 1, number: 7 }] }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const res = await getSearchIssues('tok', 'is:open is:pr author:octo', { cache: false })
+      const url = fetchMock.mock.calls[0][0] as string
+      expect(url).toContain('/search/issues?q=')
+      expect(url).toContain(encodeURIComponent('is:open is:pr author:octo'))
+      expect(url).toContain('per_page=50')
+      expect(url).toContain('sort=updated')
+      expect(res.items).toHaveLength(1)
+      expect(res.items[0].number).toBe(7)
+    })
+
+    it('짧은 TTL로 캐시를 허용한다(같은 쿼리 재요청은 fetch 1회)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse({ total_count: 0, incomplete_results: false, items: [] }),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await getSearchIssues('tok', 'q1')
+      await getSearchIssues('tok', 'q1')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('getNotifications (B20)', () => {
+    it('/notifications?per_page=30 을 호출하고 배열을 반환', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse([
+          { id: '1', reason: 'review_requested', unread: true, subject: { title: 'PR', type: 'PullRequest', url: null }, repository: { full_name: 'o/r' } },
+        ]),
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      const list = await getNotifications('tok', { cache: false })
+      expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/notifications?per_page=30')
+      expect(list).toHaveLength(1)
+      expect(list[0].reason).toBe('review_requested')
     })
   })
 })
