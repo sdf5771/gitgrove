@@ -39,6 +39,7 @@ import { SettingsPanel } from './components/modals/SettingsPanel'
 import { AddRepoModal } from './components/modals/AddRepoModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
 import { RepoManager } from './components/RepoManager'
+import { NotificationBell } from './components/NotificationBell'
 import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loadWorkspaces, saveWorkspaces, createWorkspaceId, type RecentRepoEntry, type Workspace } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
 
@@ -1039,6 +1040,10 @@ export default function App() {
           onAdd={() => setShowAddRepo(true)}
           onClose={handleCloseRepoTab}
         />
+        <NotificationBell
+          githubToken={githubToken}
+          onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
+        />
         <div className="sep" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>
           <span style={{ color: 'var(--c-gold-300)' }}>⎇</span>{displayBranch}
@@ -1107,6 +1112,7 @@ export default function App() {
             activeRepo={activeRepo}
             githubConnected={!!githubToken}
             githubToken={githubToken}
+            githubLogin={githubUser?.login ?? null}
             recents={recents}
             favorites={favorites}
             workspaces={workspaces}
@@ -1124,6 +1130,7 @@ export default function App() {
                 if (picked) { setShowRepoManager(false); await loadRepo(picked, { activate: true }) }
               })()
             }}
+            onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
             notify={notify}
           />
         ) : isLoading ? renderLoading() : !repoPath ? renderEmptyState() : (

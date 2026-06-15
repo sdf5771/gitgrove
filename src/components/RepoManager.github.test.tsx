@@ -37,6 +37,7 @@ function baseProps(over?: Partial<RepoManagerProps>): RepoManagerProps {
     activeRepo: 0,
     githubConnected: true,
     githubToken: 'tok',
+    githubLogin: 'octo',
     recents: [],
     favorites: [],
     workspaces: [],
@@ -49,6 +50,7 @@ function baseProps(over?: Partial<RepoManagerProps>): RepoManagerProps {
     onToggleRepoInWorkspace: vi.fn(),
     onClone: vi.fn(async () => true),
     onBrowse: vi.fn(),
+    onOpenUrl: vi.fn(),
     notify: vi.fn(),
     ...over,
   }
