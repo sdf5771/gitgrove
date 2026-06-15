@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ConfirmModal } from './ConfirmModal'
 
 interface StashItem {
@@ -23,7 +23,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
 
   const showToast = (t: string) => { setToast(t); setTimeout(() => setToast(''), 1800) }
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     if (!repoPath) return
     setLoading(true)
     try {
@@ -34,9 +34,9 @@ export function StashPanel({ onClose, repoPath }: Props) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [repoPath])
 
-  useEffect(() => { reload() }, [repoPath])
+  useEffect(() => { reload() }, [reload])
 
   const push = async () => {
     try {

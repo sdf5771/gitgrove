@@ -60,7 +60,7 @@ const emptyStatus: GitStatusResult = { staged: [], unstaged: [] }
 export function installGitApiMock() {
   const getLog = vi.fn(async (path: string) => logFor(path))
   const getBranches = vi.fn(async (path: string) => branchesFor(path))
-  const getStatus = vi.fn(async (_path: string) => emptyStatus)
+  const getStatus = vi.fn(async () => emptyStatus)
   const getRemotes = vi.fn(async (path: string) => {
     const f = FIXTURES[path]
     return f ? [{ name: 'origin', url: `git@github.com:test/${path.split('/').pop()}.git` }] : []

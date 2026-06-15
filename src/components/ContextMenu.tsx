@@ -9,7 +9,7 @@ interface Props {
   onAction: (action: string) => void
 }
 
-export function ContextMenu({ x, y, commit: _commit, onClose, onAction }: Props) {
+export function ContextMenu({ x, y, onClose, onAction }: Props) {
   const [showReset, setShowReset] = useState(false)
 
   useEffect(() => {

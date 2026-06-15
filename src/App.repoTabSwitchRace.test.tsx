@@ -65,7 +65,6 @@ describe('레포 탭 전환 — 레이스 근본원인 계측', () => {
     await new Promise(r => setTimeout(r, 500))
 
     const tabBEl = screen.getByText('b').closest('.repo-tab')!
-    // eslint-disable-next-line no-console
     console.log('RACE_RESULT',
       'tabB_active=', tabBEl.className.includes('on'),
       'showsA=', screen.queryAllByText(FIXTURES['/repo/a'].commitMsg).length > 0,
@@ -97,7 +96,6 @@ describe('레포 탭 전환 — 순수 탭간 레이스 (restore effect 무관)'
     await user.click(tabB)
     await new Promise(r => setTimeout(r, 400))
 
-    // eslint-disable-next-line no-console
     console.log('PURE_RACE',
       'showsA=', screen.queryAllByText(FIXTURES['/repo/a'].commitMsg).length > 0,
       'showsB=', screen.queryAllByText(FIXTURES['/repo/b'].commitMsg).length > 0)

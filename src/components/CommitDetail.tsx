@@ -16,10 +16,13 @@ interface Props {
 
 export function CommitDetail({ commit, files, loadingFiles, fileDiffPreview, loadingPreview, onOpenDiff, onFileSelect, onCherryPick, onBlame }: Props) {
   const [selFile, setSelFile] = useState(0)
+  // 커밋이 바뀔 때만 선택을 초기화하고 첫 파일을 선택한다.
+  // files/onFileSelect는 비동기로 도착·재생성되므로 deps에 넣으면 사용자 선택이 리셋된다.
   useEffect(() => {
     setSelFile(0)
     const firstPath = files?.[0]?.path
     if (firstPath) onFileSelect?.(firstPath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commit])
 
   if (!commit) {
