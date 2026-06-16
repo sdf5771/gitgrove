@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Geuru, type GeuruExpr } from './Geuru'
 
 export interface GithubUser {
   login: string
@@ -26,11 +27,24 @@ interface Props {
   repoRole?: string | null
   // Repository Manager 표시 중에는 브랜치 대신 레포 요약을 보여준다(자체 상태바 통합).
   repoSummary?: { total: number; dirty: number } | null
+  // 좌측 끝 그루 표정 — 저장소 상태에 1:1 매핑. clean→sleepy, syncing→think, conflict→conflict.
+  geuruState?: GeuruExpr
 }
 
-export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary }: Props) {
+const GEURU_TITLE: Partial<Record<GeuruExpr, string>> = {
+  idle: '그루 — 대기 중',
+  sleepy: '그루 — 변경사항 없음',
+  think: '그루 — 동기화 중',
+  merge: '그루 — 동기화 완료',
+  conflict: '그루 — 충돌 해결 필요',
+}
+
+export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary, geuruState = 'idle' }: Props) {
   return (
     <div className="sbar">
+      <span className="geuru-status" title={GEURU_TITLE[geuruState]}>
+        <Geuru expr={geuruState} scale={1.3} title={GEURU_TITLE[geuruState]} />
+      </span>
       {repoSummary ? (
         <div className="sbranch">
           <span className="sdot" />

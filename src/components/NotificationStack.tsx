@@ -1,4 +1,5 @@
 import type { Notification } from '../hooks/useNotifications'
+import { Geuru } from './Geuru'
 
 const icons = { success: '✓', info: 'ℹ', warning: '⚠', error: '✗' } as const
 const colors = { success: 'var(--c-success)', info: 'var(--c-info)', warning: 'var(--c-warning)', error: 'var(--c-danger)' } as const
@@ -14,7 +15,9 @@ export function NotificationStack({ notifs, onDismiss }: Props) {
       {notifs.map(n => (
         <div key={n.id} className={`notif notif-${n.type}`} style={n.onClick ? { cursor: 'pointer' } : undefined}
           onClick={() => { n.onClick?.(); onDismiss(n.id) }}>
-          <span className="notif-icon" style={{ color: colors[n.type] }}>{icons[n.type]}</span>
+          {n.geuru
+            ? <span className="notif-geuru"><Geuru expr={n.geuru} scale={2.2} title="그루" /></span>
+            : <span className="notif-icon" style={{ color: colors[n.type] }}>{icons[n.type]}</span>}
           <div className="notif-content">
             <div className="notif-title">{n.title}</div>
             {n.msg && <div className="notif-msg">{n.msg}{n.onClick && <span style={{ marginLeft: 6, color: 'var(--c-info)', fontSize: 10 }}>↗ 클릭하여 다운로드</span>}</div>}

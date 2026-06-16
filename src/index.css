@@ -951,3 +951,28 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-status-dot.green{background:var(--c-success);}
 .rm-status-dot.gold{background:var(--c-gold-400);}
 .rm-status-bar-right{margin-left:auto;display:flex;align-items:center;gap:16px;}
+
+/* ── 그루(Geuru) 마스코트 ── */
+/* 픽셀 스프라이트 — 정수배 확대 시 또렷하게(보간 금지). */
+.sprite{display:block;image-rendering:pixelated;image-rendering:crisp-edges;}
+
+/* 타이틀바 브랜드 마크 슬롯 */
+.title-bar .mark-slot{display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+/* 하단 상태바 좌측 끝 그루 */
+.geuru-status{display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex-shrink:0;border-radius:4px;transition:background .15s;}
+.geuru-status:hover{background:var(--c-gold-bg-soft);}
+
+/* RepoManager 헤더 인사 pill */
+.rm-title-row{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
+.rm-title-row .rm-content-title{margin-bottom:0;}
+.rm-geuru-greet{display:flex;align-items:center;gap:8px;margin-left:auto;padding:5px 11px 5px 8px;background:var(--c-gold-bg-soft);border:1px solid var(--c-gold-border);border-radius:999px;}
+.rm-geuru-greet .txt{font-family:var(--font-mono);font-size:11px;color:var(--c-gold-300);}
+
+/* 즐겨찾기 빈 상태 — 그루 */
+.rm-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:30px 20px;text-align:center;font-style:normal;}
+.rm-empty b{font-family:var(--font-display);font-size:14px;color:var(--c-text-strong);letter-spacing:.3px;}
+.rm-empty span{font-size:12px;color:var(--c-text-muted);line-height:1.6;}
+
+/* 토스트 좌측 그루 */
+.notif-geuru{flex-shrink:0;display:flex;align-items:center;margin-top:1px;}

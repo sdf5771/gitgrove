@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import type { GeuruExpr } from '../components/Geuru'
 
 export interface Notification {
   id: number
@@ -7,6 +8,8 @@ export interface Notification {
   msg?: string
   dur: number
   onClick?: () => void
+  // 토스트 좌측 그루 표정. 머지/푸시 성공 등에서 'merge'로 지정.
+  geuru?: GeuruExpr
 }
 
 export function useNotifications() {
@@ -17,12 +20,13 @@ export function useNotifications() {
     title: string,
     msg?: string,
     onClick?: (() => void) | number,
-    dur = 4000
+    dur = 4000,
+    geuru?: GeuruExpr
   ) => {
     const resolvedOnClick = typeof onClick === 'function' ? onClick : undefined
     const resolvedDur = typeof onClick === 'number' ? onClick : dur
     const id = Date.now() + Math.random()
-    setNotifs(p => [...p.slice(-3), { id, type, title, msg, dur: resolvedDur, onClick: resolvedOnClick }])
+    setNotifs(p => [...p.slice(-3), { id, type, title, msg, dur: resolvedDur, onClick: resolvedOnClick, geuru }])
     setTimeout(() => setNotifs(p => p.filter(n => n.id !== id)), resolvedDur + 400)
   }, [])
 
