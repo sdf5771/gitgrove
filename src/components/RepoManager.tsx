@@ -6,6 +6,7 @@ import { getUserRepos, GithubApiError, type GithubRepoSummary } from '../utils/g
 import { ModalShell } from './modals/ModalShell'
 import { ConfirmModal } from './modals/ConfirmModal'
 import { GithubInbox } from './GithubInbox'
+import { Geuru } from './Geuru'
 
 // ── 아이콘 (디자인 핸드오프 SVG 재현) ──
 const IconAllRepos = () => (
@@ -637,7 +638,13 @@ export function RepoManager({
       {/* ── Main ── */}
       <div className="rm-main">
         <div className="rm-content-header">
-          <div className="rm-content-title">Repository Management</div>
+          <div className="rm-title-row">
+            <div className="rm-content-title">Repository Management</div>
+            <span className="rm-geuru-greet">
+              <Geuru expr="happy" scale={1.2} title="그루" />
+              <span className="txt">{repos.length}개 저장소, 오늘도 무럭무럭</span>
+            </span>
+          </div>
           <div className="rm-action-bar">
             <button className="rm-action-btn" onClick={() => setCloneOpen(true)} title="원격 저장소 클론">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 8a6 6 0 1 1 12 0"/><path d="M8 3v2M5 4.5l1.5 1.5M11 4.5L9.5 6"/></svg>
@@ -724,7 +731,11 @@ export function RepoManager({
           {showFavorites && (
             <Section title="Favorites" count={favoriteRepos.length}>
               {favoriteRepos.length === 0 ? (
-                <div className="rm-empty-section">즐겨찾기한 저장소가 없습니다. ☆ 를 클릭해 추가하세요.</div>
+                <div className="rm-empty rm-empty-section">
+                  <Geuru expr="sleepy" scale={3.4} title="그루" />
+                  <b>즐겨찾기한 저장소가 없어요</b>
+                  <span>행의 ☆ 를 누르면 그루가 여기에 모아둘게요.</span>
+                </div>
               ) : favoriteRepos.map(r => (
                 <RepoRow
                   key={r.path}

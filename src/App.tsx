@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import './App.css'
 import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
-import { LogoIcon } from './components/LogoIcon'
+import { Geuru, type GeuruExpr } from './components/Geuru'
 
 // ──────────────────────────────────────────────
 // localStorage 키 상수
@@ -536,7 +536,7 @@ export default function App() {
     setRemoteOp('push')
     try {
       const result = await window.gitAPI?.push(repoPath)
-      notify('success', 'Push 완료', result?.summary ?? '')
+      notify('success', 'Push 완료', result?.summary ?? '', undefined, 4000, 'merge')
     } catch (err) {
       notify('error', 'Push 실패', err instanceof Error ? err.message : String(err))
     } finally {
@@ -981,7 +981,7 @@ export default function App() {
     }
     else if (action === 'push' && repoPath) {
       window.gitAPI?.push(repoPath)
-        .then(() => notify('success', 'Push 완료', name))
+        .then(() => notify('success', 'Push 완료', name, undefined, 4000, 'merge'))
         .catch(e => notify('error', 'Push 실패', e instanceof Error ? e.message : String(e)))
     }
     else if (action === 'pull' && repoPath) {
@@ -993,6 +993,15 @@ export default function App() {
 
   const repo = repos[activeRepo] || null
   const displayBranch = repo?.branch || activeBranch
+
+  // 저장소 상태 → 그루 표정 1:1 매핑 (디자인: clean→sleepy, syncing→think, conflict→conflict)
+  const geuruState: GeuruExpr = showConflict
+    ? 'conflict'
+    : remoteOp
+      ? 'think'
+      : repo?.dirty
+        ? 'idle'
+        : 'sleepy'
 
   // ── 빈 화면 (레포 미선택, 로딩 중이 아님) ──
   const renderEmptyState = () => (
@@ -1023,7 +1032,7 @@ export default function App() {
           <div className="td td-y" onClick={() => window.ipcRenderer?.send('win-minimize')} />
           <div className="td td-g" onClick={() => window.ipcRenderer?.send('win-maximize')} />
         </div>
-        <span className="app-name" style={{ marginRight: 10, display: 'flex', alignItems: 'center', gap: 7 }}><LogoIcon size={22} />GitGrove</span>
+        <span className="app-name" style={{ marginRight: 10, display: 'flex', alignItems: 'center', gap: 7 }}><span className="mark-slot"><Geuru expr="happy" scale={1} title="GitGrove" /></span>GitGrove</span>
         <div style={{ width: 1, height: 20, background: 'var(--c-border)', flexShrink: 0, marginRight: 6 }} />
         <div
           className={`tb-repos-tab${showRepoManager ? ' on' : ''}`}
@@ -1289,7 +1298,7 @@ export default function App() {
         {/* Modals */}
         {showMerge       && <MergeModal
           onClose={() => setShowMerge(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', 'Merge complete', '') } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', 'Merge complete', '', undefined, 4000, 'merge') } }}
           branches={realBranches.length > 0 ? realBranches : undefined}
           repoPath={repoPath}
           currentBranch={activeBranch}
@@ -1342,6 +1351,7 @@ export default function App() {
         githubUser={githubUser}
         repoRole={repoRole}
         repoSummary={showRepoManager ? { total: repos.length, dirty: repos.filter(r => r.dirty).length } : null}
+        geuruState={showRepoManager ? 'idle' : geuruState}
       />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}

@@ -1,0 +1,233 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 280" style="width:100%;max-width:1280px;display:block;">
+  <defs>
+    
+
+    <pattern id="dp" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="12" cy="12" r=".85" fill="#181f36"></circle>
+    </pattern>
+
+    <linearGradient id="vl" x1="0" x2="1">
+      <stop offset="0%" stop-color="#0d1220"></stop>
+      <stop offset="100%" stop-color="#0d1220" stop-opacity="0"></stop>
+    </linearGradient>
+    <linearGradient id="vr" x1="0" x2="1">
+      <stop offset="0%" stop-color="#0d1220" stop-opacity="0"></stop>
+      <stop offset="100%" stop-color="#0d1220"></stop>
+    </linearGradient>
+    <linearGradient id="trunk-grad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#ffd770"></stop>
+      <stop offset="100%" stop-color="#c98a22"></stop>
+    </linearGradient>
+
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="b"></feGaussianBlur>
+      <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+    <filter id="softglow">
+      <feGaussianBlur stdDeviation="2" result="b"></feGaussianBlur>
+      <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+  </defs>
+
+  
+  <rect width="1280" height="280" fill="#0d1220"></rect>
+  <rect width="1280" height="280" fill="url(#dp)"></rect>
+  <rect y="0" width="1280" height="2" fill="#e6a536" opacity=".25"></rect>
+  <rect y="277" width="1280" height="3" fill="#e6a536" opacity=".1"></rect>
+  
+  <rect width="120" height="280" fill="url(#vl)"></rect>
+  <rect x="1160" width="120" height="280" fill="url(#vr)"></rect>
+
+
+  
+
+  
+  <line x1="196" y1="52" x2="196" y2="232" stroke="#e6a536" stroke-width="1.5" opacity=".15"></line>
+  <line x1="256" y1="52" x2="256" y2="108" stroke="#5fb8e6" stroke-width="1" opacity=".12"></line>
+  <line x1="136" y1="108" x2="136" y2="164" stroke="#ff6b6b" stroke-width="1" opacity=".12"></line>
+
+  
+  <line x1="196" y1="52" x2="196" y2="232" stroke="#e6a536" stroke-width="2" stroke-linecap="round" opacity=".65"></line>
+
+  
+  <path d="M196 108 C196 132 256 132 256 108 L256 52" stroke="#5fb8e6" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
+
+  
+  <path d="M196 164 C196 190 136 190 136 164 L136 108" stroke="#ff6b6b" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
+
+  
+  <path d="M256 52 C256 32 196 32 196 52" stroke="#5fb8e6" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"></path>
+
+  
+  <path d="M136 108 C136 88 196 88 196 108" stroke="#ff6b6b" stroke-width="1.5" fill="none" stroke-linecap="round" opacity=".38"></path>
+
+
+  
+  <g>
+    <rect x="180" y="10" width="8" height="8" fill="#6fcf7c"></rect>
+    <rect x="190" y="4" width="8" height="8" fill="#6fcf7c"></rect>
+    <rect x="200" y="2" width="8" height="8" fill="#6fcf7c"></rect>
+    <rect x="210" y="4" width="8" height="8" fill="#6fcf7c"></rect>
+    <rect x="220" y="10" width="8" height="8" fill="#6fcf7c"></rect>
+    <rect x="185" y="19" width="8" height="8" fill="#6fcf7c" opacity=".55"></rect>
+    <rect x="208" y="19" width="8" height="8" fill="#6fcf7c" opacity=".55"></rect>
+    <rect x="172" y="18" width="6" height="6" fill="#6fcf7c" opacity=".28"></rect>
+    <rect x="226" y="18" width="6" height="6" fill="#6fcf7c" opacity=".28"></rect>
+  </g>
+
+
+  
+
+  
+  <circle class="pulse" cx="196" cy="52" r="16" fill="none" stroke="#ffd770" stroke-width="1.5" opacity=".2"></circle>
+
+  
+  <circle cx="196" cy="52" r="11" fill="#ffd770" filter="url(#glow)"></circle>
+  <circle cx="196" cy="52" r="7" fill="#c98a22"></circle>
+  <circle cx="196" cy="52" r="3" fill="#ffd770"></circle>
+
+  
+  <rect x="212" y="44" width="80" height="17" rx="8.5" fill="#e6a536"></rect>
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="11" font-weight="bold" fill="#1a1206" x="252" y="55.5" text-anchor="middle">HEAD · main</text>
+
+  
+  <circle cx="196" cy="108" r="9" fill="#0d1220" stroke="#e6a536" stroke-width="2" filter="url(#softglow)"></circle>
+  <circle cx="196" cy="108" r="3.5" fill="#e6a536"></circle>
+  <text font-family="monospace" font-size="9" fill="#4a5578" x="211" y="112">a1b2c3d  merge auth</text>
+
+  
+  <circle cx="256" cy="52" r="9" fill="#5fb8e6" filter="url(#softglow)"></circle>
+  <circle cx="256" cy="52" r="4" fill="#2d7aa8"></circle>
+  <text font-family="monospace" font-size="9" fill="#4a5578" x="270" y="56">e5f6g7h</text>
+
+  
+  <circle cx="136" cy="108" r="9" fill="#ff6b6b" filter="url(#softglow)"></circle>
+  <circle cx="136" cy="108" r="4" fill="#b03030"></circle>
+  <text font-family="monospace" font-size="9" fill="#4a5578" x="80" y="112">j0k1l2m</text>
+
+  
+  <rect x="262" y="72" width="70" height="15" rx="7" fill="rgba(95,184,230,.1)" stroke="rgba(95,184,230,.3)" stroke-width="1"></rect>
+  <text font-family="monospace" font-size="9" fill="#5fb8e6" x="297" y="82.5" text-anchor="middle">feature/auth</text>
+
+  <rect x="84" y="126" width="62" height="15" rx="7" fill="rgba(255,107,107,.1)" stroke="rgba(255,107,107,.3)" stroke-width="1"></rect>
+  <text font-family="monospace" font-size="9" fill="#ff6b6b" x="115" y="136.5" text-anchor="middle">hotfix/fix</text>
+
+  
+  <circle cx="196" cy="164" r="8" fill="#0d1220" stroke="#e6a536" stroke-width="2"></circle>
+  <circle cx="196" cy="164" r="3" fill="#e6a536"></circle>
+  <text font-family="monospace" font-size="9" fill="#4a5578" x="211" y="168">h8i9j0k</text>
+
+  
+  <circle cx="196" cy="220" r="8" fill="#0d1220" stroke="#e6a536" stroke-width="2" opacity=".85"></circle>
+  <circle cx="196" cy="220" r="3" fill="#e6a536" opacity=".85"></circle>
+
+  
+  <rect x="210" y="212" width="56" height="17" rx="8" fill="rgba(111,207,124,.12)" stroke="#6fcf7c" stroke-width="1"></rect>
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="10" fill="#6fcf7c" x="238" y="223.5" text-anchor="middle">v1.0.0</text>
+
+
+  
+  
+  
+  <ellipse cx="146" cy="232" rx="40" ry="8" fill="#000" opacity=".34"></ellipse>
+  <rect x="94" y="225" width="5" height="9" fill="#3f9550"></rect>
+  <rect x="97" y="219" width="5" height="6" fill="#6fcf7c"></rect>
+  <rect x="193" y="226" width="5" height="8" fill="#3f9550"></rect>
+  <rect x="196" y="221" width="5" height="5" fill="#6fcf7c"></rect>
+  <g transform="translate(110,153) scale(4.5)" shape-rendering="crispEdges"><rect x="4" y="1" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="5" y="1" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="10" y="1" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="11" y="1" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="3" y="2" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="4" y="2" width="1.04" height="1.04" fill="#3f9550"></rect><rect x="5" y="2" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="6" y="2" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="9" y="2" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="10" y="2" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="11" y="2" width="1.04" height="1.04" fill="#3f9550"></rect><rect x="12" y="2" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="4" y="3" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="5" y="3" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="6" y="3" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="7" y="3" width="1.04" height="1.04" fill="#3f9550"></rect><rect x="8" y="3" width="1.04" height="1.04" fill="#3f9550"></rect><rect x="9" y="3" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="10" y="3" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="11" y="3" width="1.04" height="1.04" fill="#6fcf7c"></rect><rect x="7" y="4" width="1.04" height="1.04" fill="#3f9550"></rect><rect x="8" y="4" width="1.04" height="1.04" fill="#3f9550"></rect><rect x="4" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="11" y="5" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="3" y="6" width="1.04" height="1.04" fill="#ffd770"></rect><rect x="4" y="6" width="1.04" height="1.04" fill="#ffd770"></rect><rect x="5" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="11" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="12" y="6" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="2" y="7" width="1.04" height="1.04" fill="#ffd770"></rect><rect x="3" y="7" width="1.04" height="1.04" fill="#ffd770"></rect><rect x="4" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="11" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="12" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="13" y="7" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="2" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="3" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="4" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="8" width="1.04" height="1.04" fill="#f4ecd2"></rect><rect x="6" y="8" width="1.04" height="1.04" fill="#10182b"></rect><rect x="7" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="8" width="1.04" height="1.04" fill="#f4ecd2"></rect><rect x="10" y="8" width="1.04" height="1.04" fill="#10182b"></rect><rect x="11" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="12" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="13" y="8" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="2" y="9" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="3" y="9" width="1.04" height="1.04" fill="#ff9b6b"></rect><rect x="4" y="9" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="9" width="1.04" height="1.04" fill="#10182b"></rect><rect x="6" y="9" width="1.04" height="1.04" fill="#10182b"></rect><rect x="7" y="9" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="9" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="9" width="1.04" height="1.04" fill="#10182b"></rect><rect x="10" y="9" width="1.04" height="1.04" fill="#10182b"></rect><rect x="11" y="9" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="12" y="9" width="1.04" height="1.04" fill="#ff9b6b"></rect><rect x="13" y="9" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="2" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="3" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="4" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="10" width="1.04" height="1.04" fill="#7a4412"></rect><rect x="8" y="10" width="1.04" height="1.04" fill="#7a4412"></rect><rect x="9" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="11" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="12" y="10" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="13" y="10" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="2" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="3" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="4" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="11" y="11" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="12" y="11" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="13" y="11" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="3" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="4" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="12" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="11" y="12" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="12" y="12" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="3" y="13" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="4" y="13" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="5" y="13" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="13" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="13" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="13" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="13" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="13" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="11" y="13" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="12" y="13" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="4" y="14" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="5" y="14" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="6" y="14" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="7" y="14" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="8" y="14" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="9" y="14" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="10" y="14" width="1.04" height="1.04" fill="#e6a536"></rect><rect x="11" y="14" width="1.04" height="1.04" fill="#c98a22"></rect><rect x="4" y="15" width="1.04" height="1.04" fill="#8a5a1e"></rect><rect x="5" y="15" width="1.04" height="1.04" fill="#8a5a1e"></rect><rect x="10" y="15" width="1.04" height="1.04" fill="#8a5a1e"></rect><rect x="11" y="15" width="1.04" height="1.04" fill="#8a5a1e"></rect></g>
+
+  <line x1="428" y1="26" x2="428" y2="254" stroke="#2d3551" stroke-width="1.5"></line>
+
+
+  
+
+  
+  <g transform="translate(466,90) scale(0.4)">
+    <rect width="200" height="200" rx="38" fill="#161d30"></rect>
+    <rect x=".75" y=".75" width="198.5" height="198.5" rx="37.5" fill="none" stroke="#e6a536" stroke-width="2" opacity=".28"></rect>
+    <rect x="1" y="1" width="198" height="7" rx="37" fill="rgba(244,236,210,.04)"></rect>
+    
+    <rect x="97" y="38" width="6" height="128" fill="#e6a536"></rect>
+    <rect x="60" y="108" width="37" height="6" fill="#e6a536"></rect>
+    <rect x="60" y="60" width="6" height="54" fill="#e6a536"></rect>
+    <rect x="103" y="108" width="37" height="6" fill="#e6a536"></rect>
+    <rect x="134" y="60" width="6" height="54" fill="#e6a536"></rect>
+    
+    <rect x="92" y="152" width="16" height="16" rx="3" fill="#e6a536"></rect>
+    <rect x="92" y="102" width="16" height="16" rx="3" fill="#e6a536"></rect>
+    <rect x="92" y="30" width="16" height="16" rx="3" fill="#ffd770"></rect>
+    <rect x="96" y="34" width="8" height="8" rx="1.5" fill="#c98a22"></rect>
+    <rect x="52" y="52" width="16" height="16" rx="3" fill="#e6a536"></rect>
+    <rect x="132" y="52" width="16" height="16" rx="3" fill="#e6a536"></rect>
+    
+    <rect x="40" y="32" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="51" y="26" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="62" y="22" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="44" y="42" width="9" height="9" fill="#6fcf7c" opacity=".7"></rect>
+    <rect x="55" y="36" width="9" height="9" fill="#6fcf7c" opacity=".7"></rect>
+    <rect x="66" y="32" width="9" height="9" fill="#6fcf7c" opacity=".5"></rect>
+    <rect x="142" y="32" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="131" y="26" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="120" y="22" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="138" y="42" width="9" height="9" fill="#6fcf7c" opacity=".7"></rect>
+    <rect x="127" y="36" width="9" height="9" fill="#6fcf7c" opacity=".7"></rect>
+    <rect x="84" y="12" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="95" y="7" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="106" y="12" width="9" height="9" fill="#6fcf7c"></rect>
+    <rect x="89" y="21" width="9" height="9" fill="#6fcf7c" opacity=".8"></rect>
+    <rect x="101" y="21" width="9" height="9" fill="#6fcf7c" opacity=".8"></rect>
+  </g>
+
+  
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="62" font-weight="bold" letter-spacing="-1.5" fill="#f4ecd2" x="555" y="160">GitGrove</text>
+
+  
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="14" letter-spacing="0.06em" fill="#7888a8" x="556" y="186">A modern dark-mode Git GUI for macOS</text>
+
+  
+  <rect x="556" y="204" width="62" height="20" rx="10" fill="#161d30" stroke="#2d3551" stroke-width="1"></rect>
+  <text font-family="monospace" font-size="11" fill="#a0aec8" x="587" y="217.5" text-anchor="middle">macOS</text>
+
+  <rect x="626" y="204" width="46" height="20" rx="10" fill="rgba(111,207,124,.1)" stroke="rgba(111,207,124,.4)" stroke-width="1"></rect>
+  <text font-family="monospace" font-size="11" fill="#6fcf7c" x="649" y="217.5" text-anchor="middle">MIT</text>
+
+  <rect x="680" y="204" width="68" height="20" rx="10" fill="rgba(95,184,230,.1)" stroke="rgba(95,184,230,.4)" stroke-width="1"></rect>
+  <text font-family="monospace" font-size="11" fill="#5fb8e6" x="714" y="217.5" text-anchor="middle">React 18</text>
+
+  <rect x="756" y="204" width="70" height="20" rx="10" fill="rgba(195,154,217,.1)" stroke="rgba(195,154,217,.4)" stroke-width="1"></rect>
+  <text font-family="monospace" font-size="11" fill="#c39ad9" x="791" y="217.5" text-anchor="middle">Electron</text>
+
+  <rect x="834" y="204" width="84" height="20" rx="10" fill="rgba(95,184,230,.1)" stroke="rgba(95,184,230,.4)" stroke-width="1"></rect>
+  <text font-family="monospace" font-size="11" fill="#5fb8e6" x="876" y="217.5" text-anchor="middle">TypeScript</text>
+
+
+  
+  <rect x="4" y="4" width="5" height="5" fill="#e6a536" opacity=".6"></rect>
+  <rect x="11" y="4" width="5" height="5" fill="#e6a536" opacity=".24"></rect>
+  <rect x="4" y="11" width="5" height="5" fill="#e6a536" opacity=".24"></rect>
+  <rect x="1271" y="4" width="5" height="5" fill="#e6a536" opacity=".6"></rect>
+  <rect x="1264" y="4" width="5" height="5" fill="#e6a536" opacity=".24"></rect>
+  <rect x="1271" y="11" width="5" height="5" fill="#e6a536" opacity=".24"></rect>
+  <rect x="4" y="271" width="5" height="5" fill="#e6a536" opacity=".6"></rect>
+  <rect x="1271" y="271" width="5" height="5" fill="#e6a536" opacity=".6"></rect>
+
+  
+  <line x1="556" y1="250" x2="1030" y2="250" stroke="#1e2640" stroke-width="1"></line>
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="10.5" fill="#8090b4" x="556" y="265">Designed &amp; developed by</text>
+
+  
+  <rect x="762" y="254" width="80" height="15" rx="7.5" fill="rgba(230,165,54,.08)" stroke="rgba(230,165,54,.3)" stroke-width="1"></rect>
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="10" fill="#e6a536" x="802" y="265" text-anchor="middle">seobisback</text>
+
+  <text font-family="monospace" font-size="10" fill="#4a5578" x="846" y="265">·</text>
+
+  
+  <rect x="854" y="254" width="52" height="15" rx="7.5" fill="rgba(95,184,230,.08)" stroke="rgba(95,184,230,.3)" stroke-width="1"></rect>
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="10" fill="#5fb8e6" x="880" y="265" text-anchor="middle">Claude</text>
+
+  <text font-family="monospace" font-size="10" fill="#4a5578" x="910" y="265">·</text>
+
+  
+  <rect x="918" y="254" width="94" height="15" rx="7.5" fill="rgba(195,154,217,.08)" stroke="rgba(195,154,217,.3)" stroke-width="1"></rect>
+  <text font-family="&#39;Courier New&#39;,Courier,monospace" font-size="10" fill="#c39ad9" x="965" y="265" text-anchor="middle">Claude Design</text>
+</svg>
