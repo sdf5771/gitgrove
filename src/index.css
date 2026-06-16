@@ -179,7 +179,7 @@ body { display: flex; align-items: center; justify-content: center; }
 
 /* ── Commit row ── */
 .crow {
-  display: flex; align-items: center; cursor: pointer;
+  display: flex; align-items: center; cursor: pointer; user-select: none;
   border-bottom: 1px solid rgba(35,42,68,.5); position: relative; transition: background 80ms;
 }
 .crow:hover { background: var(--c-gold-bg-soft); }

@@ -912,6 +912,37 @@ export default function App() {
     return () => window.removeEventListener('keydown', h)
   }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
 
+  // ── 히스토리 뷰: 방향키 위/아래로 커밋 선택, Enter로 해당 커밋 Diff 열기 ──
+  useEffect(() => {
+    if (view !== 'history') return
+    const h = (e: KeyboardEvent) => {
+      // 포커스가 인터랙티브 요소(입력/버튼/탭 등 자체 키 처리)에 있으면 양보.
+      const t = e.target as HTMLElement | null
+      if (t && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showBranch ||
+          showRebase || showSettings || showAddRepo || showConflict || showRepoManager) return
+      const n = filteredCommits.length
+      if (n === 0) return
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        const next = Math.min(selIdx + 1, n - 1)
+        if (next !== selIdx) void handleSelectCommit(next)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        const prev = Math.max(selIdx - 1, 0)
+        if (prev !== selIdx) void handleSelectCommit(prev)
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        void handleSelectCommit(selIdx)
+        setView('diff')
+      }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [view, filteredCommits, selIdx, handleSelectCommit, showCmd, ctxMenu, showMerge,
+      showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
+
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
       'pull':          () => void handlePull(),
@@ -1212,6 +1243,7 @@ export default function App() {
                         commits={filteredCommits}
                         selectedIdx={selIdx}
                         onSelect={handleSelectCommit}
+                        onActivate={i => { void handleSelectCommit(i); setView('diff') }}
                         onContextMenu={(e, c, i) => setCtxMenu({ x: e.clientX, y: e.clientY, commit: c, idx: i })}
                         showStats={true}
                         rowH={rowH}
