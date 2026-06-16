@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { LANE_COLORS, BRANCH_LANES, type Commit } from '../data/mockData'
 import { Chip } from './Chip'
 import { HighlightMatch } from './HighlightMatch'
@@ -57,13 +57,20 @@ interface Props {
   commits: Commit[]
   selectedIdx: number
   onSelect: (i: number) => void
+  /** 행 더블클릭(드릴인) — 해당 커밋의 Diff로 이동 */
+  onActivate?: (i: number) => void
   onContextMenu: (e: React.MouseEvent, c: Commit, i: number) => void
   showStats: boolean
   rowH: number
   activeBranch: string
 }
 
-export function CommitGraph({ commits, selectedIdx, onSelect, onContextMenu, showStats, rowH, activeBranch }: Props) {
+export function CommitGraph({ commits, selectedIdx, onSelect, onActivate, onContextMenu, showStats, rowH, activeBranch }: Props) {
+  // 선택 행이 뷰포트 밖이면 스크롤(방향키 탐색 시 따라가도록). block:'nearest'라 보이면 no-op.
+  const selRowRef = useRef<HTMLDivElement>(null)
+  // scrollIntoView는 jsdom 등 일부 환경에 없을 수 있어 옵셔널 호출로 가드.
+  useEffect(() => { selRowRef.current?.scrollIntoView?.({ block: 'nearest' }) }, [selectedIdx])
+
   return (
     <div className="gscroll">
       {commits.length === 0 ? (
@@ -76,9 +83,11 @@ export function CommitGraph({ commits, selectedIdx, onSelect, onContextMenu, sho
           <CommitGraphSVG commits={commits} selectedIdx={selectedIdx} rowH={rowH} activeBranch={activeBranch} />
           {commits.map((c, i) => (
             <div key={c.id}
+              ref={i === selectedIdx ? selRowRef : undefined}
               className={`crow${i === selectedIdx ? ' sel' : ''}`}
               style={{ height: rowH }}
               onClick={() => onSelect(i)}
+              onDoubleClick={() => onActivate?.(i)}
               onContextMenu={e => { e.preventDefault(); onContextMenu(e, c, i) }}>
               <div className="cspacer" style={{ width: SVGW }} />
               <div className="cinfo">

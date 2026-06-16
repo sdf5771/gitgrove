@@ -148,12 +148,12 @@ GitGrove is built on the **모여봐요 design system** — warm-navy dark with 
 
 **Typography:** `Pixelify Sans` (display) · `Noto Sans KR` (body) · `IBM Plex Mono` (code / hashes)
 
-**Branch Lane Colors:**
+**Branch Lane Colors** — assigned by graph lane position and cycled (8-color palette):
 ```
-lane 0 – main          ██  #e6a536  gold
-lane 1 – feature/*     ██  #5fb8e6  blue
-lane 2 – hotfix/*      ██  #ff6b6b  red
-lane 3 – other         ██  #c39ad9  purple
+lane 0  ██  #e6a536  gold      lane 4  ██  #6fcf7c  green
+lane 1  ██  #5fb8e6  blue      lane 5  ██  #4ecdc4  teal
+lane 2  ██  #ff6b6b  red       lane 6  ██  #f78fb3  pink
+lane 3  ██  #c39ad9  purple    lane 7  ██  #ffa94d  orange
 ```
 
 ---

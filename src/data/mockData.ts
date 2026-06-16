@@ -225,5 +225,16 @@ export const CONFLICT_FILES: ConflictFile[] = [
   },
 ]
 
-export const LANE_COLORS = ['#e6a536','#5fb8e6','#ff6b6b','#c39ad9']
+// 브랜치 레인 색. 레인 인덱스를 LANE_COLORS.length로 modulo해 순환 적용한다
+// (CommitGraph). 복잡한 그래프에서 색 반복을 줄이려 8색으로 확장(앞 4색은 기존 유지).
+export const LANE_COLORS = [
+  '#e6a536', // 0 gold
+  '#5fb8e6', // 1 blue
+  '#ff6b6b', // 2 red
+  '#c39ad9', // 3 purple
+  '#6fcf7c', // 4 green
+  '#4ecdc4', // 5 teal
+  '#f78fb3', // 6 pink
+  '#ffa94d', // 7 orange
+]
 export const BRANCH_LANES: Record<string, number> = {'main':0,'feature/auth':1,'hotfix/login-fix':2,'feature/ui-redesign':3}
