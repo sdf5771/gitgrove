@@ -54,6 +54,21 @@ describe('NotificationBell (B20)', () => {
     expect(screen.getByText('리뷰 요청')).toBeTruthy()
   })
 
+  it('패널을 열 때마다 최신을 다시 가져온다 (stale 방지)', async () => {
+    getNotificationsMock.mockResolvedValue([notif({ id: '1' })])
+    render(<NotificationBell githubToken="tok" onOpenUrl={vi.fn()} />)
+    await waitFor(() => expect(getNotificationsMock).toHaveBeenCalledTimes(1)) // 마운트 1회
+
+    fireEvent.click(screen.getByLabelText('알림')) // 열기 → 재조회
+    await waitFor(() => expect(getNotificationsMock).toHaveBeenCalledTimes(2))
+
+    fireEvent.click(screen.getByLabelText('알림')) // 닫기 → 조회 없음
+    expect(getNotificationsMock).toHaveBeenCalledTimes(2)
+
+    fireEvent.click(screen.getByLabelText('알림')) // 다시 열기 → 재조회
+    await waitFor(() => expect(getNotificationsMock).toHaveBeenCalledTimes(3))
+  })
+
   it('항목 클릭 → API URL을 html_url로 변환해 onOpenUrl 호출', async () => {
     getNotificationsMock.mockResolvedValue([notif({ id: '1' })])
     const onOpenUrl = vi.fn()
@@ -70,8 +85,10 @@ describe('NotificationBell (B20)', () => {
     render(<NotificationBell githubToken="tok" onOpenUrl={vi.fn()} />)
     await waitFor(() => expect(getNotificationsMock).toHaveBeenCalled())
 
-    fireEvent.click(screen.getByLabelText('알림'))
-    expect(screen.getByText(/notifications 권한을 포함해 토큰을 다시 발급/)).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('알림')) // 열기 → 재조회(로딩 후 다시 403)
+    await waitFor(() =>
+      expect(screen.getByText(/notifications 권한을 포함해 토큰을 다시 발급/)).toBeTruthy(),
+    )
   })
 
   it('알림 없으면 빈 상태 메시지', async () => {
