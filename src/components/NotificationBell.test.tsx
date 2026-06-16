@@ -80,6 +80,6 @@ describe('NotificationBell (B20)', () => {
     await waitFor(() => expect(getNotificationsMock).toHaveBeenCalled())
 
     fireEvent.click(screen.getByLabelText('알림'))
-    expect(screen.getByText(/읽지 않은 알림이 없습니다/)).toBeTruthy()
+    expect(screen.getByText(/읽지 않은 알림이 없어요/)).toBeTruthy()
   })
 })
