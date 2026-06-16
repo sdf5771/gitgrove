@@ -1049,16 +1049,16 @@ export default function App() {
           onAdd={() => setShowAddRepo(true)}
           onClose={handleCloseRepoTab}
         />
-        <NotificationBell
-          githubToken={githubToken}
-          onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
-        />
         <div className="sep" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>
           <span style={{ color: 'var(--c-gold-300)' }}>⎇</span>{displayBranch}
           {repo && repo.ahead > 0 && <span style={{ color: 'var(--c-success)' }}>↑{repo.ahead}</span>}
           {repo && repo.behind > 0 && <span>↓{repo.behind}</span>}
         </div>
+        <NotificationBell
+          githubToken={githubToken}
+          onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
+        />
       </div>
 
       {/* Action bar — Repository Manager 활성 시 숨김 */}

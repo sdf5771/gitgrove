@@ -67,6 +67,12 @@
       <sub><b>PR View</b> — GitHub PR list, file changes, CI checks</sub>
     </td>
   </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <img src="assets/screenshot-notifications.png" alt="Notification Inbox" width="100%">
+      <sub><b>Notifications</b> — Global GitHub notification panel with 그루 (Geuru), reason-grouped inbox, graceful permission-scope guidance</sub>
+    </td>
+  </tr>
 </table>
 
 ---

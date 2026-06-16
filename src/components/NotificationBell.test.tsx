@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react'
 import { NotificationBell } from './NotificationBell'
-import type { GithubNotification } from '../utils/githubClient'
+import { GithubApiError, type GithubNotification } from '../utils/githubClient'
 
 const getNotificationsMock = vi.fn()
 vi.mock('../utils/githubClient', async () => {
@@ -65,12 +65,21 @@ describe('NotificationBell (B20)', () => {
     expect(onOpenUrl).toHaveBeenCalledWith('https://github.com/octo/repo/pull/3')
   })
 
+  it('403(notifications 권한 없음) → 토큰 재발급 안내 메시지', async () => {
+    getNotificationsMock.mockRejectedValue(new GithubApiError('GitHub API error: 403', 403, false))
+    render(<NotificationBell githubToken="tok" onOpenUrl={vi.fn()} />)
+    await waitFor(() => expect(getNotificationsMock).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByLabelText('알림'))
+    expect(screen.getByText(/notifications 권한을 포함해 토큰을 다시 발급/)).toBeTruthy()
+  })
+
   it('알림 없으면 빈 상태 메시지', async () => {
     getNotificationsMock.mockResolvedValue([])
     render(<NotificationBell githubToken="tok" onOpenUrl={vi.fn()} />)
     await waitFor(() => expect(getNotificationsMock).toHaveBeenCalled())
 
     fireEvent.click(screen.getByLabelText('알림'))
-    expect(screen.getByText(/읽지 않은 알림이 없습니다/)).toBeTruthy()
+    expect(screen.getByText(/읽지 않은 알림이 없어요/)).toBeTruthy()
   })
 })

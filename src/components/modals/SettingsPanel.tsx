@@ -14,7 +14,7 @@ const loadSettings = () => {
 
 // PAT 발급 딥링크 (scope/description 사전세팅)
 const CLASSIC_TOKEN_URL =
-  'https://github.com/settings/tokens/new?scopes=repo,read:user&description=GitGrove'
+  'https://github.com/settings/tokens/new?scopes=repo,read:user,notifications&description=GitGrove'
 const FINEGRAINED_TOKEN_URL =
   'https://github.com/settings/personal-access-tokens/new'
 
@@ -346,7 +346,8 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
                   PR 뷰에서 실제 Pull Request를 조회하는 데 사용됩니다.
                   <br />
                   필요 scope: <span className="sett-scope-chip">repo</span>{' '}
-                  <span className="sett-scope-chip">read:user</span>
+                  <span className="sett-scope-chip">read:user</span>{' '}
+                  <span className="sett-scope-chip">notifications</span>
                 </div>
               </div>
 
@@ -368,6 +369,14 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
                         : '(fine-grained 또는 미노출)'}
                     </span>
                   </div>
+                  {verifyResult.scopes.length > 0 && !verifyResult.scopes.includes('notifications') && (
+                    <div className="sett-verify-meta" style={{ color: 'var(--c-warning)' }}>
+                      <span className="sett-verify-meta-lbl">알림</span>
+                      <span className="sett-verify-meta-val">
+                        notifications 권한이 없어 알림 벨이 동작하지 않습니다. 위 링크로 토큰을 다시 발급하세요.
+                      </span>
+                    </div>
+                  )}
                   {verifyResult.rate && (
                     <div className="sett-verify-meta">
                       <span className="sett-verify-meta-lbl">Rate limit</span>
@@ -407,7 +416,12 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
                   Classic 링크에는 <code className="sett-code-inline">repo</code>,{' '}
-                  <code className="sett-code-inline">read:user</code> scope와 설명이 미리 채워져 있습니다.
+                  <code className="sett-code-inline">read:user</code>,{' '}
+                  <code className="sett-code-inline">notifications</code> scope와 설명이 미리 채워져 있습니다.
+                  <br />
+                  알림 벨은 <code className="sett-code-inline">notifications</code> 권한이 있어야 동작합니다.
+                  {' '}이미 토큰을 발급해 쓰고 있다면, 알림 벨을 쓰려면 위 링크로{' '}
+                  <strong style={{ color: 'var(--c-text)' }}>새로 발급</strong>해야 합니다 — scope는 발급 후 변경할 수 없습니다.
                 </div>
               </div>
             </div>
