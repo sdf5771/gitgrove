@@ -110,12 +110,17 @@ export async function ghRequest<T>(path: string, opts: GhRequestOptions): Promis
     }
   }
 
+  // cache: 'no-store' — Chromium(렌더러) HTTP 캐시를 우회한다. GitHub는 일부
+  // 엔드포인트(특히 /notifications)에 Cache-Control: private, max-age=60 + Last-Modified를
+  // 보내, 이 옵션이 없으면 렌더러가 옛 응답을 그대로 돌려줘 알림이 stale해졌다.
+  // 중복 호출 억제는 위의 인메모리 TTL 캐시가 담당하므로 HTTP 캐시는 불필요.
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: {
       Authorization: `token ${token}`,
       Accept: accept,
     },
+    cache: 'no-store',
     signal,
   })
 

@@ -156,6 +156,15 @@ export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellPro
     return () => window.removeEventListener('focus', onFocus)
   }, [githubToken, load])
 
+  // 벨 토글: 패널을 열 때마다 항상 최신을 다시 가져온다.
+  // (그렇지 않으면 앱을 계속 띄워둔 채로는 마운트/포커스 시점의 옛 목록이 그대로 보였다.)
+  const toggle = useCallback(() => {
+    setOpen(o => {
+      if (!o) void load()
+      return !o
+    })
+  }, [load])
+
   if (!githubToken) return null
 
   const list = items ?? []
@@ -178,7 +187,7 @@ export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellPro
         className={`tb-bell${open ? ' on' : ''}`}
         aria-label="알림"
         title="알림"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
       >
         <IconBell />
         {unreadCount > 0 && <span className="tb-bell-badge">{unreadCount > 99 ? '99+' : unreadCount}</span>}
