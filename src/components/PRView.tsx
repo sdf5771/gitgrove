@@ -3,6 +3,7 @@ import { PR_DATA } from '../data/mockData'
 import type { PullRequest } from '../data/mockData'
 import { FilePath } from './FilePath'
 import { Markdown } from './Markdown'
+import { Geuru } from './Geuru'
 import { parseGitHubRepo } from '../utils/github'
 import { getGithubToken } from '../utils/githubToken'
 import { getPulls } from '../utils/githubClient'
@@ -189,7 +190,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
               </div>
             </div>
           ))}
-          {filtered.length === 0 && <div className="pr-empty" style={{ height: 120 }}><span style={{ fontSize: 24 }}>🔍</span><span>No {filter} pull requests</span></div>}
+          {filtered.length === 0 && <div className="pr-empty" style={{ height: 120 }}><Geuru expr="sleepy" scale={2.4} /><span>No {filter} pull requests</span></div>}
         </div>
       </div>
       <div className="pr-detail-pane">
@@ -260,7 +261,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
               )}
               {dtab === 'comments' && (
                 sel.threads.length === 0
-                  ? <div className="pr-empty" style={{ height: 120 }}><span style={{ fontSize: 22 }}>💬</span><span>No comments yet</span></div>
+                  ? <div className="pr-empty" style={{ height: 120 }}><Geuru expr="sleepy" scale={2.2} /><span>No comments yet</span></div>
                   : sel.threads.map(t => (
                     <div key={t.id} className="pr-comment">
                       <div className="pr-comment-hd">
@@ -301,7 +302,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
               </div>
             )}
           </>
-        ) : <div className="pr-empty"><span style={{ fontSize: 28 }}>📋</span><span>Select a pull request</span></div>}
+        ) : <div className="pr-empty"><Geuru expr="idle" scale={2.8} /><span>Select a pull request</span></div>}
       </div>
     </div>
   )
