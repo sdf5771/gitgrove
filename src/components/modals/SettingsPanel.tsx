@@ -369,6 +369,14 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
                         : '(fine-grained 또는 미노출)'}
                     </span>
                   </div>
+                  {verifyResult.scopes.length > 0 && !verifyResult.scopes.includes('notifications') && (
+                    <div className="sett-verify-meta" style={{ color: 'var(--c-warning)' }}>
+                      <span className="sett-verify-meta-lbl">알림</span>
+                      <span className="sett-verify-meta-val">
+                        notifications 권한이 없어 알림 벨이 동작하지 않습니다. 위 링크로 토큰을 다시 발급하세요.
+                      </span>
+                    </div>
+                  )}
                   {verifyResult.rate && (
                     <div className="sett-verify-meta">
                       <span className="sett-verify-meta-lbl">Rate limit</span>
@@ -412,6 +420,8 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
                   <code className="sett-code-inline">notifications</code> scope와 설명이 미리 채워져 있습니다.
                   <br />
                   알림 벨은 <code className="sett-code-inline">notifications</code> 권한이 있어야 동작합니다.
+                  {' '}이미 토큰을 발급해 쓰고 있다면, 알림 벨을 쓰려면 위 링크로{' '}
+                  <strong style={{ color: 'var(--c-text)' }}>새로 발급</strong>해야 합니다 — scope는 발급 후 변경할 수 없습니다.
                 </div>
               </div>
             </div>
