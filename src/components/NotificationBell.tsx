@@ -62,7 +62,13 @@ export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellPro
       setItems(list)
     } catch (err) {
       if (seqRef.current !== mySeq) return
-      const msg = err instanceof GithubApiError ? err.message : err instanceof Error ? err.message : String(err)
+      let msg: string
+      if (err instanceof GithubApiError && err.status === 403 && !err.rateLimited) {
+        // /notifications는 notifications(또는 repo) scope가 필요 — 토큰에 권한이 없으면 403.
+        msg = '알림 권한이 없는 토큰이에요. 설정 → GitHub에서 notifications 권한을 포함해 토큰을 다시 발급해 주세요.'
+      } else {
+        msg = err instanceof GithubApiError ? err.message : err instanceof Error ? err.message : String(err)
+      }
       setError(msg)
     } finally {
       if (seqRef.current === mySeq) setLoading(false)
