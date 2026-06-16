@@ -5,6 +5,7 @@ import os from 'node:os'
 import fs from 'node:fs'
 import https from 'node:https'
 import simpleGit, { CheckRepoActions } from 'simple-git'
+import { categorizeGitStatus } from '../src/utils/gitStatus'
 
 // macOS GPU 프로세스 크래시 억제
 app.commandLine.appendSwitch('disable-gpu-sandbox')
@@ -446,46 +447,9 @@ ipcMain.handle('git:status', async (_event, repoPath: string): Promise<GitStatus
   const unstagedStats = parseNumstat(unstagedNumstatRaw)
   const stagedStats = parseNumstat(stagedNumstatRaw)
 
-  type FileStatus = { path: string; status: string; additions: number; deletions: number }
-
-  const staged: FileStatus[] = []
-  const unstaged: FileStatus[] = []
-
-  // staged: created, renamed, modified (index 기준)
-  for (const f of status.created) {
-    staged.push({ path: f, status: 'A', ...(stagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
-  }
-  for (const f of status.renamed) {
-    const p = typeof f === 'string' ? f : f.to
-    staged.push({ path: p, status: 'M', ...(stagedStats.get(p) ?? { additions: 0, deletions: 0 }) })
-  }
-  for (const f of status.staged) {
-    if (!status.created.includes(f) && !status.renamed.find(r => (typeof r === 'string' ? r : r.to) === f)) {
-      staged.push({ path: f, status: 'M', ...(stagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
-    }
-  }
-  // 중복 제거
-  const stagedDeduped = staged.filter((f, i, arr) => arr.findIndex(x => x.path === f.path) === i)
-
-  // unstaged: not_added (untracked), modified, deleted, conflicted
-  for (const f of status.not_added) {
-    unstaged.push({ path: f, status: 'A', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
-  }
-  for (const f of status.modified) {
-    unstaged.push({ path: f, status: 'M', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
-  }
-  for (const f of status.deleted) {
-    unstaged.push({ path: f, status: 'D', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
-  }
-  for (const f of status.conflicted) {
-    if (!unstaged.find(u => u.path === f)) {
-      unstaged.push({ path: f, status: 'M', ...(unstagedStats.get(f) ?? { additions: 0, deletions: 0 }) })
-    }
-  }
-  // 중복 제거
-  const unstagedDeduped = unstaged.filter((f, i, arr) => arr.findIndex(x => x.path === f.path) === i)
-
-  return { staged: stagedDeduped, unstaged: unstagedDeduped }
+  // porcelain의 XY 두 칼럼(index/working-tree)으로 staged/unstaged를 분리한다.
+  // (simple-git 집계 배열은 두 칼럼을 구분하지 못해 fully-staged 파일이 중복됐음 — gitStatus.ts 참고)
+  return categorizeGitStatus(status.files, status.conflicted, stagedStats, unstagedStats)
 })
 
 // git:diff — 파일 diff 조회
