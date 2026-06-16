@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/hero.svg" alt="GitGrove — A modern dark-mode Git GUI for macOS" width="100%">
+  <img src="assets/hero-geuru.svg" alt="GitGrove — A modern dark-mode Git GUI for macOS" width="100%">
 </div>
 
 <br>
@@ -20,6 +20,24 @@
 <div align="center">
   <strong>A professional dark-mode Git GUI desktop app for macOS.</strong><br>
   Visual branch graph · Staging area · Diff explorer · PR review — all in one window.
+</div>
+
+<br>
+
+---
+
+## 🌱 Meet 그루 (Geuru)
+
+<div align="center">
+  <img src="assets/geuru-intro.svg" alt="Meet 그루 (Geuru) — GitGrove의 마스코트" width="100%">
+</div>
+
+<br>
+
+<div align="center">
+  <strong>그루 (Geuru)</strong> — GitGrove의 마스코트.<br>
+  커밋을 심으면 무럭무럭 자라는 작은 새싹 정령이에요. 머지·푸시·충돌마다 표정이 바뀌며,<br>
+  타이틀바 · 상태바 · 저장소 관리 화면 곳곳에서 함께합니다.
 </div>
 
 <br>
