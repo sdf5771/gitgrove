@@ -250,6 +250,8 @@ export interface GetMergeRequestsOptions extends Partial<GlRequestOptions> {
   projectId?: number | string
   /** created_by_me / assigned_to_me / all 등 (전역 호출용) */
   scope?: 'created_by_me' | 'assigned_to_me' | 'all'
+  /** 리뷰어로 지정된 MR만(전역 인박스 "리뷰 요청받음" 용). scope와 별개 파라미터 */
+  reviewerUsername?: string
   /** opened / closed / merged / all */
   state?: 'opened' | 'closed' | 'merged' | 'all'
   /** 페이지당 항목 수(기본 30) */
@@ -267,14 +269,16 @@ export async function getMergeRequests(
 ): Promise<GitlabMergeRequest[]> {
   const projectId = opts?.projectId
   const scope = opts?.scope
+  const reviewerUsername = opts?.reviewerUsername
   const state = opts?.state ?? 'opened'
   const perPage = opts?.perPage ?? 30
-  const { projectId: _pid, scope: _sc, state: _st, perPage: _pp, ...reqOpts } = opts ?? {}
-  void _pid; void _sc; void _st; void _pp
+  const { projectId: _pid, scope: _sc, reviewerUsername: _rv, state: _st, perPage: _pp, ...reqOpts } = opts ?? {}
+  void _pid; void _sc; void _rv; void _st; void _pp
 
   const params = new URLSearchParams()
   if (state) params.set('state', state)
   if (scope) params.set('scope', scope)
+  if (reviewerUsername) params.set('reviewer_username', reviewerUsername)
   params.set('per_page', String(perPage))
 
   const path = projectId != null
@@ -448,6 +452,55 @@ export async function getTodos(
   params.set('per_page', String(perPage))
 
   const res = await glRequest<GitlabTodo[]>(host, `/todos?${params.toString()}`, { token, ...reqOpts })
+  return res.data
+}
+
+/** GET /issues 응답 중 UI가 쓰는 필드 (Cross-project 인박스 "할당된 이슈"용) */
+export interface GitlabIssue {
+  id: number
+  iid: number
+  project_id: number
+  title: string
+  state: 'opened' | 'closed'
+  web_url: string
+  references?: { full?: string } | null
+  author: { id: number; username: string; name: string; avatar_url: string | null } | null
+  created_at: string
+  updated_at: string
+  user_notes_count?: number
+  labels?: string[]
+}
+
+export interface GetIssuesOptions extends Partial<GlRequestOptions> {
+  /** created_by_me / assigned_to_me / all (기본 assigned_to_me) */
+  scope?: 'created_by_me' | 'assigned_to_me' | 'all'
+  /** opened / closed / all (기본 opened) */
+  state?: 'opened' | 'closed' | 'all'
+  /** 페이지당 항목 수(기본 30) */
+  perPage?: number
+}
+
+/**
+ * GET /issues — 계정 전역 이슈(scope로 본인 할당/작성 필터).
+ * 인박스 "할당된 이슈" 탭에서 scope=assigned_to_me 로 사용.
+ */
+export async function getIssues(
+  host: string,
+  token: string,
+  opts?: GetIssuesOptions,
+): Promise<GitlabIssue[]> {
+  const scope = opts?.scope ?? 'assigned_to_me'
+  const state = opts?.state ?? 'opened'
+  const perPage = opts?.perPage ?? 30
+  const { scope: _sc, state: _st, perPage: _pp, ...reqOpts } = opts ?? {}
+  void _sc; void _st; void _pp
+
+  const params = new URLSearchParams()
+  params.set('scope', scope)
+  params.set('state', state)
+  params.set('per_page', String(perPage))
+
+  const res = await glRequest<GitlabIssue[]>(host, `/issues?${params.toString()}`, { token, ...reqOpts })
   return res.data
 }
 

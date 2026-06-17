@@ -8,6 +8,7 @@ import { getProjects, GitlabApiError, type GitlabProjectSummary } from '../utils
 import { ModalShell } from './modals/ModalShell'
 import { ConfirmModal } from './modals/ConfirmModal'
 import { GithubInbox } from './GithubInbox'
+import type { GitlabConn } from '../utils/useGitlabConns'
 import { Geuru } from './Geuru'
 
 // ── 아이콘 (디자인 핸드오프 SVG 재현) ──
@@ -577,6 +578,8 @@ export interface RepoManagerProps {
   onBrowse: () => void
   /** GitLab 연결 여부(연결된 host가 1개 이상) — 사이드바 활성/점 표시용 */
   gitlabConnected: boolean
+  /** 연결된 GitLab 인스턴스(host+token+username) — 통합 인박스용 */
+  gitlabInstances?: GitlabConn[]
   /** 외부 브라우저로 URL 열기 (인박스 항목 클릭) */
   onOpenUrl: (url: string) => void
   /** GitLab 탭이 있는 Settings 패널 열기 (GL5 미연결 유도 / 인스턴스 추가) */
@@ -585,7 +588,7 @@ export interface RepoManagerProps {
 }
 
 export function RepoManager({
-  repos, activeRepo, githubConnected, githubToken, githubLogin, gitlabConnected, recents, favorites, workspaces,
+  repos, activeRepo, githubConnected, githubToken, githubLogin, gitlabConnected, gitlabInstances = [], recents, favorites, workspaces,
   onToggleFavorite, onOpenPath, onRemoveRepo, onCreateWorkspace, onRenameWorkspace,
   onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, onOpenUrl, onOpenGitlabSettings, notify,
 }: RepoManagerProps) {
@@ -1097,6 +1100,7 @@ export function RepoManager({
           <GithubInbox
             githubToken={githubToken}
             githubLogin={githubLogin}
+            gitlabInstances={gitlabInstances}
             onOpenUrl={onOpenUrl}
           />
         ) : isGithub ? (

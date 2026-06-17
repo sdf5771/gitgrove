@@ -1,13 +1,34 @@
 import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import { getNotifications, GithubApiError, type GithubNotification } from '../utils/githubClient'
+import { getTodos, GitlabApiError, type GitlabTodo } from '../utils/gitlabClient'
+import type { GitlabConn } from '../utils/useGitlabConns'
 import { Geuru } from './Geuru'
+import { ProviderBadge, ProviderFilterChips, type ProviderFilter } from './ProviderMark'
 
 // 포커스 복귀 시 refetch 최소 간격(rate-limit 보호).
 const MIN_REFETCH_MS = 60_000
 
+// ── 프로바이더 통합 알림 항목 ──
+type ReasonKind = 'review' | 'mention' | 'ci_fail' | 'ci_pass' | 'merge' | 'comment' | 'assign'
+
+export interface NotifItem {
+  provider: 'github' | 'gitlab'
+  key: string
+  url: string
+  title: string
+  repo: string
+  /** updated_at / created_at ISO */
+  at: string
+  unread: boolean
+  icoCls: string
+  rsCls: string
+  reasonLabel: string
+  kind: ReasonKind
+}
+
 // subject.url은 REST API URL이다(예: https://api.github.com/repos/o/r/pulls/3).
 // 가능한 경우 사람이 볼 수 있는 html_url로 변환한다. 변환 불가하면 레포 페이지로.
-function toHtmlUrl(n: GithubNotification): string {
+function githubHtmlUrl(n: GithubNotification): string {
   const apiUrl = n.subject.url
   if (apiUrl) {
     const m = apiUrl.match(/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/(pulls|issues)\/(\d+)/)
@@ -33,11 +54,10 @@ const REASON_LABEL: Record<string, string> = {
   ci_activity: 'CI',
 }
 
-// ── reason → 아이콘/색 매핑 (디자인 legend 그대로) ──
-type ReasonKind = 'review' | 'mention' | 'ci_fail' | 'ci_pass' | 'merge' | 'comment' | 'assign'
 interface ReasonStyle { kind: ReasonKind; icoCls: string; rsCls: string; label: string }
 
-function reasonStyle(reason: string, title: string): ReasonStyle {
+// ── GitHub reason → 아이콘/색 매핑 (디자인 legend 그대로) ──
+function githubReasonStyle(reason: string, title: string): ReasonStyle {
   switch (reason) {
     case 'review_requested': return { kind: 'review', icoCls: 'ic-gold', rsCls: 'rs-gold', label: '리뷰 요청' }
     case 'assign': return { kind: 'assign', icoCls: 'ic-gold', rsCls: 'rs-gold', label: '할당됨' }
@@ -53,6 +73,23 @@ function reasonStyle(reason: string, title: string): ReasonStyle {
     case 'subscribed': return { kind: 'comment', icoCls: 'ic-muted', rsCls: 'rs-info', label: '구독' }
     case 'author': return { kind: 'comment', icoCls: 'ic-muted', rsCls: 'rs-info', label: '내 스레드' }
     default: return { kind: 'comment', icoCls: 'ic-muted', rsCls: 'rs-info', label: REASON_LABEL[reason] ?? reason }
+  }
+}
+
+// ── GitLab todo action_name → 아이콘/색 매핑 ──
+// 골드=리뷰요청/할당(인터랙션 요구), info=멘션, danger=파이프라인 실패, purple=머지/승인.
+function gitlabTodoStyle(action: string): ReasonStyle {
+  switch (action) {
+    case 'review_requested': return { kind: 'review', icoCls: 'ic-gold', rsCls: 'rs-gold', label: '리뷰 요청' }
+    case 'assigned': return { kind: 'assign', icoCls: 'ic-gold', rsCls: 'rs-gold', label: '할당됨' }
+    case 'mentioned':
+    case 'directly_addressed': return { kind: 'mention', icoCls: 'ic-info', rsCls: 'rs-info', label: '멘션' }
+    case 'build_failed': return { kind: 'ci_fail', icoCls: 'ic-danger', rsCls: 'rs-danger', label: '파이프라인' }
+    case 'unmergeable': return { kind: 'ci_fail', icoCls: 'ic-danger', rsCls: 'rs-danger', label: '충돌' }
+    case 'approval_required': return { kind: 'merge', icoCls: 'ic-purple', rsCls: 'rs-purple', label: '승인 필요' }
+    case 'marked': return { kind: 'comment', icoCls: 'ic-info', rsCls: 'rs-info', label: '표시됨' }
+    case 'merge_train_removed': return { kind: 'merge', icoCls: 'ic-purple', rsCls: 'rs-purple', label: '머지 트레인' }
+    default: return { kind: 'comment', icoCls: 'ic-info', rsCls: 'rs-info', label: action }
   }
 }
 
@@ -98,66 +135,136 @@ const IconBell = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2a4 4 0 0 1 4 4v2.5l1 2H3l1-2V6a4 4 0 0 1 4-4z" /><path d="M6.5 12.5a1.5 1.5 0 0 0 3 0" /></svg>
 )
 
+// ── 매핑: 원본 → NotifItem ──
+function githubToItem(n: GithubNotification): NotifItem {
+  const rs = githubReasonStyle(n.reason, n.subject.title)
+  return {
+    provider: 'github',
+    key: `gh:${n.id}`,
+    url: githubHtmlUrl(n),
+    title: n.subject.title,
+    repo: n.repository.full_name,
+    at: n.updated_at,
+    unread: n.unread,
+    icoCls: rs.icoCls,
+    rsCls: rs.rsCls,
+    reasonLabel: rs.label,
+    kind: rs.kind,
+  }
+}
+
+function gitlabTodoToItem(host: string, t: GitlabTodo): NotifItem {
+  const rs = gitlabTodoStyle(t.action_name)
+  return {
+    provider: 'gitlab',
+    key: `gl:${host}:${t.id}`,
+    url: t.target_url,
+    title: t.target?.title ?? t.body,
+    repo: t.project?.path_with_namespace ?? t.project?.name ?? '',
+    at: t.created_at,
+    // GitLab todos는 pending 만 조회 → 전부 안 읽음으로 간주.
+    unread: t.state === 'pending',
+    icoCls: rs.icoCls,
+    rsCls: rs.rsCls,
+    reasonLabel: rs.label,
+    kind: rs.kind,
+  }
+}
+
 export interface NotificationBellProps {
   githubToken: string
+  /** 연결된 GitLab 인스턴스(host+token+username). 미연결이면 빈 배열 */
+  gitlabInstances?: GitlabConn[]
   /** 외부 브라우저로 URL 열기 */
   onOpenUrl: (url: string) => void
 }
 
-export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellProps) {
+export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl }: NotificationBellProps) {
   const [open, setOpen] = useState(false)
-  const [items, setItems] = useState<GithubNotification[] | null>(null)
+  const [items, setItems] = useState<NotifItem[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // notifications 권한이 없어 403이 난 경우 — 에러가 아니라 '유도' 상태로 다룬다.
+  const [provFilter, setProvFilter] = useState<ProviderFilter>('all')
+  // GitHub notifications 권한이 없어 403이 난 경우 — 에러가 아니라 '유도' 상태.
   const [permDenied, setPermDenied] = useState(false)
   const lastFetchRef = useRef(0)
   const seqRef = useRef(0)
 
+  const hasGithub = !!githubToken
+  const hasGitlab = gitlabInstances.length > 0
+  const gitlabKey = gitlabInstances.map(i => i.host).join(',')
+
   const load = useCallback(async () => {
-    if (!githubToken) return
+    if (!hasGithub && !hasGitlab) return
     const mySeq = ++seqRef.current
     lastFetchRef.current = Date.now()
     setLoading(true)
     setError(null)
     setPermDenied(false)
-    try {
-      const list = await getNotifications(githubToken, { cache: false })
-      if (seqRef.current !== mySeq) return
-      setItems(list)
-    } catch (err) {
-      if (seqRef.current !== mySeq) return
-      if (err instanceof GithubApiError && err.status === 403 && !err.rateLimited) {
-        // /notifications는 notifications(또는 repo) scope가 필요 — 토큰에 권한이 없으면 403.
-        // 사용자에겐 에러(빨간 403)가 아니라 '권한 없음' 유도 상태로 보여준다.
-        setPermDenied(true)
-      } else {
-        const msg = err instanceof GithubApiError ? err.message : err instanceof Error ? err.message : String(err)
-        setError(msg)
-      }
-    } finally {
-      if (seqRef.current === mySeq) setLoading(false)
-    }
-  }, [githubToken])
 
-  // 마운트/토큰 변경 시 1회.
+    const sources: Array<Promise<NotifItem[]>> = []
+    if (hasGithub) {
+      sources.push(getNotifications(githubToken, { cache: false }).then(list => list.map(githubToItem)))
+    }
+    for (const inst of gitlabInstances) {
+      sources.push(getTodos(inst.host, inst.token, { state: 'pending', cache: false }).then(list => list.map(t => gitlabTodoToItem(inst.host, t))))
+    }
+
+    const results = await Promise.allSettled(sources)
+    if (seqRef.current !== mySeq) return
+
+    const merged: NotifItem[] = []
+    let ghPermDenied = false
+    const errors: string[] = []
+    let idx = 0
+    for (const r of results) {
+      const isGithubSource = hasGithub && idx === 0
+      idx++
+      if (r.status === 'fulfilled') {
+        merged.push(...r.value)
+      } else {
+        const err = r.reason
+        if (isGithubSource && err instanceof GithubApiError && err.status === 403 && !err.rateLimited) {
+          // /notifications는 notifications(또는 repo) scope가 필요 — 권한 없으면 403.
+          ghPermDenied = true
+        } else {
+          const msg = err instanceof GithubApiError || err instanceof GitlabApiError
+            ? err.message
+            : err instanceof Error ? err.message : String(err)
+          errors.push(msg)
+        }
+      }
+    }
+
+    merged.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    setItems(merged)
+    // 전부 실패(권한 거부 제외)면 에러. 일부라도 결과 있으면 표시 우선.
+    if (merged.length === 0 && ghPermDenied && errors.length === 0) {
+      setPermDenied(true)
+    } else if (merged.length === 0 && errors.length > 0) {
+      setError(errors[0])
+    }
+    setLoading(false)
+  }, [hasGithub, hasGitlab, githubToken, gitlabInstances])
+
+  // 마운트/토큰/인스턴스 변경 시 1회.
   useEffect(() => {
-    if (!githubToken) { setItems(null); return }
+    if (!hasGithub && !hasGitlab) { setItems(null); return }
     void load()
-  }, [githubToken, load])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [githubToken, gitlabKey])
 
   // 포커스 복귀 시 throttled refetch(최소 60s 간격).
   useEffect(() => {
-    if (!githubToken) return
+    if (!hasGithub && !hasGitlab) return
     const onFocus = () => {
       if (Date.now() - lastFetchRef.current >= MIN_REFETCH_MS) void load()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-  }, [githubToken, load])
+  }, [hasGithub, hasGitlab, load])
 
   // 벨 토글: 패널을 열 때마다 항상 최신을 다시 가져온다.
-  // (그렇지 않으면 앱을 계속 띄워둔 채로는 마운트/포커스 시점의 옛 목록이 그대로 보였다.)
   const toggle = useCallback(() => {
     setOpen(o => {
       if (!o) void load()
@@ -165,21 +272,43 @@ export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellPro
     })
   }, [load])
 
-  if (!githubToken) return null
+  if (!hasGithub && !hasGitlab) return null
 
   const list = items ?? []
+  // 안읽음 카운트(합산) — 배지/헤더용. 프로바이더 필터와 무관하게 전체 합산.
   const unreadCount = list.filter(n => n.unread).length
+
+  // 프로바이더별 카운트(필터 칩).
+  const counts = {
+    all: list.length,
+    github: list.filter(n => n.provider === 'github').length,
+    gitlab: list.filter(n => n.provider === 'gitlab').length,
+  }
+
+  const visible = list.filter(n => {
+    if (provFilter === 'github') return n.provider === 'github'
+    if (provFilter === 'gitlab') return n.provider === 'gitlab'
+    return true
+  })
+
   const groups = GROUP_ORDER
-    .map(key => ({ key, items: list.filter(n => groupKey(n.updated_at) === key) }))
+    .map(key => ({ key, items: visible.filter(n => groupKey(n.at) === key) }))
     .filter(g => g.items.length > 0)
 
-  const handleItemClick = (n: GithubNotification) => {
-    onOpenUrl(toHtmlUrl(n))
+  const handleItemClick = (n: NotifItem) => {
+    onOpenUrl(n.url)
     setOpen(false)
   }
 
+  const footUrl = provFilter === 'gitlab' && gitlabInstances[0]
+    ? `${gitlabInstances[0].host}/dashboard/todos`
+    : 'https://github.com/notifications'
+  const footLabel = provFilter === 'github' ? 'GitHub 알림' : provFilter === 'gitlab' ? 'GitLab Todos' : '전체 알림'
+
   // 헤더 그루: 안 읽은 게 없으면 반가운 얼굴, 있으면 기본.
   const headExpr = list.length > 0 && unreadCount === 0 ? 'happy' : 'idle'
+  // 필터 칩은 양쪽 다 연결됐을 때만 의미 있음(한쪽만이면 숨김).
+  const showFilter = hasGithub && hasGitlab && list.length > 0
 
   return (
     <>
@@ -210,6 +339,12 @@ export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellPro
               </div>
             </div>
 
+            {showFilter && (
+              <div className="tb-prov-filter">
+                <ProviderFilterChips value={provFilter} onChange={setProvFilter} counts={counts} />
+              </div>
+            )}
+
             <div className="nb-list">
               {loading && items === null ? (
                 <div className="nb-status"><span className="sett-spinner" /> 불러오는 중…</div>
@@ -225,39 +360,48 @@ export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellPro
                   <b>불러오지 못했어요</b>
                   <span style={{ color: 'var(--c-danger)' }}>{error}</span>
                 </div>
-              ) : list.length === 0 ? (
-                <div className="nb-empty">
-                  <Geuru expr="sleepy" scale={3.2} />
-                  <b>읽지 않은 알림이 없어요</b>
-                  <span>새 소식이 오면<br />그루가 여기서 알려줄게요.</span>
-                </div>
+              ) : groups.length === 0 ? (
+                list.length === 0 ? (
+                  <div className="nb-empty">
+                    <Geuru expr="sleepy" scale={3.2} />
+                    <b>읽지 않은 알림이 없어요</b>
+                    <span>새 소식이 오면<br />그루가 여기서 알려줄게요.</span>
+                  </div>
+                ) : (
+                  // 전체엔 알림이 있으나 현재 프로바이더 필터에 해당 항목이 없는 경우.
+                  <div className="nb-empty">
+                    <Geuru expr="sleepy" scale={3.2} />
+                    <b>알림이 없어요</b>
+                    <span>이 서비스의 새 알림이 없어요.</span>
+                  </div>
+                )
               ) : (
                 groups.map(g => (
                   <div key={g.key}>
                     <div className="nb-group">{g.key}</div>
-                    {g.items.map(n => {
-                      const rs = reasonStyle(n.reason, n.subject.title)
-                      return (
-                        <div
-                          key={n.id}
-                          className={`nb-item${n.unread ? ' unread' : ''}`}
-                          onClick={() => handleItemClick(n)}
-                          title="기본 브라우저로 열기"
-                        >
-                          <div className={`nb-ico ${rs.icoCls}`}>{REASON_ICON[rs.kind]}</div>
-                          <div className="nb-body">
-                            <div className="nb-it-title">{n.subject.title}</div>
-                            <div className="nb-it-sub">
-                              <span className="nb-repo">{n.repository.full_name}</span>
-                              <span className="nb-dot">·</span>
-                              <span className={`nb-reason ${rs.rsCls}`}>{rs.label}</span>
-                              <span className="nb-time">{relativeTime(n.updated_at)}</span>
-                            </div>
-                          </div>
-                          {n.unread && <span className="nb-unread-dot" />}
+                    {g.items.map(n => (
+                      <div
+                        key={n.key}
+                        className={`nb-item${n.unread ? ' unread' : ''}`}
+                        onClick={() => handleItemClick(n)}
+                        title="기본 브라우저로 열기"
+                      >
+                        <div className={`nb-ico ${n.icoCls}`}>
+                          {REASON_ICON[n.kind]}
+                          <ProviderBadge provider={n.provider} />
                         </div>
-                      )
-                    })}
+                        <div className="nb-body">
+                          <div className="nb-it-title">{n.title}</div>
+                          <div className="nb-it-sub">
+                            <span className="nb-repo">{n.repo}</span>
+                            <span className="nb-dot">·</span>
+                            <span className={`nb-reason ${n.rsCls}`}>{n.reasonLabel}</span>
+                            <span className="nb-time">{relativeTime(n.at)}</span>
+                          </div>
+                        </div>
+                        {n.unread && <span className="nb-unread-dot" />}
+                      </div>
+                    ))}
                   </div>
                 ))
               )}
@@ -266,9 +410,9 @@ export function NotificationBell({ githubToken, onOpenUrl }: NotificationBellPro
             <div className="nb-foot">
               <button
                 className="nb-foot-btn"
-                onClick={() => { onOpenUrl('https://github.com/notifications'); setOpen(false) }}
+                onClick={() => { onOpenUrl(footUrl); setOpen(false) }}
               >
-                GitHub에서 모두 보기
+                {footLabel} 보기
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 11L11 5M11 5H6M11 5v5" /></svg>
               </button>
             </div>
