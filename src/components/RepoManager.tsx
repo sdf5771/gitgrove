@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Repo } from '../data/mockData'
 import type { RecentRepoEntry, Workspace } from '../utils/repoStore'
 import { parseGitHubRepo } from '../utils/github'
+import { parseGitLabRepo, normalizeGitlabHost } from '../utils/gitlab'
 import { getUserRepos, GithubApiError, type GithubRepoSummary } from '../utils/githubClient'
+import { getProjects, GitlabApiError, type GitlabProjectSummary } from '../utils/gitlabClient'
 import { ModalShell } from './modals/ModalShell'
 import { ConfirmModal } from './modals/ConfirmModal'
 import { GithubInbox } from './GithubInbox'
@@ -48,6 +50,30 @@ const IconGitHub = () => (
 const IconGitLab = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="5" width="5" height="8" rx="1"/><rect x="9" y="3" width="5" height="10" rx="1"/><path d="M7 9h2"/></svg>
 )
+// GitLab 브랜드 마크 (비침해 추상, 디자인 glMark 재현 — 식별 전용)
+const GlMark = ({ size = 16 }: { size?: number }) => (
+  <svg className="gl-mark" width={size} height={size} viewBox="0 0 24 24" aria-label="GitLab">
+    <path d="M12 21.5l3.2-9.8H8.8L12 21.5z" fill="#fc6d26"/>
+    <path d="M12 21.5L8.8 11.7H4.2L12 21.5z" fill="#e24329"/>
+    <path d="M4.2 11.7L3 15.4a.8.8 0 0 0 .3.9L12 21.5 4.2 11.7z" fill="#fca326"/>
+    <path d="M4.2 11.7H8.8L6.9 5.6c-.1-.3-.5-.3-.6 0L4.2 11.7z" fill="#e24329"/>
+    <path d="M12 21.5l3.2-9.8h4.6L12 21.5z" fill="#e24329"/>
+    <path d="M19.8 11.7L21 15.4a.8.8 0 0 1-.3.9L12 21.5l7.8-9.8z" fill="#fca326"/>
+    <path d="M19.8 11.7H15.2l1.9-6.1c.1-.3.5-.3.6 0l2.1 6.1z" fill="#e24329"/>
+  </svg>
+)
+const IconCloud = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M4.6 12.5a3 3 0 0 1-.3-6 4 4 0 0 1 7.7-1 3 3 0 0 1 .3 7z"/></svg>
+)
+const IconServer = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2.5" y="2.5" width="11" height="4.6" rx="1"/><rect x="2.5" y="9" width="11" height="4.6" rx="1"/><path d="M5 4.8h.01M5 11.3h.01"/></svg>
+)
+const IconRefresh = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M13 3v3h-3M3 13v-3h3"/><path d="M12.5 6.5A5 5 0 0 0 4 5M3.5 9.5A5 5 0 0 0 12 11"/></svg>
+)
+const IconStarSmall = () => (
+  <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor" style={{ verticalAlign: -1 }}><path d="M8 1.5l1.8 3.9 4.2.5-3.1 2.9.8 4.2L8 11.4 4.3 13.5l.8-4.2L2 6.4l4.2-.5z"/></svg>
+)
 const IconInbox = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 9l2-6h8l2 6M2 9v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9M2 9h3l1 2h4l1-2h3"/></svg>
 )
@@ -58,7 +84,17 @@ type Selection =
   | { kind: 'view'; view: View }
   | { kind: 'workspace'; id: string }
   | { kind: 'github' }
+  | { kind: 'gitlab' }
   | { kind: 'inbox' }
+
+/** GitLab 인스턴스(연결된 host) — gitlab.com=SaaS, 그 외=Self-hosted */
+export interface GitlabInstance {
+  /** 정규화 host (예: "https://gitlab.com") */
+  host: string
+  /** 표시용 host (스킴 제거, 예: "gitlab.com") */
+  display: string
+  type: 'SaaS' | 'Self-hosted'
+}
 
 // path → 표시용 레포 정보(이름/브랜치). 열린 레포가 우선, 없으면 최근 캐시, 둘 다 없으면 폴더명.
 interface RepoDesc { name: string; branch: string; dirty?: number; open: boolean }
@@ -320,6 +356,206 @@ function GithubBrowser({
   )
 }
 
+// ── GitLab 프로젝트 브라우저 (GL5·GL6) — GithubBrowser 미러 ──
+function visTagClass(v: GitlabProjectSummary['visibility']): string {
+  return v === 'private' ? 'rm-gh-tag priv' : 'rm-gh-tag'
+}
+const visLabel: Record<GitlabProjectSummary['visibility'], string> = {
+  private: 'private', internal: 'internal', public: 'public',
+}
+// 프로젝트 path 기반 안정 색상(아바타). 디자인은 행마다 색이 다름 → namespace 해시.
+const GL_AVATAR_COLORS = ['#fc6d26', '#e24329', '#5fb8e6', '#6fcf7c', '#c39ad9', '#fca326']
+function avatarColor(key: string): string {
+  let h = 0
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) | 0
+  return GL_AVATAR_COLORS[Math.abs(h) % GL_AVATAR_COLORS.length]
+}
+function relativeTime(iso: string): string {
+  const t = Date.parse(iso)
+  if (!Number.isFinite(t)) return ''
+  const diff = Date.now() - t
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return '방금'
+  if (min < 60) return `${min}분 전`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}시간 전`
+  const day = Math.floor(hr / 24)
+  if (day < 7) return `${day}일 전`
+  const wk = Math.floor(day / 7)
+  if (wk < 5) return `${wk}주 전`
+  const mo = Math.floor(day / 30)
+  if (mo < 12) return `${mo}개월 전`
+  return `${Math.floor(day / 365)}년 전`
+}
+
+interface GitlabBrowserProps {
+  instances: GitlabInstance[]
+  activeHost: string | null
+  onSelectInstance: (host: string) => void
+  onAddInstance: () => void
+  /** 미연결(연결된 인스턴스가 없음) */
+  disconnected: boolean
+  projects: GitlabProjectSummary[]
+  loading: boolean
+  error: string | null
+  query: string
+  hasMore: boolean
+  loadingMore: boolean
+  cloningRepo: string | null
+  isLocal: (fullPath: string) => boolean
+  onQueryChange: (q: string) => void
+  onRefresh: () => void
+  onLoadMore: () => void
+  onAction: (proj: GitlabProjectSummary) => void
+  onOpenSettings: () => void
+}
+function GitlabBrowser({
+  instances, activeHost, onSelectInstance, onAddInstance, disconnected,
+  projects, loading, error, query, hasMore, loadingMore, cloningRepo,
+  isLocal, onQueryChange, onRefresh, onLoadMore, onAction, onOpenSettings,
+}: GitlabBrowserProps) {
+  if (disconnected) {
+    return (
+      <div className="rm-empty-big">
+        <Geuru expr="idle" scale={3.4} title="그루" />
+        <b>GitLab이 연결되지 않았어요</b>
+        <span>설정 → GitLab 탭에서 GitLab.com 또는 Self-hosted 인스턴스를 연결하면 프로젝트를 여기서 바로 열 수 있어요.</span>
+        <button className="rm-action-btn open" style={{ minWidth: 'auto', padding: '8px 16px' }} onClick={onOpenSettings}>
+          설정 열기 ↗
+        </button>
+      </div>
+    )
+  }
+  const activeInstance = instances.find(i => i.host === activeHost) ?? null
+  return (
+    <>
+      {/* 인스턴스 셀렉터 바 */}
+      <div className="gl-inst-bar">
+        {instances.map(inst => {
+          const on = inst.host === activeHost
+          return (
+            <button
+              key={inst.host}
+              className={`gl-inst${on ? ' on' : ''}`}
+              onClick={() => onSelectInstance(inst.host)}
+              title={`${inst.display} (${inst.type})`}
+            >
+              <span className="gl-inst-ic">{inst.type === 'SaaS' ? <IconCloud /> : <IconServer />}</span>
+              <span className="gl-inst-info">
+                <span className="gl-inst-host">
+                  <b>{inst.display}</b>
+                  <span className={`gl-inst-type${inst.type === 'Self-hosted' ? ' self' : ''}`}>{inst.type}</span>
+                </span>
+                <span className="gl-inst-sub"><span className="gl-inst-dot" />연결됨</span>
+              </span>
+            </button>
+          )
+        })}
+        <button className="gl-inst-add" onClick={onAddInstance} title="설정에서 GitLab 인스턴스 추가">
+          ＋ 인스턴스 추가
+        </button>
+      </div>
+
+      {/* 필터 바 */}
+      <div className="rm-filter-bar">
+        <div className="rm-search-wrap">
+          <IconSearch />
+          <input
+            type="text"
+            placeholder="GitLab 프로젝트 검색 (namespace/name)…"
+            value={query}
+            onChange={e => onQueryChange(e.target.value)}
+          />
+        </div>
+        <button className="pr-refresh-btn" title="새로고침" disabled={loading} onClick={onRefresh}>
+          <span style={loading ? { display: 'inline-block', animation: 'spin 600ms linear infinite' } : undefined}>⟳</span>
+        </button>
+        {projects.length > 0 && <span className="rm-gh-count">{projects.length}개</span>}
+      </div>
+
+      {/* 리스트 / 상태 */}
+      <div className="rm-list">
+        {loading && projects.length === 0 ? (
+          [0, 1, 2, 3, 4].map(i => (
+            <div key={i} className="skel-row">
+              <div className="skel" style={{ width: 34, height: 34 }} />
+              <div style={{ flex: 1 }}>
+                <div className="skel" style={{ width: '42%', height: 13, marginBottom: 7 }} />
+                <div className="skel" style={{ width: '26%', height: 11 }} />
+              </div>
+              <div className="skel" style={{ width: 74, height: 30 }} />
+            </div>
+          ))
+        ) : error ? (
+          <div className="rm-empty-big">
+            <Geuru expr="conflict" scale={3.4} title="그루" />
+            <b>불러오지 못했어요</b>
+            <span className="rm-empty-err">{(activeInstance?.display ?? activeHost ?? '')} · {error}</span>
+            <span>토큰이 만료됐거나 <code>api</code> scope가 없을 수 있어요. 설정에서 다시 검증하세요.</span>
+            <button className="rm-action-btn clone" style={{ minWidth: 'auto', padding: '8px 16px' }} onClick={onRefresh}>
+              <IconRefresh /> 다시 시도
+            </button>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="rm-empty-big">
+            <Geuru expr="sleepy" scale={3.4} title="그루" />
+            <b>{query.trim() ? '검색 결과가 없어요' : '프로젝트가 없어요'}</b>
+            <span>
+              {query.trim()
+                ? '다른 검색어로 시도해 보세요.'
+                : `${activeInstance?.display ?? ''} 에서 접근 가능한 프로젝트가 없어요. 프로젝트를 만들거나 그룹에 합류해 보세요.`}
+            </span>
+          </div>
+        ) : (
+          <>
+            {projects.map(proj => {
+              const local = isLocal(proj.path_with_namespace)
+              const cloning = cloningRepo === proj.path_with_namespace
+              return (
+                <div key={proj.id} className="rm-gh-row">
+                  <div
+                    className="rm-gh-avatar"
+                    style={{ background: `linear-gradient(135deg, ${avatarColor(proj.path_with_namespace)}, ${avatarColor(proj.path_with_namespace)}99)` }}
+                  >
+                    {proj.name.slice(0, 2)}
+                  </div>
+                  <div className="rm-gh-info">
+                    <div className="rm-gh-title">
+                      <span className="rm-gh-name">{proj.path_with_namespace}</span>
+                      <span className={visTagClass(proj.visibility)}>{visLabel[proj.visibility]}</span>
+                    </div>
+                    <div className="rm-gh-sub">
+                      <span><IconStarSmall /> {proj.star_count}</span>
+                      {proj.last_activity_at && <span className="rm-gh-dot">·</span>}
+                      {proj.last_activity_at && <span>{relativeTime(proj.last_activity_at)}</span>}
+                    </div>
+                  </div>
+                  <div className="rm-gh-action">
+                    <button
+                      className={`rm-action-btn ${local ? 'open' : 'clone'}`}
+                      disabled={cloning}
+                      onClick={() => onAction(proj)}
+                    >
+                      {cloning ? <span className="sett-spinner" /> : local ? '열기' : 'Clone'}
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+            {hasMore && (
+              <div className="rm-loadmore">
+                <button disabled={loadingMore} onClick={onLoadMore}>
+                  {loadingMore ? '불러오는 중…' : '더 보기'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
 export interface RepoManagerProps {
   repos: Repo[]
   activeRepo: number
@@ -339,15 +575,19 @@ export interface RepoManagerProps {
   onToggleRepoInWorkspace: (id: string, path: string) => void
   onClone: (url: string) => Promise<boolean>
   onBrowse: () => void
+  /** GitLab 연결 여부(연결된 host가 1개 이상) — 사이드바 활성/점 표시용 */
+  gitlabConnected: boolean
   /** 외부 브라우저로 URL 열기 (인박스 항목 클릭) */
   onOpenUrl: (url: string) => void
+  /** GitLab 탭이 있는 Settings 패널 열기 (GL5 미연결 유도 / 인스턴스 추가) */
+  onOpenGitlabSettings: () => void
   notify: (type: 'info' | 'success' | 'warning' | 'error', title: string, body: string) => void
 }
 
 export function RepoManager({
-  repos, activeRepo, githubConnected, githubToken, githubLogin, recents, favorites, workspaces,
+  repos, activeRepo, githubConnected, githubToken, githubLogin, gitlabConnected, recents, favorites, workspaces,
   onToggleFavorite, onOpenPath, onRemoveRepo, onCreateWorkspace, onRenameWorkspace,
-  onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, onOpenUrl, notify,
+  onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, onOpenUrl, onOpenGitlabSettings, notify,
 }: RepoManagerProps) {
   const [sel, setSel] = useState<Selection>({ kind: 'view', view: 'all' })
   const [query, setQuery] = useState('')
@@ -373,6 +613,23 @@ export function RepoManager({
   const [ghError, setGhError] = useState<string | null>(null)
   const [ghQuery, setGhQuery] = useState('')
   const [ghCloning, setGhCloning] = useState<string | null>(null)
+
+  // ── GitLab 프로젝트 브라우저 상태 (GL5·GL6) ──
+  // 연결된 인스턴스(host) 목록 — 마운트 시 gitlabListHosts()로 로드.
+  const [glInstances, setGlInstances] = useState<GitlabInstance[] | null>(null)
+  const [glActiveHost, setGlActiveHost] = useState<string | null>(null)
+  // host → 토큰 캐시(연결됨 인스턴스)
+  const [glTokens, setGlTokens] = useState<Record<string, string>>({})
+  const [glProjects, setGlProjects] = useState<GitlabProjectSummary[] | null>(null)
+  const [glLoading, setGlLoading] = useState(false)
+  const [glLoadingMore, setGlLoadingMore] = useState(false)
+  const [glError, setGlError] = useState<string | null>(null)
+  const [glQuery, setGlQuery] = useState('')
+  const [glPage, setGlPage] = useState(1)
+  const [glHasMore, setGlHasMore] = useState(false)
+  const [glCloning, setGlCloning] = useState<string | null>(null)
+  // path(host)#fullPath(소문자) Set — 로컬 보유 GitLab 프로젝트
+  const [glLocal, setGlLocal] = useState<Record<string, string>>({})
 
   const favSet = useMemo(() => new Set(favorites), [favorites])
 
@@ -470,6 +727,155 @@ export function RepoManager({
     }
   }
 
+  // ── GitLab: 연결된 인스턴스(host+토큰) 로드 (마운트/탭 진입) ──
+  useEffect(() => {
+    let cancelled = false
+    if (sel.kind !== 'gitlab' || glInstances !== null) return
+    void (async () => {
+      try {
+        const hosts = await window.appAPI?.gitlabListHosts() ?? []
+        // gitlab.com(SaaS)을 먼저 정렬
+        const sorted = [...hosts].sort((a, b) => {
+          const an = normalizeGitlabHost(a) === 'https://gitlab.com' ? 0 : 1
+          const bn = normalizeGitlabHost(b) === 'https://gitlab.com' ? 0 : 1
+          return an - bn
+        })
+        const tokenEntries = await Promise.all(sorted.map(async h => {
+          const norm = normalizeGitlabHost(h)
+          const token = await window.appAPI?.gitlabGetToken(h) ?? null
+          return { norm, token }
+        }))
+        if (cancelled) return
+        const tokens: Record<string, string> = {}
+        const insts: GitlabInstance[] = []
+        tokenEntries.forEach(({ norm, token }) => {
+          if (!norm || !token) return
+          tokens[norm] = token
+          const display = norm.replace(/^https?:\/\//, '')
+          insts.push({ host: norm, display, type: norm === 'https://gitlab.com' ? 'SaaS' : 'Self-hosted' })
+        })
+        setGlTokens(tokens)
+        setGlInstances(insts)
+        setGlActiveHost(prev => prev ?? insts[0]?.host ?? null)
+      } catch {
+        if (!cancelled) { setGlInstances([]); setGlActiveHost(null) }
+      }
+    })()
+    return () => { cancelled = true }
+  }, [sel, glInstances])
+
+  // ── GitLab: 로컬 보유 프로젝트 해석 (열린 레포 + 최근, getRemotes → parseGitLabRepo) ──
+  // 키 = "{host}#{fullPath}"(소문자). 활성 host의 path_with_namespace와 매칭.
+  useEffect(() => {
+    let cancelled = false
+    const paths = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path)])
+    paths.forEach(path => {
+      if (glLocal[path] !== undefined) return
+      window.gitAPI?.getRemotes(path)
+        .then(remotes => {
+          if (cancelled) return
+          const origin = remotes.find(rm => rm.name === 'origin') ?? remotes[0]
+          const info = origin && parseGitLabRepo(origin.url)
+          setGlLocal(prev => ({ ...prev, [path]: info ? `${info.host}#${info.fullPath}`.toLowerCase() : '' }))
+        })
+        .catch(() => { if (!cancelled) setGlLocal(prev => ({ ...prev, [path]: '' })) })
+    })
+    return () => { cancelled = true }
+  }, [repos, recents, glLocal])
+
+  // "{host}#{fullPath}"(소문자) → 로컬 path
+  const glLocalByKey = useMemo(() => {
+    const m = new Map<string, string>()
+    Object.entries(glLocal).forEach(([path, key]) => { if (key) m.set(key, path) })
+    return m
+  }, [glLocal])
+
+  const isGlLocal = (fullPath: string): boolean => {
+    if (!glActiveHost) return false
+    return glLocalByKey.has(`${glActiveHost}#${fullPath}`.toLowerCase())
+  }
+
+  // ── GitLab: 프로젝트 목록 fetch ──
+  const loadGitlabProjects = useMemo(() => {
+    return async (host: string, opts: { force?: boolean; search?: string; page?: number; append?: boolean }) => {
+      const token = glTokens[host]
+      if (!token) return
+      const page = opts.page ?? 1
+      if (opts.append) setGlLoadingMore(true)
+      else { setGlLoading(true); setGlError(null) }
+      try {
+        const list = await getProjects(host, token, {
+          membership: true,
+          search: opts.search?.trim() || undefined,
+          page,
+          perPage: 30,
+          cache: opts.force ? false : undefined,
+        })
+        setGlHasMore(list.length === 30)
+        setGlProjects(prev => (opts.append && prev ? [...prev, ...list] : list))
+      } catch (err) {
+        const msg = err instanceof GitlabApiError
+          ? err.message
+          : err instanceof Error ? err.message : String(err)
+        if (opts.append) setGlError(msg)
+        else { setGlError(msg); setGlProjects([]) }
+      } finally {
+        if (opts.append) setGlLoadingMore(false)
+        else setGlLoading(false)
+      }
+    }
+  }, [glTokens])
+
+  // 활성 host 변경 / 검색어 변경 시 1페이지 로드 (검색은 디바운스)
+  useEffect(() => {
+    if (sel.kind !== 'gitlab' || !glActiveHost || !glTokens[glActiveHost]) return
+    const handle = setTimeout(() => {
+      setGlPage(1)
+      void loadGitlabProjects(glActiveHost, { search: glQuery, page: 1 })
+    }, glQuery ? 300 : 0)
+    return () => clearTimeout(handle)
+  }, [sel.kind, glActiveHost, glQuery, glTokens, loadGitlabProjects])
+
+  const handleGlSelectInstance = (host: string) => {
+    if (host === glActiveHost) return
+    setGlActiveHost(host)
+    setGlProjects(null)
+    setGlQuery('')
+    setGlPage(1)
+    setGlError(null)
+  }
+
+  const handleGlRefresh = () => {
+    if (!glActiveHost) return
+    setGlPage(1)
+    void loadGitlabProjects(glActiveHost, { force: true, search: glQuery, page: 1 })
+  }
+
+  const handleGlLoadMore = () => {
+    if (!glActiveHost || glLoadingMore) return
+    const next = glPage + 1
+    setGlPage(next)
+    void loadGitlabProjects(glActiveHost, { search: glQuery, page: next, append: true })
+  }
+
+  const handleGlAction = async (proj: GitlabProjectSummary) => {
+    const localPath = glActiveHost
+      ? glLocalByKey.get(`${glActiveHost}#${proj.path_with_namespace}`.toLowerCase())
+      : undefined
+    if (localPath) {
+      onOpenPath(localPath, proj.name, proj.default_branch)
+      return
+    }
+    if (glCloning) return
+    setGlCloning(proj.path_with_namespace)
+    try {
+      const ok = await onClone(proj.http_url_to_repo)
+      if (!ok) setGlCloning(null) // 성공 시 매니저가 닫히며 언마운트
+    } catch {
+      setGlCloning(null)
+    }
+  }
+
   // path → 표시정보 조회 (열린 레포 우선 → 최근 → 폴더명)
   const repoByPath = useMemo(() => {
     const m = new Map<string, RepoDesc>()
@@ -523,6 +929,7 @@ export function RepoManager({
   const wsPaths = activeWs ? activeWs.paths.filter(p => matchesQuery(describe(p).name)) : []
   const menuTarget = menu ? describe(menu.path) : null
   const isGithub = sel.kind === 'github'
+  const isGitlab = sel.kind === 'gitlab'
   const isInbox = sel.kind === 'inbox'
 
   const ghFiltered = useMemo(() => {
@@ -629,9 +1036,25 @@ export function RepoManager({
               <IconGitHub />GitHub
             </div>
           )}
-          <div className="rm-sidebar-item rm-disabled" title="준비 중">
-            <IconGitLab />GitLab
-          </div>
+          {gitlabConnected ? (
+            <div
+              className={`rm-sidebar-item${isGitlab ? ' active' : ''}`}
+              title="내 GitLab 프로젝트 둘러보기"
+              onClick={() => setSel({ kind: 'gitlab' })}
+            >
+              <GlMark size={15} />GitLab
+              <span className="rm-svc-dot gl" />
+            </div>
+          ) : (
+            <div
+              className="rm-sidebar-item rm-disabled"
+              title="GitLab 연결 필요 (설정 → GitLab 탭에서 인스턴스 등록)"
+              onClick={onOpenGitlabSettings}
+              style={{ cursor: 'pointer' }}
+            >
+              <IconGitLab />GitLab
+            </div>
+          )}
         </div>
       </div>
 
@@ -688,6 +1111,27 @@ export function RepoManager({
             onQueryChange={setGhQuery}
             onRefresh={() => void loadGithubRepos(true)}
             onAction={repo => void handleGhAction(repo)}
+          />
+        ) : isGitlab ? (
+          <GitlabBrowser
+            instances={glInstances ?? []}
+            activeHost={glActiveHost}
+            onSelectInstance={handleGlSelectInstance}
+            onAddInstance={onOpenGitlabSettings}
+            disconnected={glInstances !== null && glInstances.length === 0}
+            projects={glProjects ?? []}
+            loading={glLoading || glInstances === null}
+            error={glError}
+            query={glQuery}
+            hasMore={glHasMore}
+            loadingMore={glLoadingMore}
+            cloningRepo={glCloning}
+            isLocal={isGlLocal}
+            onQueryChange={setGlQuery}
+            onRefresh={handleGlRefresh}
+            onLoadMore={handleGlLoadMore}
+            onAction={proj => void handleGlAction(proj)}
+            onOpenSettings={onOpenGitlabSettings}
           />
         ) : (
         <>

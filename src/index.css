@@ -895,6 +895,52 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-gh-action{flex-shrink:0;}
 .rm-gh-action .rm-action-btn{min-width:72px;justify-content:center;}
 
+/* ── GitLab 프로젝트 브라우저 (GL5·GL6) ── */
+/* 서비스 연결 사이드바 GitLab 점/활성 */
+.rm-sidebar-item .rm-svc-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-left:auto;}
+.rm-svc-dot.gl{background:var(--c-gitlab);box-shadow:0 0 6px rgba(252,109,38,.5);}
+.rm-svc-dot.off{background:var(--c-text-faint);}
+/* 인스턴스 셀렉터 바 */
+.gl-inst-bar{display:flex;gap:10px;padding:14px 24px 0;flex-wrap:wrap;}
+.gl-inst{display:flex;align-items:center;gap:11px;padding:10px 13px;border:1px solid var(--c-border);border-radius:8px;background:var(--c-bg-inset);cursor:pointer;transition:border-color 120ms,background 120ms;min-width:236px;text-align:left;}
+.gl-inst:hover{border-color:var(--c-border-strong);}
+.gl-inst.on{border-color:var(--c-gitlab-border);background:var(--c-gitlab-bg-soft);}
+.gl-inst-ic{width:31px;height:31px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--c-bg-elevated);border:1px solid var(--c-border);color:var(--c-gitlab-3);}
+.gl-inst.on .gl-inst-ic{border-color:var(--c-gitlab-border);}
+.gl-inst-ic svg{width:16px;height:16px;}
+.gl-inst-info{flex:1;min-width:0;}
+.gl-inst-host{display:flex;align-items:center;gap:7px;}
+.gl-inst-host b{font-family:var(--font-mono);font-size:12.5px;color:var(--c-text-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
+.gl-inst-type{font-size:9px;font-family:var(--font-display);letter-spacing:.04em;padding:1px 6px;border-radius:999px;border:1px solid var(--c-border);color:var(--c-text-faint);background:var(--c-bg-elevated);flex-shrink:0;}
+.gl-inst-type.self{color:var(--c-gitlab-3);border-color:var(--c-gitlab-border);background:var(--c-gitlab-bg-soft);}
+.gl-inst-sub{display:flex;align-items:center;gap:6px;margin-top:3px;font-size:11px;color:var(--c-text-muted);font-family:var(--font-mono);}
+.gl-inst-dot{width:7px;height:7px;border-radius:50%;background:var(--c-success);box-shadow:0 0 6px rgba(111,207,124,.5);flex-shrink:0;}
+.gl-inst-add{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 16px;border:1px dashed var(--c-border);border-radius:8px;background:none;color:var(--c-text-muted);font-size:12px;cursor:pointer;transition:border-color 120ms,color 120ms;}
+.gl-inst-add:hover{border-color:var(--c-gitlab-border);color:var(--c-gitlab-3);}
+/* 프로젝트 행 아바타 + visibility 태그 */
+.rm-gh-avatar{width:34px;height:34px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:13px;color:#fff;}
+.rm-gh-tag.priv{color:var(--c-gold-300);border-color:var(--c-gold-border);background:var(--c-gold-bg-soft);}
+/* 행 액션 버튼 (디자인 .open=골드 / .clone=중립, hover 시 주황 식별) */
+.rm-gh-action .rm-action-btn.open{background:var(--c-gold-bg);border-color:var(--c-gold-border);color:var(--c-gold-300);font-weight:600;}
+.rm-gh-action .rm-action-btn.open:hover{background:rgba(230,165,54,.22);color:var(--c-gold-200);}
+.rm-gh-action .rm-action-btn.clone{background:var(--c-bg-elevated);border-color:var(--c-border);color:var(--c-text-muted);}
+.rm-gh-action .rm-action-btn.clone:hover{border-color:var(--c-gitlab-border);color:var(--c-gitlab-3);background:var(--c-bg-elevated);}
+/* 로딩 스켈레톤 */
+.skel-row{display:flex;align-items:center;gap:12px;padding:11px 12px;}
+.skel{background:linear-gradient(90deg,var(--c-bg-surface) 25%,var(--c-bg-elevated) 50%,var(--c-bg-surface) 75%);background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:5px;}
+@keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+/* 더 보기 (페이지네이션) */
+.rm-loadmore{display:flex;justify-content:center;padding:14px 0 4px;}
+.rm-loadmore button{padding:7px 18px;background:var(--c-bg-elevated);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:12px;cursor:pointer;transition:border-color 120ms,color 120ms;font-family:var(--font-body);}
+.rm-loadmore button:hover{border-color:var(--c-gold-border);color:var(--c-gold-300);}
+.rm-loadmore button:disabled{opacity:.6;cursor:default;}
+/* 빈/미연결/에러 큰 상태 */
+.rm-empty-big{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:50px 24px;text-align:center;}
+.rm-empty-big b{font-family:var(--font-display);font-size:15px;color:var(--c-text-strong);font-weight:400;letter-spacing:.3px;}
+.rm-empty-big span{font-size:12.5px;color:var(--c-text-muted);line-height:1.6;max-width:300px;}
+.rm-empty-big .rm-empty-err{color:var(--c-danger);font-family:var(--font-mono);font-size:11.5px;}
+.rm-empty-big .rm-empty-err code{font-family:var(--font-mono);color:var(--c-gitlab-3);}
+
 /* ── Cross-repo 인박스 (B19) ── */
 .rm-inbox{flex:1;display:flex;flex-direction:column;min-height:0;}
 .rm-inbox-tabs{display:flex;gap:4px;padding:12px 28px 0;background:var(--c-bg-deep);}
