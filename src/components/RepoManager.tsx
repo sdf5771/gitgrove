@@ -786,17 +786,41 @@ export function RepoManager({
     return () => { cancelled = true }
   }, [repos, recents, glLocal])
 
-  // "{host}#{fullPath}"(소문자) → 로컬 path
-  const glLocalByKey = useMemo(() => {
-    const m = new Map<string, string>()
-    Object.entries(glLocal).forEach(([path, key]) => { if (key) m.set(key, path) })
-    return m
+  // "{host}#{fullPath}"(소문자) → 로컬 path. 추가로 포트 제외 hostname 키도 둔다.
+  // SSH remote가 `ssh://git@host:2222/...`처럼 SSH 포트를 host에 싣는 경우,
+  // 저장된 API host(포트 없음)와 exact 키가 어긋나므로 hostname 폴백으로 보정.
+  const { glLocalByKey, glLocalByHostname } = useMemo(() => {
+    const byKey = new Map<string, string>()
+    const byName = new Map<string, string>()
+    Object.entries(glLocal).forEach(([path, key]) => {
+      if (!key) return
+      byKey.set(key, path)
+      // key = "{host}#{fullPath}" → host의 포트를 제거한 hostname 키
+      const hashAt = key.indexOf('#')
+      if (hashAt > 0) {
+        const host = key.slice(0, hashAt)
+        const rest = key.slice(hashAt) // "#fullPath"
+        const authority = host.replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+        const colon = authority.lastIndexOf(':')
+        const hostname = colon > 0 ? authority.slice(0, colon) : authority
+        byName.set(`${hostname}${rest}`, path)
+      }
+    })
+    return { glLocalByKey: byKey, glLocalByHostname: byName }
   }, [glLocal])
 
-  const isGlLocal = (fullPath: string): boolean => {
-    if (!glActiveHost) return false
-    return glLocalByKey.has(`${glActiveHost}#${fullPath}`.toLowerCase())
+  // 활성 host + fullPath로 로컬 보유 경로를 찾는다(exact → hostname 폴백).
+  const glLocalLookup = (fullPath: string): string | undefined => {
+    if (!glActiveHost) return undefined
+    const exact = glLocalByKey.get(`${glActiveHost}#${fullPath}`.toLowerCase())
+    if (exact) return exact
+    const authority = glActiveHost.replace(/^https?:\/\//, '')
+    const colon = authority.lastIndexOf(':')
+    const hostname = colon > 0 ? authority.slice(0, colon) : authority
+    return glLocalByHostname.get(`${hostname}#${fullPath}`.toLowerCase())
   }
+
+  const isGlLocal = (fullPath: string): boolean => glLocalLookup(fullPath) !== undefined
 
   // ── GitLab: 프로젝트 목록 fetch ──
   const loadGitlabProjects = useMemo(() => {
@@ -862,9 +886,7 @@ export function RepoManager({
   }
 
   const handleGlAction = async (proj: GitlabProjectSummary) => {
-    const localPath = glActiveHost
-      ? glLocalByKey.get(`${glActiveHost}#${proj.path_with_namespace}`.toLowerCase())
-      : undefined
+    const localPath = glLocalLookup(proj.path_with_namespace)
     if (localPath) {
       onOpenPath(localPath, proj.name, proj.default_branch)
       return

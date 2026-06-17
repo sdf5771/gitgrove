@@ -73,6 +73,20 @@ describe('PR 탭 provider 분기 (GitHub PRView ↔ GitLab MRView)', () => {
     expect(getMergeRequestsMock).not.toHaveBeenCalled()
   })
 
+  it('self-hosted SSH 커스텀 포트 origin도 저장 host와 매칭돼 MRView를 렌더한다', async () => {
+    // origin이 ssh://...:2222 → parseGitLabRepo.host = https://gl.internal:2222
+    // 저장된 API host는 포트 없는 https://gl.internal → hostname 폴백 매칭(회귀 방지).
+    setupRepo({
+      originUrl: 'ssh://git@gl.internal:2222/platform/web-client.git',
+      gitlabHosts: ['https://gl.internal'],
+      gitlabToken: 'gl-tok',
+    })
+    render(<App />)
+    await openPRTab()
+    await waitFor(() => expect(shown('No open merge requests')).toBe(true))
+    expect(getMergeRequestsMock).toHaveBeenCalled()
+  })
+
   it('origin이 GitLab이지만 host 미연결이면 PRView로(기존 동작)', async () => {
     setupRepo({
       originUrl: 'git@gitlab.com:platform/web-client.git',
