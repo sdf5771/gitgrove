@@ -35,7 +35,7 @@ import { CherryPickModal } from './components/modals/CherryPickModal'
 import { StashPanel } from './components/modals/StashPanel'
 import { BranchModal } from './components/modals/BranchModal'
 import { InteractiveRebaseModal } from './components/modals/InteractiveRebaseModal'
-import { SettingsPanel } from './components/modals/SettingsPanel'
+import { SettingsPanel, type SettingsTab } from './components/modals/SettingsPanel'
 import { AddRepoModal } from './components/modals/AddRepoModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
 import { RepoManager } from './components/RepoManager'
@@ -277,6 +277,7 @@ export default function App() {
   const [branchTab,      setBranchTab]      = useState<BranchTab>('create')
   const [showRebase,     setShowRebase]     = useState(false)
   const [showSettings,   setShowSettings]   = useState(false)
+  const [settingsTab,    setSettingsTab]    = useState<SettingsTab | undefined>(undefined)
   const [showAddRepo,    setShowAddRepo]    = useState(false)
   const [showConflict,   setShowConflict]   = useState(false)
   const [showCmd,        setShowCmd]        = useState(false)
@@ -633,6 +634,23 @@ export default function App() {
     return () => {
       cancelled = true
       window.removeEventListener('gitgrove:settings-changed', loadToken)
+    }
+  }, [])
+
+  // ── GitLab 연결 여부 (연결된 host가 1개 이상이면 RepoManager GitLab 활성) ──
+  const [gitlabConnected, setGitlabConnected] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    const loadHosts = () => {
+      window.appAPI?.gitlabListHosts()
+        .then(hosts => { if (!cancelled) setGitlabConnected(hosts.length > 0) })
+        .catch(() => {})
+    }
+    loadHosts()
+    window.addEventListener('gitgrove:settings-changed', loadHosts)
+    return () => {
+      cancelled = true
+      window.removeEventListener('gitgrove:settings-changed', loadHosts)
     }
   }, [])
 
@@ -1153,6 +1171,7 @@ export default function App() {
             githubConnected={!!githubToken}
             githubToken={githubToken}
             githubLogin={githubUser?.login ?? null}
+            gitlabConnected={gitlabConnected}
             recents={recents}
             favorites={favorites}
             workspaces={workspaces}
@@ -1171,6 +1190,7 @@ export default function App() {
               })()
             }}
             onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
+            onOpenGitlabSettings={() => { setSettingsTab('gitlab'); setShowSettings(true) }}
             notify={notify}
           />
         ) : isLoading ? renderLoading() : !repoPath ? renderEmptyState() : (
@@ -1357,7 +1377,7 @@ export default function App() {
           currentBranch={activeBranch}
         />}
         {showStash       && <StashPanel onClose={() => setShowStash(false)} repoPath={repoPath} currentBranch={activeBranch} />}
-        {showSettings    && <SettingsPanel onClose={() => setShowSettings(false)} repoPath={repoPath} />}
+        {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} />}
         {showAddRepo     && (
           <AddRepoModal
             onClose={() => setShowAddRepo(false)}

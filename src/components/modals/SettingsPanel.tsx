@@ -4,7 +4,7 @@ import { getCurrentUser, GitlabApiError, type GitlabUser } from '../../utils/git
 import { normalizeGitlabHost } from '../../utils/gitlab'
 import { Geuru } from '../Geuru'
 
-type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github' | 'gitlab'
+export type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github' | 'gitlab'
 
 const GITLAB_COM_HOST = 'https://gitlab.com'
 type GitlabKind = 'com' | 'self'
@@ -105,10 +105,12 @@ function glResultFromUser(user: GitlabUser, host: string): GitlabVerifyResult {
 interface Props {
   onClose: () => void
   repoPath?: string | null
+  /** 처음 표시할 탭 (예: GitLab 미연결 유도 시 'gitlab') */
+  initialTab?: SettingsTab
 }
 
-export function SettingsPanel({ onClose, repoPath }: Props) {
-  const [tab, setTab] = useState<SettingsTab>('git')
+export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
+  const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'git')
   const [cfg, setCfg] = useState({ name: '', email: '', defaultBranch: 'main', gpg: false })
   const [remotes, setRemotes] = useState<Array<{ n: string; url: string }>>([])
   const [newRemote, setNewRemote] = useState({ n: '', url: '' })
