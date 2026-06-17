@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Markdown } from './Markdown'
 import { Geuru } from './Geuru'
-import { parseGitLabRepo, pipelineStatusToPipe, type PipeState } from '../utils/gitlab'
+import { parseGitLabRepo, matchGitlabHost, pipelineStatusToPipe, type PipeState } from '../utils/gitlab'
 import {
   getMergeRequests,
   getMergeRequestChanges,
@@ -182,7 +182,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
     const info = parseGitLabRepo(origin.url)
     if (!info) return null
     const hosts = await window.appAPI?.gitlabListHosts() ?? []
-    const matched = hosts.find(h => h.replace(/\/+$/, '') === info.host.replace(/\/+$/, ''))
+    const matched = matchGitlabHost(hosts, info.host)
     if (!matched) return null
     const token = await window.appAPI?.gitlabGetToken(matched) ?? null
     if (!token) return null

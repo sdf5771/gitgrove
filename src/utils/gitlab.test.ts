@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeGitlabHost, parseGitLabRepo, accessLevelToRole, pipelineStatusToPipe } from './gitlab'
+import { normalizeGitlabHost, parseGitLabRepo, accessLevelToRole, pipelineStatusToPipe, matchGitlabHost } from './gitlab'
 
 describe('normalizeGitlabHost', () => {
   it('스킴 없으면 https 부여 + trailing slash 제거', () => {
@@ -200,5 +200,60 @@ describe('accessLevelToRole', () => {
   it('NaN/Infinity는 null', () => {
     expect(accessLevelToRole(NaN)).toBeNull()
     expect(accessLevelToRole(Infinity)).toBeNull()
+  })
+})
+
+describe('matchGitlabHost (origin host ↔ 연결 host 매칭)', () => {
+  it('authority 완전 일치(gitlab.com)', () => {
+    const hosts = ['https://gitlab.com']
+    expect(matchGitlabHost(hosts, 'https://gitlab.com')).toBe('https://gitlab.com')
+  })
+
+  it('trailing slash / 스킴 차이를 무시하고 매칭', () => {
+    const hosts = ['https://gitlab.com']
+    expect(matchGitlabHost(hosts, 'https://gitlab.com/')).toBe('https://gitlab.com')
+    // (이론상) http origin이라도 authority가 같으면 같은 인스턴스로 본다
+    expect(matchGitlabHost(['http://gl.internal'], 'http://gl.internal/')).toBe('http://gl.internal')
+  })
+
+  it('self-hosted SSH 커스텀 포트(ssh://...:2222) origin도 저장된 API host와 매칭', () => {
+    // parseGitLabRepo('ssh://git@gl.internal:2222/g/p.git').host === 'https://gl.internal:2222'
+    // 저장 host(API)는 포트 없음 → hostname 폴백으로 매칭돼야 함
+    const hosts = ['https://gl.internal']
+    expect(matchGitlabHost(hosts, 'https://gl.internal:2222')).toBe('https://gl.internal')
+  })
+
+  it('scp-ssh(포트 없음) origin은 1순위 authority로 매칭', () => {
+    // parseGitLabRepo('git@gl.internal:g/p.git').host === 'https://gl.internal'
+    expect(matchGitlabHost(['https://gl.internal'], 'https://gl.internal')).toBe('https://gl.internal')
+  })
+
+  it('연결되지 않은 host는 null', () => {
+    expect(matchGitlabHost(['https://gitlab.com'], 'https://gl.other.com')).toBeNull()
+    expect(matchGitlabHost([], 'https://gitlab.com')).toBeNull()
+  })
+
+  it('빈 repoHost는 null', () => {
+    expect(matchGitlabHost(['https://gitlab.com'], '')).toBeNull()
+  })
+
+  it('legit한 커스텀 HTTPS 포트는 구분 유지(exact만, 잘못된 매칭 안 함)', () => {
+    // 8443에 연결돼 있고 origin이 9443이면 hostname은 같지만 포트가 다른 별개 인스턴스 →
+    // 단, 같은 hostname 연결이 유일하면 폴백으로 매칭(아래 모호성 케이스와 구분)
+    const hosts = ['https://gl.internal:8443']
+    // exact 우선
+    expect(matchGitlabHost(hosts, 'https://gl.internal:8443')).toBe('https://gl.internal:8443')
+  })
+
+  it('동일 hostname에 포트만 다른 인스턴스가 둘 이상이면 모호 → null(잘못된 매칭 방지)', () => {
+    const hosts = ['https://gl.internal:8443', 'https://gl.internal:9443']
+    // SSH 포트(2222)는 둘 중 어디로도 단정 불가 → null
+    expect(matchGitlabHost(hosts, 'https://gl.internal:2222')).toBeNull()
+  })
+
+  it('여러 인스턴스 중 정확한 hostname 하나만 매칭', () => {
+    const hosts = ['https://gitlab.com', 'https://gl.internal']
+    expect(matchGitlabHost(hosts, 'https://gl.internal:2222')).toBe('https://gl.internal')
+    expect(matchGitlabHost(hosts, 'https://gitlab.com')).toBe('https://gitlab.com')
   })
 })

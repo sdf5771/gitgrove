@@ -7,6 +7,7 @@ import https from 'node:https'
 import simpleGit, { CheckRepoActions } from 'simple-git'
 import { categorizeGitStatus } from '../src/utils/gitStatus'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
+import { decideMaximizeAction } from './winMaximize'
 
 // macOS GPU 프로세스 크래시 억제
 app.commandLine.appendSwitch('disable-gpu-sandbox')
@@ -204,11 +205,18 @@ function createWindow() {
   // 연속 토글을 한 번으로 묶고, 풀스크린이면 먼저 해제한다.
   let maxToggleLock = false
   ipcMain.on('win-maximize', () => {
-    if (!win || maxToggleLock) return
+    if (!win) return
+    const action = decideMaximizeAction({
+      locked: maxToggleLock,
+      isFullScreen: win.isFullScreen(),
+      isMaximized: win.isMaximized(),
+    })
+    if (action === 'none') return
+    // 단일 액션을 확정했으므로 잠금을 켜 연속 토글을 한 번으로 묶는다(코얼레싱).
     maxToggleLock = true
     setTimeout(() => { maxToggleLock = false }, 300)
-    if (win.isFullScreen()) { win.setFullScreen(false); return }
-    if (win.isMaximized()) win.unmaximize()
+    if (action === 'exit-fullscreen') win.setFullScreen(false)
+    else if (action === 'unmaximize') win.unmaximize()
     else win.maximize()
   })
   ipcMain.on('win-close', () => win?.close())

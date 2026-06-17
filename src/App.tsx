@@ -24,7 +24,7 @@ import { PRView } from './components/PRView'
 import { MRView } from './components/MRView'
 import { StatusBar, type GithubUser } from './components/StatusBar'
 import { parseGitHubRepo, permissionToRole } from './utils/github'
-import { parseGitLabRepo } from './utils/gitlab'
+import { parseGitLabRepo, matchGitlabHost } from './utils/gitlab'
 import type { RepoPermissions } from './utils/github'
 import { getGithubToken } from './utils/githubToken'
 import { useGitlabConns } from './utils/useGitlabConns'
@@ -725,7 +725,7 @@ export default function App() {
         const glInfo = origin && parseGitLabRepo(origin.url)
         if (glInfo) {
           const hosts = await window.appAPI?.gitlabListHosts() ?? []
-          const matched = hosts.some(h => h.replace(/\/+$/, '') === glInfo.host.replace(/\/+$/, ''))
+          const matched = matchGitlabHost(hosts, glInfo.host)
           if (!cancelled) { setRepoProvider(matched ? 'gitlab' : 'github'); return }
         }
         if (!cancelled) setRepoProvider('github')

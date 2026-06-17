@@ -112,6 +112,48 @@ export function parseGitLabRepo(remoteUrl: string): GitLabRepoInfo | null {
   return { host, fullPath: segments.join('/'), namespace, project }
 }
 
+/** host 문자열에서 authority(host:port)만 추출. 스킴/경로 제거, 소문자. */
+function hostAuthority(host: string): string {
+  return host.trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/\/+$/, '')
+}
+
+/** authority에서 포트를 떼고 hostname만. */
+function hostnameOnly(authority: string): string {
+  // IPv6([::1]:443)은 본 앱 범위 밖 — 일반 host:port만 처리.
+  const i = authority.lastIndexOf(':')
+  return i > 0 ? authority.slice(0, i) : authority
+}
+
+/**
+ * 활성 레포 origin에서 파싱한 GitLab host(`parseGitLabRepo(...).host`)를 연결된
+ * 인스턴스 host 목록(`gitlabListHosts()` — normalizeGitlabHost 키)과 매칭한다.
+ *
+ * 1순위: authority(host:port) 완전 일치(스킴/trailing slash 무시).
+ * 2순위: hostname(포트 제외) 일치가 **유일**하면 그 host. — SSH remote가
+ *   `ssh://git@gl.internal:2222/...`처럼 SSH 포트를 host에 싣는 경우, 저장된
+ *   API host(`https://gl.internal`)와 포트가 달라 1순위가 실패하므로 보정.
+ *   동일 hostname에 포트가 다른 인스턴스가 둘 이상 연결된 경우(희귀)엔 모호하므로
+ *   2순위를 적용하지 않는다(잘못된 인스턴스 매칭 방지).
+ *
+ * @returns 매칭된 연결 host(목록 원본 문자열) 또는 null
+ */
+export function matchGitlabHost(connectedHosts: string[], repoHost: string): string | null {
+  if (!repoHost) return null
+  const target = hostAuthority(repoHost)
+  if (!target) return null
+
+  // 1순위: authority 완전 일치
+  const exact = connectedHosts.find(h => hostAuthority(h) === target)
+  if (exact) return exact
+
+  // 2순위: hostname(포트 제외) 일치가 유일할 때만
+  const targetName = hostnameOnly(target)
+  const byName = connectedHosts.filter(h => hostnameOnly(hostAuthority(h)) === targetName)
+  if (byName.length === 1) return byName[0]
+
+  return null
+}
+
 /**
  * GitLab 파이프라인/MR 머지 상태 문자열 → MR 뷰의 파이프라인 배지 상태.
  * 디자인 매핑: pass(녹색) / fail(빨강) / run(info 블루, 스핀) / pend(회색).
