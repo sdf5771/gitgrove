@@ -72,6 +72,16 @@ export function installGitApiMock() {
     isRepo: vi.fn(async () => true),
     clone: vi.fn(async (_url: string, parentDir: string) => ({ path: `${parentDir}/cloned`, name: 'cloned' })),
     getLog,
+    getActivity: vi.fn(async (_path: string, opts?: { days?: number }) => {
+      const days = Math.max(1, Math.floor(opts?.days ?? 14))
+      return { daily: Array(days).fill(0), total: 0, lastCommit: null }
+    }),
+    getActivityBatch: vi.fn(async (paths: string[], opts?: { days?: number }) => {
+      const days = Math.max(1, Math.floor(opts?.days ?? 14))
+      const map: Record<string, { daily: number[]; total: number; lastCommit: string | null }> = {}
+      for (const p of paths) map[p] = { daily: Array(days).fill(0), total: 0, lastCommit: null }
+      return map
+    }),
     getBranches,
     getStatus,
     getDiff: vi.fn(async () => ''),
