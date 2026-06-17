@@ -87,6 +87,14 @@ interface GitStashEntry {
   time: string
 }
 
+// Repository Management(RM1) — per-repo 최근 N일 활동 (스파크라인·성장단계·그로브현황).
+// 형태는 src/utils/repoActivity.ts 의 RepoActivity 와 동일하게 유지한다.
+interface RepoActivity {
+  daily: number[]           // 길이 days. index 0 = (days-1)일 전, 마지막 = 오늘 (과거→현재)
+  total: number             // daily 합 = 최근 days일 커밋 수
+  lastCommit: string | null // 가장 최근 커밋 상대시간(예: "2d ago") 또는 null
+}
+
 // ──────────────────────────────────────────────
 // Window 타입 보강
 // ──────────────────────────────────────────────
@@ -113,6 +121,8 @@ interface Window {
     isRepo: (repoPath: string) => Promise<boolean>
     clone: (url: string, parentDir: string, opts?: { shallow?: boolean }) => Promise<{ path: string; name: string }>
     getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => Promise<GitCommit[]>
+    getActivity: (repoPath: string, opts?: { days?: number }) => Promise<RepoActivity>
+    getActivityBatch: (paths: string[], opts?: { days?: number }) => Promise<Record<string, RepoActivity>>
     getBranches: (repoPath: string) => Promise<GitBranchResult>
     getStatus: (repoPath: string) => Promise<GitStatusResult>
     getDiff: (repoPath: string, filePath: string) => Promise<string>

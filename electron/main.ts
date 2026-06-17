@@ -7,6 +7,7 @@ import https from 'node:https'
 import simpleGit, { CheckRepoActions } from 'simple-git'
 import { categorizeGitStatus } from '../src/utils/gitStatus'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
+import { normalizeDailyCounts, type RepoActivity } from '../src/utils/repoActivity'
 import { decideMaximizeAction } from './winMaximize'
 
 // macOS GPU 프로세스 크래시 억제
@@ -382,6 +383,71 @@ ipcMain.handle('git:log', async (_event, repoPath: string, opts?: { limit?: numb
       stats,
     }
   })
+})
+
+// git:activity — per-repo 최근 days일 일별 커밋 활동 (Repository Management 카드용)
+//
+// 현재 HEAD 기준(전체 브랜치 X) 최근 days일 커밋을 일별로 집계해 길이 days 배열(과거→현재)로
+// 반환한다. 빈/신규/커밋없음/비-git/에러 경로는 throw하지 않고 안전 폴백(전부 0)을 돌려준다.
+// 정규화·성장단계·버킷 경계 로직은 src/utils/repoActivity.ts 순수 함수로 분리(단위테스트).
+const EMPTY_ACTIVITY = (days: number): RepoActivity => ({
+  daily: Array(days).fill(0),
+  total: 0,
+  lastCommit: null,
+})
+
+async function computeActivity(repoPath: string, days: number): Promise<RepoActivity> {
+  const git = simpleGit(repoPath)
+
+  // committer date(%cd) 기준 short date(YYYY-MM-DD). --since로 범위 제한해 가볍게.
+  // --no-color/--no-pager 불필요 (raw는 plumbing). HEAD 기준이라 --all/--branches 안 줌.
+  const out = await git.raw([
+    'log',
+    `--since=${days} days ago`,
+    '--pretty=format:%cd',
+    '--date=short',
+  ])
+
+  const dates = out.split('\n').map(s => s.trim()).filter(Boolean)
+  const daily = normalizeDailyCounts(dates, days)
+  const total = daily.reduce((a, b) => a + b, 0)
+
+  // 가장 최근 커밋 시각 → 상대시간. (없으면 null)
+  let lastCommit: string | null = null
+  try {
+    const iso = (await git.raw([
+      'log', '-1', '--pretty=format:%cI',
+    ])).trim()
+    if (iso) lastCommit = relativeTime(new Date(iso))
+  } catch {
+    // ignore — lastCommit는 부가정보
+  }
+
+  return { daily, total, lastCommit }
+}
+
+ipcMain.handle('git:activity', async (_event, repoPath: string, opts?: { days?: number }): Promise<RepoActivity> => {
+  const days = Math.max(1, Math.floor(opts?.days ?? 14))
+  try {
+    return await computeActivity(repoPath, days)
+  } catch {
+    // 빈/신규/커밋없음/비-git/에러 → 카드가 "조용" 상태로 안전하게 폴백
+    return EMPTY_ACTIVITY(days)
+  }
+})
+
+// git:activity-batch — 여러 repo를 한 번에 조회(호출부 N+1 완화).
+// 각 repo 실패가 전체를 막지 않게 allSettled. 입력 paths 순서대로 결과 반환.
+ipcMain.handle('git:activity-batch', async (_event, paths: string[], opts?: { days?: number }): Promise<Record<string, RepoActivity>> => {
+  const days = Math.max(1, Math.floor(opts?.days ?? 14))
+  const list = Array.isArray(paths) ? paths : []
+  const results = await Promise.allSettled(list.map(p => computeActivity(p, days)))
+  const map: Record<string, RepoActivity> = {}
+  list.forEach((p, i) => {
+    const r = results[i]
+    map[p] = r.status === 'fulfilled' ? r.value : EMPTY_ACTIVITY(days)
+  })
+  return map
 })
 
 // git:branches — 브랜치 목록 조회
