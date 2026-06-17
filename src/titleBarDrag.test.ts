@@ -75,4 +75,10 @@ describe('타이틀바 우측 그룹 우측 고정(.tb-right pin)', () => {
     // `flex: 0 0 auto` 또는 명시적 `flex-shrink: 0` 둘 다 허용.
     expect(tbRight).toMatch(/flex:\s*0\s+0|flex-shrink:\s*0/)
   })
+
+  it('.tb-right는 탭 스트립과 최소 간격을 보장한다(padding-left, slack 0에도 유지)', () => {
+    // margin-left:auto는 슬랙이 0이면 0으로 해소되므로, 탭이 넘칠 때 탭과 그룹이
+    // 붙는다. padding-left는 auto margin에 흡수되지 않아 항상 간격을 유지한다.
+    expect(tbRight).toMatch(/padding-left:\s*16px/)
+  })
 })

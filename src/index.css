@@ -81,8 +81,10 @@ body { display: flex; align-items: center; justify-content: center; }
 /* 타이틀 바 우측 고정 그룹(브랜치 표시 + 알림 벨).
    margin-left:auto로 남는 슬랙을 흡수해 항상 우측 끝에 핀되고,
    flex-shrink:0로 탭 개수 변동에도 줄어들지 않는다. .repo-tabs(flex:1)가
-   가용폭을 먼저 채우는 v1.16.0 동작과 양립한다(탭이 넘칠 때만 탭 내부 스크롤). */
-.tb-right { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 12px; }
+   가용폭을 먼저 채우는 v1.16.0 동작과 양립한다(탭이 넘칠 때만 탭 내부 스크롤).
+   padding-left:16px는 탭 스트립과의 최소 간격을 보장한다(기존 .sep min-width:16px 대체).
+   slack이 0이어도 padding은 auto margin에 흡수되지 않아 간격이 유지된다. */
+.tb-right { flex: 0 0 auto; margin-left: auto; padding-left: 16px; display: flex; align-items: center; gap: 12px; }
 
 /* ── Action bar ── */
 .action-bar {
