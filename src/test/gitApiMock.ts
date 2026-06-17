@@ -112,10 +112,10 @@ export function installGitApiMock() {
     openReleaseUrl: vi.fn(),
     githubIsEncryptionAvailable: vi.fn(async () => false),
     githubSetToken: vi.fn(async () => true),
-    githubGetToken: vi.fn(async () => null),
+    githubGetToken: vi.fn(async (): Promise<string | null> => null),
     gitlabIsEncryptionAvailable: vi.fn(async () => false),
     gitlabSetToken: vi.fn(async () => true),
-    gitlabGetToken: vi.fn(async () => null),
+    gitlabGetToken: vi.fn(async (): Promise<string | null> => null),
     gitlabListHosts: vi.fn(async () => [] as string[]),
     gitlabRemoveToken: vi.fn(async () => true),
   }

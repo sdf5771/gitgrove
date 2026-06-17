@@ -22,6 +22,13 @@
   --c-info:         #5fb8e6;
   --c-danger:       #ff6b6b;
   --c-warning:      #ffce5a;
+  /* GitLab 식별색 — 연결됨 카드 보더 / 탭 on 보더 / 종류 라디오 선택 표시 전용.
+     버튼·포커스링·CTA는 골드(앱 유일 액센트)를 유지하고 주황을 승격하지 않는다. */
+  --c-gitlab:       #fc6d26;
+  --c-gitlab-2:     #e24329;
+  --c-gitlab-3:     #fca326;
+  --c-gitlab-bg-soft: rgba(252,109,38,.07);
+  --c-gitlab-border:  rgba(252,109,38,.42);
   --font-display:   'Pixelify Sans','DotGothic16',system-ui,sans-serif;
   --font-body:      'Noto Sans KR',system-ui,sans-serif;
   --font-mono:      'IBM Plex Mono',ui-monospace,monospace;
@@ -518,6 +525,37 @@ body { display: flex; align-items: center; justify-content: center; }
 .sett-token-link-btn{padding:6px 12px;background:var(--c-bg-elevated);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:11.5px;font-family:var(--font-body);cursor:pointer;transition:border-color 120ms,color 120ms;}
 .sett-token-link-btn:hover{border-color:var(--c-gold-border);color:var(--c-gold-300);}
 .sett-code-inline{font-family:var(--font-mono);background:var(--c-bg-inset);padding:1px 4px;border-radius:2px;color:var(--c-info);}
+
+/* ── Settings: GitLab tab (GL4) ──
+   주황은 식별용(탭 on 보더·종류 라디오·연결됨 카드)만. 버튼/포커스링은 골드 유지. */
+.sett-tab.gl.on{color:var(--c-gitlab-3);border-bottom-color:var(--c-gitlab);}
+.gl-type{display:flex;gap:8px;}
+.gl-type-opt{flex:1;display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--c-border);border-radius:var(--r3);background:var(--c-bg-inset);cursor:pointer;transition:border-color 120ms,background 120ms;text-align:left;}
+.gl-type-opt:hover{border-color:var(--c-border-strong);}
+.gl-type-opt.on{border-color:var(--c-gitlab-border);background:var(--c-gitlab-bg-soft);}
+.gl-type-opt:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--c-gold-border);}
+.gl-radio{width:15px;height:15px;border-radius:50%;border:1.5px solid var(--c-border-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color 120ms;}
+.gl-type-opt.on .gl-radio{border-color:var(--c-gitlab);}
+.gl-type-opt.on .gl-radio::after{content:'';width:7px;height:7px;border-radius:50%;background:var(--c-gitlab);}
+.gl-type-txt b{display:block;font-size:12.5px;color:var(--c-text-strong);font-family:var(--font-display);font-weight:400;letter-spacing:.2px;}
+.gl-type-txt span{font-size:10.5px;color:var(--c-text-muted);font-family:var(--font-mono);}
+.tok-wrap{position:relative;flex:1;}
+.tok-eye{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;padding:3px;display:flex;align-items:center;justify-content:center;border-radius:5px;transition:background 120ms;}
+.tok-eye:hover{background:var(--c-gold-bg-soft);}
+.sett-spinner.gl{border-color:var(--c-gitlab-border);border-top-color:var(--c-gitlab-3);}
+.conn-status{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:var(--r3);font-size:11.5px;border:1px solid;line-height:1.4;}
+.conn-status .geuru-mini{flex-shrink:0;}
+.cs-idle{background:var(--c-bg-inset);border-color:var(--c-border);color:var(--c-text-muted);}
+.cs-verify{background:var(--c-gitlab-bg-soft);border-color:var(--c-gitlab-border);color:var(--c-gitlab-3);}
+.cs-ok{background:rgba(111,207,124,.08);border-color:rgba(111,207,124,.35);color:var(--c-success);}
+.cs-err{background:rgba(255,107,107,.08);border-color:rgba(255,107,107,.35);color:var(--c-danger);}
+/* GitLab 탭의 연결됨 카드/에러는 GitHub 탭과 같은 sett-verify-* 클래스를 쓰되,
+   연결됨 카드만 주황 식별색으로 override한다. */
+.sett-verify-ok.gl{background:var(--c-gitlab-bg-soft);border-color:var(--c-gitlab-border);}
+.sett-verify-ok.gl .sett-verify-avatar{border-color:var(--c-gitlab-border);}
+.sett-verify-avatar.gl-fallback{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--c-gitlab-3),var(--c-gitlab-2));font-family:var(--font-display);font-size:13px;color:#fff;}
+.sett-verify-err .geuru-mini{flex-shrink:0;margin-top:1px;}
+.sett-token-link-btn.gl:hover{border-color:var(--c-gitlab-border);color:var(--c-gitlab-3);}
 
 /* ── Repo tabs ── */
 .repo-tabs{display:flex;align-items:center;gap:0;overflow-x:auto;flex:1;max-width:500px;scrollbar-width:none;}

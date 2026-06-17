@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react'
 import { getUser, getRateLimit, GithubApiError } from '../../utils/githubClient'
+import { getCurrentUser, GitlabApiError, type GitlabUser } from '../../utils/gitlabClient'
+import { normalizeGitlabHost } from '../../utils/gitlab'
+import { Geuru } from '../Geuru'
 
-type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github'
+type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github' | 'gitlab'
+
+const GITLAB_COM_HOST = 'https://gitlab.com'
+type GitlabKind = 'com' | 'self'
 
 const GITHUB_TOKEN_KEY = 'gitgrove:githubToken'
 const SETTINGS_KEY = 'gitgrove:settings'
@@ -72,6 +78,30 @@ async function loadInitialToken(): Promise<string> {
   return plain
 }
 
+// GitLab PAT 발급 딥링크 — host-상대. self-hosted 인스턴스에서도 같은 경로를 연다.
+function gitlabTokenUrl(host: string): string {
+  const base = normalizeGitlabHost(host) || GITLAB_COM_HOST
+  return `${base}/-/user_settings/personal_access_tokens?scopes=api,read_user`
+}
+
+interface GitlabVerifyResult {
+  username: string
+  name: string
+  avatarUrl: string | null
+  webUrl: string
+  host: string
+}
+
+function glResultFromUser(user: GitlabUser, host: string): GitlabVerifyResult {
+  return {
+    username: user.username,
+    name: user.name,
+    avatarUrl: user.avatar_url,
+    webUrl: user.web_url,
+    host,
+  }
+}
+
 interface Props {
   onClose: () => void
   repoPath?: string | null
@@ -93,6 +123,18 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
   const [verifyState, setVerifyState] = useState<VerifyState>('idle')
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null)
   const [verifyError, setVerifyError] = useState<string>('')
+
+  // GitLab 탭 상태 (GL4)
+  const [glKind, setGlKind] = useState<GitlabKind>('com')
+  const [glHostInput, setGlHostInput] = useState('') // self-hosted Host URL 입력
+  const [glToken, setGlToken] = useState('')
+  const [glShowToken, setGlShowToken] = useState(false)
+  const [glVerifyState, setGlVerifyState] = useState<VerifyState>('idle')
+  const [glVerifyResult, setGlVerifyResult] = useState<GitlabVerifyResult | null>(null)
+  const [glVerifyError, setGlVerifyError] = useState('')
+
+  // 현재 선택된 종류로부터 사용할 host (정규화 후). com이면 고정.
+  const glActiveHost = glKind === 'com' ? GITLAB_COM_HOST : normalizeGitlabHost(glHostInput)
 
   const _saved = loadSettings()
   const [density, setDensity] = useState<'comfortable' | 'compact'>(
@@ -128,6 +170,36 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
   useEffect(() => {
     let cancelled = false
     loadInitialToken().then(t => { if (!cancelled) setGithubToken(t) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // 마운트 시 GitLab 기존 연결 복원: 연결된 host가 있으면 종류/host/토큰을 반영하고
+  // 연결됨(success) 상태로 표시. (GitHub 탭 토큰 복원 패턴 미러)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const hosts = await window.appAPI?.gitlabListHosts()
+        if (!hosts || hosts.length === 0) return
+        // gitlab.com을 우선, 없으면 첫 self-hosted host.
+        const host = hosts.find(h => normalizeGitlabHost(h) === GITLAB_COM_HOST) ?? hosts[0]
+        const token = await window.appAPI?.gitlabGetToken(host)
+        if (cancelled || !token) return
+        const normalized = normalizeGitlabHost(host)
+        const isCom = normalized === GITLAB_COM_HOST
+        setGlKind(isCom ? 'com' : 'self')
+        if (!isCom) setGlHostInput(normalized)
+        setGlToken(token)
+        try {
+          const user = await getCurrentUser(normalized, token, { cache: false })
+          if (cancelled) return
+          setGlVerifyResult(glResultFromUser(user, normalized))
+          setGlVerifyState('success')
+        } catch {
+          // 저장된 토큰이 더 이상 유효하지 않을 수 있음 — idle 유지(연결됨으로 단정 금지).
+        }
+      } catch { /* ignore */ }
+    })()
     return () => { cancelled = true }
   }, [])
 
@@ -213,6 +285,67 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
     window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
   }
 
+  // ── GitLab 탭 핸들러 (GL4) ──
+
+  // 종류 전환: com↔self. 전환 시 진행 중 검증 상태 초기화(host가 바뀌므로).
+  const onGlKindChange = (kind: GitlabKind) => {
+    if (kind === glKind) return
+    setGlKind(kind)
+    if (glVerifyState !== 'idle') { setGlVerifyState('idle'); setGlVerifyResult(null); setGlVerifyError('') }
+  }
+
+  const onGlHostChange = (v: string) => {
+    setGlHostInput(v)
+    if (glVerifyState !== 'idle') { setGlVerifyState('idle'); setGlVerifyResult(null); setGlVerifyError('') }
+  }
+
+  const onGlTokenChange = (v: string) => {
+    setGlToken(v)
+    if (glVerifyState !== 'idle') { setGlVerifyState('idle'); setGlVerifyResult(null); setGlVerifyError('') }
+  }
+
+  // GitLab 토큰 검증: GET /user → 성공 시 host-키로 토큰 저장 + 연결됨 카드.
+  const verifyGitlab = async () => {
+    const token = glToken.trim()
+    const host = glActiveHost
+    if (!host) { setGlVerifyState('error'); setGlVerifyError('Host URL을 입력하세요.'); return }
+    if (!token) { setGlVerifyState('error'); setGlVerifyError('토큰을 입력하세요.'); return }
+    setGlVerifyState('verifying'); setGlVerifyError(''); setGlVerifyResult(null)
+    try {
+      const user = await getCurrentUser(host, token, { cache: false })
+      setGlVerifyResult(glResultFromUser(user, host))
+      setGlVerifyState('success')
+      // 검증 성공 토큰을 host-키로 안전 저장(safeStorage, IPC 내부에서 host 정규화).
+      try { await window.appAPI?.gitlabSetToken(host, token) } catch { /* ignore */ }
+      window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
+    } catch (err) {
+      setGlVerifyState('error')
+      if (err instanceof GitlabApiError) {
+        if (err.status === 401) {
+          setGlVerifyError('토큰이 유효하지 않습니다 (401). 만료되었거나 api scope가 없는 토큰입니다. 위 링크에서 새로 발급하세요.')
+        } else if (err.rateLimited) {
+          setGlVerifyError(err.message)
+        } else if (err.status === 403) {
+          setGlVerifyError('접근이 거부되었습니다 (403). 토큰 권한(api, read_user)을 확인하세요.')
+        } else if (err.status === 0) {
+          setGlVerifyError('Host URL이 올바른지 확인하세요.')
+        } else {
+          setGlVerifyError(`검증 실패 (HTTP ${err.status}). 토큰 또는 호스트를 확인하세요.`)
+        }
+      } else {
+        setGlVerifyError('네트워크 오류로 검증에 실패했습니다. 호스트에 연결할 수 있는지 확인하세요.')
+      }
+    }
+  }
+
+  // GitLab 연결 해제: host-키 토큰 제거.
+  const disconnectGitlab = async () => {
+    const host = glVerifyResult?.host ?? glActiveHost
+    setGlVerifyState('idle'); setGlVerifyResult(null); setGlVerifyError('')
+    if (host) { try { await window.appAPI?.gitlabRemoveToken(host) } catch { /* ignore */ } }
+    window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
+  }
+
   return (
     <div className="sett-wrap">
       <div className="sett-bd" onClick={onClose} />
@@ -223,8 +356,12 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
           <button className="modal-close" style={{ marginLeft: 'auto' }} onClick={onClose}>×</button>
         </div>
         <div className="sett-tabs">
-          {([['git', 'Git Config'], ['appearance', 'Appearance'], ['remotes', 'Remotes'], ['github', 'GitHub']] as const).map(([id, label]) => (
-            <button key={id} className={`sett-tab${tab === id ? ' on' : ''}`} onClick={() => setTab(id)}>{label}</button>
+          {([['git', 'Git Config'], ['appearance', 'Appearance'], ['remotes', 'Remotes'], ['github', 'GitHub'], ['gitlab', 'GitLab']] as const).map(([id, label]) => (
+            <button
+              key={id}
+              className={`sett-tab${id === 'gitlab' ? ' gl' : ''}${tab === id ? ' on' : ''}`}
+              onClick={() => setTab(id)}
+            >{label}</button>
           ))}
         </div>
         <div className="sett-body">
@@ -425,6 +562,174 @@ export function SettingsPanel({ onClose, repoPath }: Props) {
                 </div>
               </div>
             </div>
+          )}
+          {tab === 'gitlab' && (
+            <>
+              <div className="sett-section">
+                <div className="sett-sec-ttl" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <Geuru expr="idle" scale={1.4} className="geuru-mini" /> GitLab 연결
+                </div>
+                {glVerifyState === 'idle' && (
+                  <div className="conn-status cs-idle">
+                    <Geuru expr="idle" scale={1.1} className="geuru-mini" />
+                    아직 연결되지 않았어요 · 토큰을 입력하고 검증하세요
+                  </div>
+                )}
+                {glVerifyState === 'verifying' && (
+                  <div className="conn-status cs-verify">
+                    <span className="sett-spinner gl" />
+                    {glActiveHost || '호스트'} 에 연결 확인 중…
+                  </div>
+                )}
+                {glVerifyState === 'success' && glVerifyResult && (
+                  <div className="conn-status cs-ok">
+                    <Geuru expr="happy" scale={1.1} className="geuru-mini" />
+                    연결됨 · @{glVerifyResult.username} · {glVerifyResult.host}
+                  </div>
+                )}
+                {glVerifyState === 'error' && (
+                  <div className="conn-status cs-err">
+                    <Geuru expr="conflict" scale={1.1} className="geuru-mini" />
+                    연결 실패 · 토큰 또는 호스트를 확인하세요
+                  </div>
+                )}
+              </div>
+
+              <div className="sett-section">
+                <div className="sett-sec-ttl">종류</div>
+                <div className="gl-type">
+                  <button
+                    type="button"
+                    className={`gl-type-opt${glKind === 'com' ? ' on' : ''}`}
+                    aria-pressed={glKind === 'com'}
+                    onClick={() => onGlKindChange('com')}
+                  >
+                    <span className="gl-radio" />
+                    <span className="gl-type-txt"><b>GitLab.com</b><span>gitlab.com</span></span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`gl-type-opt${glKind === 'self' ? ' on' : ''}`}
+                    aria-pressed={glKind === 'self'}
+                    onClick={() => onGlKindChange('self')}
+                  >
+                    <span className="gl-radio" />
+                    <span className="gl-type-txt"><b>Self-hosted</b><span>사내 인스턴스</span></span>
+                  </button>
+                </div>
+                {glKind === 'self' && (
+                  <div className="sett-field" style={{ marginTop: 2 }}>
+                    <div className="sett-lbl">Host URL</div>
+                    <input
+                      className="sett-inp"
+                      style={{ fontFamily: 'var(--font-mono)' }}
+                      value={glHostInput}
+                      onChange={e => onGlHostChange(e.target.value)}
+                      placeholder="https://gitlab.mycompany.com"
+                      spellCheck={false}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="sett-section">
+                <div className="sett-sec-ttl">Personal Access Token</div>
+                <div className="sett-field">
+                  <div className="sett-lbl">Token</div>
+                  <div className="sett-token-row">
+                    <div className="tok-wrap">
+                      <input
+                        className="sett-inp"
+                        type={glShowToken ? 'text' : 'password'}
+                        value={glToken}
+                        onChange={e => onGlTokenChange(e.target.value)}
+                        placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
+                        style={{ fontFamily: 'var(--font-mono)', paddingRight: 42 }}
+                      />
+                      <button
+                        type="button"
+                        className="tok-eye"
+                        title={glShowToken ? '토큰 숨기기' : '토큰 보기'}
+                        aria-label={glShowToken ? '토큰 숨기기' : '토큰 보기'}
+                        onClick={() => setGlShowToken(v => !v)}
+                      >
+                        <Geuru expr={glShowToken ? 'idle' : 'blink'} scale={1.15} />
+                      </button>
+                    </div>
+                    <button
+                      className="sett-verify-btn"
+                      onClick={verifyGitlab}
+                      disabled={glVerifyState === 'verifying' || !glToken.trim()}
+                    >
+                      {glVerifyState === 'verifying'
+                        ? (<><span className="sett-spinner" />검증중…</>)
+                        : '검증'}
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
+                    MR 뷰·인박스에서 실제 Merge Request와 이슈를 조회하는 데 사용됩니다.
+                    <br />
+                    필요 scope: <span className="sett-scope-chip">api</span>{' '}
+                    <span className="sett-scope-chip">read_user</span>{' '}
+                    <span className="sett-scope-chip">read_repository</span>
+                  </div>
+                </div>
+
+                {/* 검증 결과 — 연결됨 카드(GitLab 주황 식별 보더) */}
+                {glVerifyState === 'success' && glVerifyResult && (
+                  <div className="sett-verify-ok gl">
+                    <div className="sett-verify-acct">
+                      {glVerifyResult.avatarUrl
+                        ? <img className="sett-verify-avatar" src={glVerifyResult.avatarUrl} alt="" />
+                        : <div className="sett-verify-avatar gl-fallback">{(glVerifyResult.name || glVerifyResult.username).charAt(0).toUpperCase()}</div>}
+                      <div className="sett-verify-acct-info">
+                        <div className="sett-verify-acct-login">@{glVerifyResult.username}</div>
+                        <div className="sett-verify-acct-sub">연결됨 · GitLab 계정 확인 완료</div>
+                      </div>
+                    </div>
+                    <div className="sett-verify-meta">
+                      <span className="sett-verify-meta-lbl">Host</span>
+                      <span className="sett-verify-meta-val">{glVerifyResult.host}</span>
+                    </div>
+                    {glVerifyResult.name && (
+                      <div className="sett-verify-meta">
+                        <span className="sett-verify-meta-lbl">Name</span>
+                        <span className="sett-verify-meta-val">{glVerifyResult.name}</span>
+                      </div>
+                    )}
+                    <button className="sett-disconnect-btn" onClick={disconnectGitlab}>연결 해제</button>
+                  </div>
+                )}
+
+                {glVerifyState === 'error' && (
+                  <div className="sett-verify-err">
+                    <Geuru expr="conflict" scale={1.1} className="geuru-mini" />
+                    <div>{glVerifyError}</div>
+                  </div>
+                )}
+              </div>
+
+              <div className="sett-section">
+                <div className="sett-sec-ttl">토큰 발급</div>
+                <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
+                  {glKind === 'self' ? '사내 GitLab 인스턴스' : 'GitLab.com'}의 설정에서 토큰을 발급하세요. 아래 링크는 호스트에 맞춰 열립니다.
+                </div>
+                <div className="sett-token-links">
+                  <button
+                    className="sett-token-link-btn gl"
+                    disabled={!glActiveHost}
+                    onClick={() => { if (glActiveHost) window.appAPI?.openReleaseUrl(gitlabTokenUrl(glActiveHost)) }}
+                  >
+                    {glActiveHost || '호스트'} 토큰 발급 ↗
+                  </button>
+                </div>
+                {glActiveHost && (
+                  <div style={{ fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                    {gitlabTokenUrl(glActiveHost)}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
         <div className="sett-footer">
