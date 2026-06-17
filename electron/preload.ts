@@ -10,6 +10,12 @@ contextBridge.exposeInMainWorld('appAPI', {
   githubIsEncryptionAvailable: () => ipcRenderer.invoke('github:isEncryptionAvailable') as Promise<boolean>,
   githubSetToken: (token: string) => ipcRenderer.invoke('github:setToken', token) as Promise<boolean>,
   githubGetToken: () => ipcRenderer.invoke('github:getToken') as Promise<string | null>,
+  // GitLab PAT 멀티 인스턴스 안전 저장 (host→토큰 맵, safeStorage)
+  gitlabIsEncryptionAvailable: () => ipcRenderer.invoke('gitlab:isEncryptionAvailable') as Promise<boolean>,
+  gitlabSetToken: (host: string, token: string) => ipcRenderer.invoke('gitlab:setToken', host, token) as Promise<boolean>,
+  gitlabGetToken: (host: string) => ipcRenderer.invoke('gitlab:getToken', host) as Promise<string | null>,
+  gitlabListHosts: () => ipcRenderer.invoke('gitlab:listHosts') as Promise<string[]>,
+  gitlabRemoveToken: (host: string) => ipcRenderer.invoke('gitlab:removeToken', host) as Promise<boolean>,
 })
 
 // --------- Expose ipcRenderer to the Renderer process ---------

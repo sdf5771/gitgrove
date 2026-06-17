@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import https from 'node:https'
 import simpleGit, { CheckRepoActions } from 'simple-git'
 import { categorizeGitStatus } from '../src/utils/gitStatus'
+import { normalizeGitlabHost } from '../src/utils/gitlab'
 
 // macOS GPU 프로세스 크래시 억제
 app.commandLine.appendSwitch('disable-gpu-sandbox')
@@ -994,6 +995,109 @@ ipcMain.handle('github:getToken', (): string | null => {
   } catch {
     return null
   }
+})
+
+// ──────────────────────────────────────────────
+// gitlab:* — 멀티 인스턴스 PAT 안전 저장 (safeStorage / OS 키체인)
+// ──────────────────────────────────────────────
+//
+// GitLab은 gitlab.com(SaaS) + self-hosted를 **동시에** 연동할 수 있어(D1),
+// 단일 토큰이 아니라 **host→토큰 맵**을 저장한다. 맵 전체를 JSON으로 직렬화한 뒤
+// safeStorage.encryptString으로 통째 암호화해 한 파일에 보관한다.
+// host 키는 src/utils/gitlab.ts의 normalizeGitlabHost로 정규화(저장/조회 일관성).
+// 미가용 환경(일부 Linux 등)은 isEncryptionAvailable=false를 알리고 set/get은 no-op/null.
+
+function gitlabTokenFilePath(): string {
+  return path.join(app.getPath('userData'), 'gitgrove-gitlab-tokens.enc')
+}
+
+// 복호화된 host→토큰 맵을 읽는다. 파일 없음/실패/손상이면 빈 맵.
+function readGitlabTokenMap(): Record<string, string> {
+  if (!safeStorage.isEncryptionAvailable()) return {}
+  const file = gitlabTokenFilePath()
+  try {
+    if (!fs.existsSync(file)) return {}
+    const encrypted = fs.readFileSync(file)
+    const json = safeStorage.decryptString(encrypted)
+    const parsed = JSON.parse(json)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      // 값이 string인 항목만 채택(손상 방어)
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === 'string' && v) out[k] = v
+      }
+      return out
+    }
+    return {}
+  } catch {
+    return {}
+  }
+}
+
+// host→토큰 맵을 암호화 저장. 빈 맵이면 파일 제거.
+function writeGitlabTokenMap(map: Record<string, string>): boolean {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  const file = gitlabTokenFilePath()
+  try {
+    if (Object.keys(map).length === 0) {
+      try { fs.unlinkSync(file) } catch { /* 파일 없으면 무시 */ }
+      return true
+    }
+    const encrypted = safeStorage.encryptString(JSON.stringify(map))
+    fs.writeFileSync(file, encrypted)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// safeStorage 암호화 가용 여부
+ipcMain.handle('gitlab:isEncryptionAvailable', (): boolean => {
+  try {
+    return safeStorage.isEncryptionAvailable()
+  } catch {
+    return false
+  }
+})
+
+// host 토큰 upsert. token이 빈값이면 해당 host 제거. host는 정규화 후 키로.
+ipcMain.handle('gitlab:setToken', (_event, host: string, token: string): boolean => {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  const key = normalizeGitlabHost(host)
+  if (!key) return false
+  const map = readGitlabTokenMap()
+  if (!token) {
+    delete map[key]
+  } else {
+    map[key] = token
+  }
+  return writeGitlabTokenMap(map)
+})
+
+// host 토큰 복호화 조회. 없으면 null.
+ipcMain.handle('gitlab:getToken', (_event, host: string): string | null => {
+  if (!safeStorage.isEncryptionAvailable()) return null
+  const key = normalizeGitlabHost(host)
+  if (!key) return null
+  const map = readGitlabTokenMap()
+  return map[key] ?? null
+})
+
+// 연결된 host 목록(정규화된 키).
+ipcMain.handle('gitlab:listHosts', (): string[] => {
+  if (!safeStorage.isEncryptionAvailable()) return []
+  return Object.keys(readGitlabTokenMap())
+})
+
+// host 연결 해제(토큰 제거).
+ipcMain.handle('gitlab:removeToken', (_event, host: string): boolean => {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  const key = normalizeGitlabHost(host)
+  if (!key) return false
+  const map = readGitlabTokenMap()
+  if (!(key in map)) return true
+  delete map[key]
+  return writeGitlabTokenMap(map)
 })
 
 // ──────────────────────────────────────────────

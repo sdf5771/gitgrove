@@ -113,6 +113,11 @@ export function installGitApiMock() {
     githubIsEncryptionAvailable: vi.fn(async () => false),
     githubSetToken: vi.fn(async () => true),
     githubGetToken: vi.fn(async () => null),
+    gitlabIsEncryptionAvailable: vi.fn(async () => false),
+    gitlabSetToken: vi.fn(async () => true),
+    gitlabGetToken: vi.fn(async () => null),
+    gitlabListHosts: vi.fn(async () => [] as string[]),
+    gitlabRemoveToken: vi.fn(async () => true),
   }
 
   window.gitAPI = gitAPI
