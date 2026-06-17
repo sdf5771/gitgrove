@@ -9,7 +9,9 @@ import { ModalShell } from './modals/ModalShell'
 import { ConfirmModal } from './modals/ConfirmModal'
 import { GithubInbox } from './GithubInbox'
 import type { GitlabConn } from '../utils/useGitlabConns'
-import { Geuru } from './Geuru'
+import { Geuru, type GeuruExpr } from './Geuru'
+import { Tree } from './Tree'
+import { stageOf, bucketOf, type RepoActivity, type ActivityBucket } from '../utils/repoActivity'
 
 // ── 아이콘 (디자인 핸드오프 SVG 재현) ──
 const IconAllRepos = () => (
@@ -27,17 +29,11 @@ const IconBranch = () => (
 const IconOpenExternal = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M7 2H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9"/><path d="M10 2h4v4M14 2l-6 6"/></svg>
 )
-const IconKebab = () => (
-  <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.4"/><circle cx="8" cy="8" r="1.4"/><circle cx="8" cy="13" r="1.4"/></svg>
-)
 const IconTrash = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 4h10M6.5 4V2.5h3V4M5 4l.6 9a1 1 0 0 0 1 1h2.8a1 1 0 0 0 1-1L11 4"/></svg>
 )
 const IconSearch = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="6.5" cy="6.5" r="4"/><path d="M10.5 10.5l3 3"/></svg>
-)
-const IconChevron = () => (
-  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6l4 4 4-4"/></svg>
 )
 const IconWorkspace = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M5 4V3a3 3 0 0 1 6 0v1"/></svg>
@@ -79,6 +75,58 @@ const IconInbox = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 9l2-6h8l2 6M2 9v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9M2 9h3l1 2h4l1-2h3"/></svg>
 )
 
+// 프로바이더 식별 (카드 owner 줄의 GH/GL 마크). 식별 전용 — 인터랙션 액센트 아님.
+type Provider = 'gh' | 'gl' | null
+
+// 카드 owner 줄의 작은 GitHub 마크 (디자인 ghMark 재현, 식별 전용 회색).
+const GhMarkSmall = ({ size = 11 }: { size?: number }) => (
+  <svg className="prov-mark-svg" width={size} height={size} viewBox="0 0 16 16" fill="#8b96b4" aria-label="GitHub">
+    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.69-.01-1.36-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.7-.01 1.93 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+  </svg>
+)
+const GlMarkSmall = ({ size = 11 }: { size?: number }) => (
+  <svg className="prov-mark-svg" width={size} height={size} viewBox="0 0 24 24" aria-label="GitLab">
+    <path d="M12 21.5l3.2-9.8H8.8L12 21.5z" fill="#fc6d26"/>
+    <path d="M12 21.5L8.8 11.7H4.2L12 21.5z" fill="#e24329"/>
+    <path d="M4.2 11.7L3 15.4a.8.8 0 0 0 .3.9L12 21.5 4.2 11.7z" fill="#fca326"/>
+    <path d="M4.2 11.7H8.8L6.9 5.6c-.1-.3-.5-.3-.6 0z" fill="#e24329"/>
+    <path d="M12 21.5l3.2-9.8h4.6L12 21.5z" fill="#e24329"/>
+    <path d="M19.8 11.7L21 15.4a.8.8 0 0 1-.3.9L12 21.5z" fill="#fca326"/>
+  </svg>
+)
+
+const IconFolderOpen = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 7h6M5 10h4"/></svg>
+)
+const IconSyncUp = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 13V4M4 7l4-4 4 4"/></svg>
+)
+const IconSyncDown = () => (
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 3v9M4 9l4 4 4-4"/></svg>
+)
+
+// 빈 daily(활동 미로딩) 폴백.
+const EMPTY_ACTIVITY: RepoActivity = { daily: [], total: 0, lastCommit: null }
+
+// 카드 그루(마스코트) 상태 — dirty→conflict / behind→think / 활발→happy / 조용→sleepy / 그외 idle.
+// 정본 geuruFor() 포팅. total은 활동(14일 합), dirty/behind는 동기 상태.
+function geuruForCard(opts: { dirty: number; behind: number; total: number }): { expr: GeuruExpr; text: string } {
+  if (opts.dirty > 0) return { expr: 'conflict', text: `변경 ${opts.dirty}개 대기 중` }
+  if (opts.behind > 0) return { expr: 'think', text: `${opts.behind} 커밋 뒤처짐 · pull 필요` }
+  if (opts.total >= 40) return { expr: 'happy', text: '무럭무럭 자라는 중' }
+  if (opts.total <= 4) return { expr: 'sleepy', text: '한동안 조용해요' }
+  return { expr: 'idle', text: '건강하게 자라고 있어요' }
+}
+
+// 스파크라인 막대 색 (정본 barColor): 0=회색, 비율>0.66 grove, >0.33 gold-400, else gold-500.
+function sparkColor(v: number, max: number): string {
+  if (v === 0) return 'var(--c-border)'
+  const r = v / max
+  if (r > 0.66) return 'var(--c-grove)'
+  if (r > 0.33) return 'var(--c-gold-400)'
+  return 'var(--c-gold-500)'
+}
+
 // 사이드바 선택: 내장 보기('all'/'favorites'/'recent') 또는 사용자 워크스페이스(id)
 type View = 'all' | 'favorites' | 'recent'
 type Selection =
@@ -104,98 +152,135 @@ function basename(p: string): string {
   return seg || p
 }
 
-interface BranchChipProps { branch: string; dirty?: number }
-function BranchChip({ branch, dirty }: BranchChipProps) {
-  const isMain = branch === 'main' || branch === 'master'
-  return (
-    <>
-      <span className={`rm-branch-chip${isMain ? ' rm-bc-main' : ''}`}>
-        <IconBranch />
-        <span className="rm-bname">{branch || '—'}</span>
-      </span>
-      {dirty != null && dirty > 0 && (
-        <span className="rm-dirty-badge">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 2v8M8 13v1"/></svg>
-          <span>{dirty}</span>
-        </span>
-      )}
-    </>
-  )
-}
-
-interface RowProps {
+// ── 그로브 카드 (디자인 정본 .card 재현) ──
+interface CardModel {
+  path: string
   name: string
   owner?: string
+  provider: Provider
   branch: string
-  dirty?: number
+  dirty: number      // 변경 파일 수(열린 레포는 1로 근사, 닫힌 레포는 0)
+  ahead: number
+  behind: number
+  open: boolean
+  activity: RepoActivity
+}
+
+interface GroveCardProps {
+  model: CardModel
   isFavorite: boolean
   isSelected: boolean
-  faded?: boolean
+  dim?: boolean
   onSelect: () => void
   onToggleStar: () => void
   onOpen: () => void
   onMenu: (e: React.MouseEvent) => void
 }
-function RepoRow({ name, owner, branch, dirty, isFavorite, isSelected, faded, onSelect, onToggleStar, onOpen, onMenu }: RowProps) {
+function GroveCard({ model, isFavorite, isSelected, dim, onSelect, onToggleStar, onOpen, onMenu }: GroveCardProps) {
+  const { name, owner, provider, branch, dirty, ahead, behind, open, activity } = model
+  const total = activity.total
+  const stage = stageOf(total)
+  const isMain = branch === 'main' || branch === 'master'
+  const geuru = geuruForCard({ dirty, behind, total })
+  const daily = activity.daily
+  const max = Math.max(1, ...daily)
+  const branchDisp = branch.length > 24 ? branch.slice(0, 23) + '…' : (branch || '—')
   return (
     <div
-      className={`rm-row${isSelected ? ' selected' : ''}`}
-      style={faded ? { opacity: 0.82 } : undefined}
+      className={`rm-card${isSelected ? ' sel' : ''}${dim ? ' dim' : ''}`}
+      data-name={name}
       title="더블클릭으로 열기"
       onClick={onSelect}
       onDoubleClick={onOpen}
     >
-      <div className="rm-row-checks">
-        <span
-          className={`rm-row-star${isFavorite ? ' active' : ''}`}
-          title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
-          onClick={e => { e.stopPropagation(); onToggleStar() }}
-        >
-          <IconStar filled={isFavorite} />
-        </span>
-      </div>
-      <div className="rm-row-name">
-        <span className="rm-row-name-text">{name}</span>
-      </div>
-      <div className="rm-row-owner">{owner || '—'}</div>
-      <div className="rm-row-branch"><BranchChip branch={branch} dirty={dirty} /></div>
-      <div className="rm-row-actions">
-        <button className="rm-row-action-btn" title="메뉴" onClick={e => { e.stopPropagation(); onMenu(e) }}><IconKebab /></button>
-      </div>
-    </div>
-  )
-}
+      <button
+        type="button"
+        className={`rm-card-star${isFavorite ? ' on' : ''}`}
+        title={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+        aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+        aria-pressed={isFavorite}
+        onClick={e => { e.stopPropagation(); onToggleStar() }}
+      >
+        <IconStar filled={isFavorite} />
+      </button>
 
-interface SectionProps {
-  title: string
-  count: number
-  children: React.ReactNode
-  hasHeaderColumns?: boolean
-  lastBranchLabel?: boolean
-}
-function Section({ title, count, children, hasHeaderColumns = true, lastBranchLabel }: SectionProps) {
-  const [collapsed, setCollapsed] = useState(false)
-  return (
-    <div className="rm-section">
-      <div className="rm-section-header" onClick={() => setCollapsed(c => !c)}>
-        <span className={`rm-section-chevron${collapsed ? ' collapsed' : ''}`}><IconChevron /></span>
-        <span className="rm-section-title">{title}</span>
-        <span className="rm-section-count">{count}</span>
-      </div>
-      {!collapsed && (
-        <div>
-          {hasHeaderColumns && (
-            <div className="rm-table-header">
-              <span />
-              <span>이름</span>
-              <span>소유자</span>
-              <span>{lastBranchLabel ? '마지막 브랜치' : '브랜치'}</span>
-              <span />
-            </div>
-          )}
-          {children}
+      <div className="rm-card-top">
+        <div className="rm-tree-tile">
+          <Tree stage={stage} scale={2.6} />
+          <div className="rm-tree-ground" />
         </div>
-      )}
+        <div className="rm-card-id">
+          <div className="rm-card-name-row">
+            <span className="rm-card-name">{name}</span>
+          </div>
+          <div className="rm-card-owner">
+            {provider && (
+              <span className="prov-mark">{provider === 'gl' ? <GlMarkSmall /> : <GhMarkSmall />}</span>
+            )}
+            <span className="rm-card-owner-txt">
+              {owner || '—'}{activity.lastCommit ? ` · ${activity.lastCommit}` : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rm-card-meta">
+        <span className={`rm-branch-chip${isMain ? ' rm-bc-main' : ''}`}>
+          <IconBranch /><span className="rm-bname">{branchDisp}</span>
+        </span>
+        {dirty > 0 && (
+          <span className="rm-dirty-badge">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 2v7M8 12v.5"/></svg>
+            <span>{dirty}</span>
+          </span>
+        )}
+        {(ahead > 0 || behind > 0) && (
+          <span className="rm-sync-chip" title={`ahead ${ahead} · behind ${behind}`}>
+            {ahead > 0 && <><IconSyncUp />{ahead}</>}
+            {behind > 0 && <><IconSyncDown />{behind}</>}
+          </span>
+        )}
+      </div>
+
+      <div className="rm-activity">
+        <div className="rm-act-label">
+          <span>최근 14일 활동</span><span>{total} commits</span>
+        </div>
+        <div className="rm-act-row">
+          {daily.length === 0
+            ? Array.from({ length: 14 }, (_, i) => (
+                <div key={i} className="rm-act-bar" style={{ height: 2, background: 'var(--c-border)' }} />
+              ))
+            : daily.map((v, i) => (
+                <div
+                  key={i}
+                  className="rm-act-bar"
+                  style={{ height: v === 0 ? 2 : 4 + (v / max) * 22, background: sparkColor(v, max) }}
+                />
+              ))}
+        </div>
+      </div>
+
+      <div className="rm-card-foot">
+        <div className="rm-geuru-state">
+          <span className="rm-gs-sprite"><Geuru expr={geuru.expr} scale={1} title="그루" /></span>
+          <span className="rm-gs-txt">{geuru.text}</span>
+        </div>
+        <div className="rm-foot-btns">
+          <button
+            type="button"
+            className="rm-fbtn open"
+            onClick={e => { e.stopPropagation(); onOpen() }}
+          >{open ? '열기' : 'Clone'}</button>
+          <button
+            type="button"
+            className="rm-fbtn ghost"
+            title="메뉴"
+            aria-label="메뉴"
+            onClick={e => { e.stopPropagation(); onMenu(e) }}
+          ><IconFolderOpen /></button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -595,8 +680,15 @@ export function RepoManager({
   const [sel, setSel] = useState<Selection>({ kind: 'view', view: 'all' })
   const [query, setQuery] = useState('')
   const [selectedPath, setSelectedPath] = useState<string | null>(repos[activeRepo]?.path ?? null)
+  // 카드 그리드 세그먼트(전체/열림/즐겨찾기/최근/변경) + 정렬.
+  const [seg, setSeg] = useState<'all' | 'open' | 'fav' | 'recent' | 'dirty'>('all')
+  const [sort, setSort] = useState<'activity' | 'name'>('activity')
   // path → owner (remote에서 lazily 추출)
   const [owners, setOwners] = useState<Record<string, string>>({})
+  // path → provider ('gh'|'gl'|''(미상)). owners와 같은 getRemotes 호출에서 함께 해석.
+  const [providers, setProviders] = useState<Record<string, Provider | ''>>({})
+  // path → 14일 활동 (getActivityBatch). 미로딩 path는 EMPTY_ACTIVITY 폴백.
+  const [activity, setActivity] = useState<Record<string, RepoActivity>>({})
   // 행 케밥 메뉴 / 모달 상태
   const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null)
   const [wsModal, setWsModal] = useState<{ pendingPath: string | null } | null>(null)
@@ -643,22 +735,61 @@ export function RepoManager({
     }
   }, [workspaces, sel])
 
-  // ── 열린 레포의 소유자를 remote에서 추출 (가벼운 로컬 조회, 원격 호출 없음) ──
+  // ── 레포 소유자 + 프로바이더를 remote에서 추출 (열린 레포 + 최근, 가벼운 로컬 조회) ──
+  // 카드 owner 줄과 GH/GL 마크에 사용. 같은 getRemotes 호출로 owner·provider를 함께 해석.
   useEffect(() => {
     let cancelled = false
-    repos.forEach(r => {
-      if (owners[r.path] !== undefined) return
-      window.gitAPI?.getRemotes(r.path)
+    const paths = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path)])
+    paths.forEach(path => {
+      if (owners[path] !== undefined) return
+      window.gitAPI?.getRemotes(path)
         .then(remotes => {
           if (cancelled) return
           const origin = remotes.find(rm => rm.name === 'origin') ?? remotes[0]
-          const info = origin && parseGitHubRepo(origin.url)
-          setOwners(prev => ({ ...prev, [r.path]: info?.owner ?? '' }))
+          const gh = origin && parseGitHubRepo(origin.url)
+          const gl = !gh && origin ? parseGitLabRepo(origin.url) : null
+          const owner = gh?.owner ?? (gl ? gl.fullPath.split('/')[0] : '') ?? ''
+          const provider: Provider | '' = gh ? 'gh' : gl ? 'gl' : ''
+          setOwners(prev => ({ ...prev, [path]: owner }))
+          setProviders(prev => ({ ...prev, [path]: provider }))
         })
-        .catch(() => { if (!cancelled) setOwners(prev => ({ ...prev, [r.path]: '' })) })
+        .catch(() => {
+          if (cancelled) return
+          setOwners(prev => ({ ...prev, [path]: '' }))
+          setProviders(prev => ({ ...prev, [path]: '' }))
+        })
     })
     return () => { cancelled = true }
-  }, [repos, owners])
+  }, [repos, recents, owners])
+
+  // ── 14일 활동 일괄 조회 (열린·최근·즐겨찾기 path, N+1 완화) ──
+  // RM1 계약: getActivityBatch(paths) → Record<path, RepoActivity>. 실패/비-git은 폴백(전부 0).
+  useEffect(() => {
+    let cancelled = false
+    const all = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path), ...favorites])
+    const missing = [...all].filter(p => activity[p] === undefined)
+    if (missing.length === 0) return
+    const batch = window.gitAPI?.getActivityBatch
+    if (!batch) return
+    batch(missing, { days: 14 })
+      .then(map => {
+        if (cancelled) return
+        setActivity(prev => {
+          const next = { ...prev }
+          missing.forEach(p => { next[p] = map[p] ?? EMPTY_ACTIVITY })
+          return next
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        setActivity(prev => {
+          const next = { ...prev }
+          missing.forEach(p => { next[p] = EMPTY_ACTIVITY })
+          return next
+        })
+      })
+    return () => { cancelled = true }
+  }, [repos, recents, favorites, activity])
 
   // ── 로컬 레포의 "owner/name" 해석 (열린 레포 + 최근, remote에서 lazy) ──
   // GitHub 브라우저의 열기 vs Clone 판정에 사용. 원격 호출 없이 getRemotes만.
@@ -910,14 +1041,80 @@ export function RepoManager({
   }, [repos, recents])
   const describe = (path: string): RepoDesc => repoByPath.get(path) ?? { name: basename(path), branch: '', open: false }
 
-  const matchesQuery = (name: string) => {
-    const q = query.trim().toLowerCase()
-    return !q || name.toLowerCase().includes(q)
+  const getActivity = (path: string): RepoActivity => activity[path] ?? EMPTY_ACTIVITY
+
+  // path 집합 → 카드 모델 목록. 열린 레포가 우선(open/dirty/ahead/behind 반영), 없으면 최근 캐시.
+  const buildCard = (path: string): CardModel => {
+    const open = repos.find(r => r.path === path)
+    if (open) {
+      return {
+        path, name: open.name, owner: owners[path], provider: providers[path] || null,
+        branch: open.branch, dirty: open.dirty ? 1 : 0, ahead: open.ahead, behind: open.behind,
+        open: true, activity: getActivity(path),
+      }
+    }
+    const rec = recents.find(r => r.path === path)
+    const name = rec?.name ?? basename(path)
+    return {
+      path, name, owner: owners[path], provider: providers[path] || null,
+      branch: rec?.branch ?? '', dirty: 0, ahead: 0, behind: 0,
+      open: false, activity: getActivity(path),
+    }
   }
 
-  const openRepos = repos.filter(r => matchesQuery(r.name))
-  const favoriteRepos = repos.filter(r => favSet.has(r.path) && matchesQuery(r.name))
-  const filteredRecents = recents.filter(r => matchesQuery(r.name))
+  // 세그/검색/정렬을 적용한 카드 목록. (그리드 뷰 전용)
+  const cardModels = useMemo(() => {
+    // 전체 path 합집합(열린 + 최근 + 즐겨찾기), 중복 제거.
+    const paths = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path), ...favorites])
+    let list = [...paths].map(buildCard)
+    // 세그먼트 필터
+    if (seg === 'open') list = list.filter(c => c.open)
+    else if (seg === 'fav') list = list.filter(c => favSet.has(c.path))
+    else if (seg === 'recent') list = list.filter(c => recents.some(r => r.path === c.path))
+    else if (seg === 'dirty') list = list.filter(c => c.dirty > 0)
+    // 검색
+    const q = query.trim().toLowerCase()
+    if (q) list = list.filter(c => c.name.toLowerCase().includes(q) || (c.owner ?? '').toLowerCase().includes(q))
+    // 정렬
+    if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name))
+    else list.sort((a, b) => b.activity.total - a.activity.total || a.name.localeCompare(b.name))
+    return list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repos, recents, favorites, favSet, owners, providers, activity, seg, sort, query])
+
+  // 세그먼트 카운트(검색 무시 — 전체 기준)
+  const segCounts = useMemo(() => {
+    const paths = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path), ...favorites])
+    const all = [...paths]
+    return {
+      all: all.length,
+      open: repos.length,
+      fav: all.filter(p => favSet.has(p)).length,
+      recent: all.filter(p => recents.some(r => r.path === p)).length,
+      dirty: repos.filter(r => r.dirty).length,
+    }
+  }, [repos, recents, favorites, favSet])
+
+  // 그로브 현황(사이드바 카드) — bucketOf 집계.
+  const groveBuckets = useMemo(() => {
+    const paths = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path), ...favorites])
+    const acc: Record<ActivityBucket, number> = { active: 0, moderate: 0, dormant: 0 }
+    paths.forEach(p => { acc[bucketOf(getActivity(p).total)] += 1 })
+    return acc
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repos, recents, favorites, activity])
+
+  // "이번 주 N commits" (상태바) — 14일 daily 마지막 7칸 합.
+  const weekCommits = useMemo(() => {
+    const paths = new Set<string>([...repos.map(r => r.path), ...recents.map(r => r.path), ...favorites])
+    let sum = 0
+    paths.forEach(p => {
+      const d = getActivity(p).daily
+      sum += d.slice(-7).reduce((a, b) => a + b, 0)
+    })
+    return sum
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [repos, recents, favorites, activity])
 
   const handleOpen = (path: string, name?: string, branch?: string) => onOpenPath(path, name, branch)
 
@@ -945,13 +1142,20 @@ export function RepoManager({
 
   const placeholder = (label: string) => () => notify('info', `${label} 준비 중`, '다음 버전에서 제공됩니다.')
 
-  // 메인 리스트 렌더 분기
+  // 메인 렌더 분기
   const isView = sel.kind === 'view'
-  const showOpen = isView && sel.view === 'all'
-  const showFavorites = isView && (sel.view === 'all' || sel.view === 'favorites')
-  const showRecent = isView && (sel.view === 'all' || sel.view === 'recent')
   const activeWs = sel.kind === 'workspace' ? workspaces.find(w => w.id === sel.id) ?? null : null
-  const wsPaths = activeWs ? activeWs.paths.filter(p => matchesQuery(describe(p).name)) : []
+  // 워크스페이스(그룹) 카드 — 검색/정렬 적용.
+  const wsCards = useMemo(() => {
+    if (!activeWs) return []
+    let list = activeWs.paths.map(buildCard)
+    const q = query.trim().toLowerCase()
+    if (q) list = list.filter(c => c.name.toLowerCase().includes(q) || (c.owner ?? '').toLowerCase().includes(q))
+    if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name))
+    else list.sort((a, b) => b.activity.total - a.activity.total || a.name.localeCompare(b.name))
+    return list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWs, repos, recents, owners, providers, activity, query, sort])
   const menuTarget = menu ? describe(menu.path) : null
   const isGithub = sel.kind === 'github'
   const isGitlab = sel.kind === 'gitlab'
@@ -969,25 +1173,41 @@ export function RepoManager({
     <div className="rm-body">
       {/* ── Sidebar ── */}
       <div className="rm-sidebar">
-        <div className="rm-sidebar-label">보기</div>
+        <div className="rm-sidebar-label">그로브</div>
         <div className="rm-sidebar-section">
-          <div className={`rm-sidebar-item${isView && sel.view === 'all' ? ' active' : ''}`} onClick={() => setSel({ kind: 'view', view: 'all' })}>
+          <div
+            className={`rm-sidebar-item${isView && seg === 'all' ? ' active' : ''}`}
+            onClick={() => { setSel({ kind: 'view', view: 'all' }); setSeg('all') }}
+          >
             <IconAllRepos />모든 저장소
-            <span className={`rm-badge-count${isView && sel.view === 'all' ? ' active' : ''}`}>{repos.length}</span>
+            <span className={`rm-badge-count${isView && seg === 'all' ? ' active' : ''}`}>{segCounts.all}</span>
           </div>
-          <div className={`rm-sidebar-item${isView && sel.view === 'favorites' ? ' active' : ''}`} onClick={() => setSel({ kind: 'view', view: 'favorites' })}>
+          <div
+            className={`rm-sidebar-item${isView && seg === 'fav' ? ' active' : ''}`}
+            onClick={() => { setSel({ kind: 'view', view: 'favorites' }); setSeg('fav') }}
+          >
             <IconStar />즐겨찾기
-            <span className={`rm-badge-count${isView && sel.view === 'favorites' ? ' active' : ''}`}>{favoriteRepos.length}</span>
+            <span className={`rm-badge-count${isView && seg === 'fav' ? ' active' : ''}`}>{segCounts.fav}</span>
           </div>
-          <div className={`rm-sidebar-item${isView && sel.view === 'recent' ? ' active' : ''}`} onClick={() => setSel({ kind: 'view', view: 'recent' })}>
+          <div
+            className={`rm-sidebar-item${isView && seg === 'recent' ? ' active' : ''}`}
+            onClick={() => { setSel({ kind: 'view', view: 'recent' }); setSeg('recent') }}
+          >
             <IconClock />최근 열람
-            <span className={`rm-badge-count${isView && sel.view === 'recent' ? ' active' : ''}`}>{recents.length}</span>
+            <span className={`rm-badge-count${isView && seg === 'recent' ? ' active' : ''}`}>{segCounts.recent}</span>
+          </div>
+          <div
+            className={`rm-sidebar-item${isView && seg === 'dirty' ? ' active' : ''}`}
+            onClick={() => { setSel({ kind: 'view', view: 'all' }); setSeg('dirty') }}
+          >
+            <IconBranch />변경 있음
+            <span className={`rm-badge-count${isView && seg === 'dirty' ? ' active' : ''}`}>{segCounts.dirty}</span>
           </div>
         </div>
 
         <div className="rm-sidebar-divider" />
         <div className="rm-sidebar-label">
-          워크스페이스
+          그룹
           <button className="rm-ws-add" title="새 워크스페이스" onClick={() => setWsModal({ pendingPath: null })}><IconPlus /></button>
         </div>
         <div className="rm-sidebar-section">
@@ -1081,40 +1301,59 @@ export function RepoManager({
             </div>
           )}
         </div>
+
+        {/* ── 그로브 현황 카드 (활발/보통/휴면 — bucketOf 집계) ── */}
+        <div className="rm-grove-card">
+          <div className="rm-grove-card-top">
+            <Geuru expr="idle" scale={1.4} title="그루" />
+            <div className="rm-gc-txt">
+              <b>그로브 현황</b>
+              <span>이번 주 {weekCommits} 커밋</span>
+            </div>
+          </div>
+          <div className="rm-grove-bar">
+            {(() => {
+              const tot = Math.max(1, groveBuckets.active + groveBuckets.moderate + groveBuckets.dormant)
+              return (
+                <>
+                  <i style={{ width: `${groveBuckets.active / tot * 100}%`, background: 'var(--c-grove)' }} />
+                  <i style={{ width: `${groveBuckets.moderate / tot * 100}%`, background: 'var(--c-gold-400)' }} />
+                  <i style={{ width: `${groveBuckets.dormant / tot * 100}%`, background: 'var(--c-border-strong)' }} />
+                </>
+              )
+            })()}
+          </div>
+          <div className="rm-grove-legend">
+            <span><i style={{ background: 'var(--c-grove)' }} />활발</span>
+            <span><i style={{ background: 'var(--c-gold-400)' }} />보통</span>
+            <span><i style={{ background: 'var(--c-border-strong)' }} />휴면</span>
+          </div>
+        </div>
       </div>
 
       {/* ── Main ── */}
       <div className="rm-main">
         <div className="rm-content-header">
-          <div className="rm-title-row">
-            <div className="rm-content-title">Repository Management</div>
-            <span className="rm-geuru-greet">
-              <Geuru expr="happy" scale={1.2} title="그루" />
-              <span className="txt">{repos.length}개 저장소, 오늘도 무럭무럭</span>
-            </span>
-          </div>
-          <div className="rm-action-bar">
-            <button className="rm-action-btn" onClick={() => setCloneOpen(true)} title="원격 저장소 클론">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 8a6 6 0 1 1 12 0"/><path d="M8 3v2M5 4.5l1.5 1.5M11 4.5L9.5 6"/></svg>
-              Clone
-            </button>
-            <button className="rm-action-btn rm-primary" onClick={onBrowse}>
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 13h10M8 3v7M5 7l3-4 3 4"/></svg>
-              Browse
-            </button>
-            <button className="rm-action-btn rm-disabled" onClick={placeholder('Init')} title="준비 중">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 2v12M2 8h12"/></svg>
-              Init
-            </button>
-            <div className="rm-action-sep" />
-            <button className="rm-action-btn" onClick={() => setWsModal({ pendingPath: null })} title="새 워크스페이스 만들기">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="4" width="12" height="8" rx="1.5"/><path d="M5 4V3a3 3 0 0 1 6 0v1"/></svg>
-              New Workspace
-            </button>
-            <button className="rm-action-btn rm-disabled" onClick={placeholder('Integrations')} title="준비 중">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 2"/></svg>
-              Integrations
-            </button>
+          <div className="rm-head-top">
+            <span className="rm-head-geuru"><Geuru expr="happy" scale={2.6} title="그루" /></span>
+            <div className="rm-head-titles">
+              <h1>내 그로브<span className="en">Repository</span></h1>
+              <p><b>{segCounts.all}그루</b>가 자라고 있어요 · {segCounts.open} 열림 · {segCounts.dirty} 변경 대기</p>
+            </div>
+            <div className="rm-head-actions">
+              <button className="rm-action-btn rm-primary" onClick={() => setCloneOpen(true)} title="원격 저장소 클론">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 8a6 6 0 1 1 12 0"/><path d="M8 3v2M5.5 4.5L7 6M10.5 4.5L9 6"/></svg>
+                Clone
+              </button>
+              <button className="rm-action-btn" onClick={onBrowse} title="폴더 열기">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M2 5.5a1 1 0 0 1 1-1h3l1.5 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>
+                Browse
+              </button>
+              <button className="rm-action-btn rm-disabled" onClick={placeholder('Init')} title="준비 중">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 3v10M3 8h10"/></svg>
+                Init
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1159,119 +1398,161 @@ export function RepoManager({
             onAction={proj => void handleGlAction(proj)}
             onOpenSettings={onOpenGitlabSettings}
           />
-        ) : (
+        ) : activeWs ? (
+        /* ── 워크스페이스(그룹) 카드 그리드 ── */
         <>
-        {/* Filter bar */}
-        <div className="rm-filter-bar">
-          <div className="rm-search-wrap">
-            <IconSearch />
-            <input
-              type="text"
-              placeholder="Search repositories…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
+          <div className="rm-filter-bar">
+            <div className="rm-search-wrap">
+              <IconSearch />
+              <input
+                type="text"
+                placeholder="저장소 검색…"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
+            </div>
+            <button className="rm-sort-btn" onClick={() => setSort(s => s === 'activity' ? 'name' : 'activity')} title="정렬 전환">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 4v8M4 12l-2-2M4 12l2-2M10 4h4M10 8h3M10 12h2"/></svg>
+              {sort === 'name' ? '이름순' : '최근 활동순'}
+            </button>
           </div>
-        </div>
-
-        {/* Repo list */}
-        <div className="rm-list">
-          {showOpen && (
-            <Section title="Open repositories" count={openRepos.length}>
-              {openRepos.length === 0 ? (
-                <div className="rm-empty-section">열린 저장소가 없습니다. Browse 로 추가하세요.</div>
-              ) : openRepos.map(r => (
-                <RepoRow
-                  key={r.path}
-                  name={r.name}
-                  owner={owners[r.path]}
-                  branch={r.branch}
-                  dirty={r.dirty ? 1 : 0}
-                  isFavorite={favSet.has(r.path)}
-                  isSelected={selectedPath === r.path}
-                  onSelect={() => setSelectedPath(r.path)}
-                  onToggleStar={() => onToggleFavorite(r.path)}
-                  onOpen={() => handleOpen(r.path, r.name, r.branch)}
-                  onMenu={e => openMenu(r.path, e)}
-                />
-              ))}
-            </Section>
-          )}
-
-          {showFavorites && (
-            <Section title="Favorites" count={favoriteRepos.length}>
-              {favoriteRepos.length === 0 ? (
-                <div className="rm-empty rm-empty-section">
-                  <Geuru expr="sleepy" scale={3.4} title="그루" />
-                  <b>즐겨찾기한 저장소가 없어요</b>
-                  <span>행의 ☆ 를 누르면 그루가 여기에 모아둘게요.</span>
-                </div>
-              ) : favoriteRepos.map(r => (
-                <RepoRow
-                  key={r.path}
-                  name={r.name}
-                  owner={owners[r.path]}
-                  branch={r.branch}
-                  dirty={r.dirty ? 1 : 0}
-                  isFavorite
-                  isSelected={selectedPath === r.path}
-                  onSelect={() => setSelectedPath(r.path)}
-                  onToggleStar={() => onToggleFavorite(r.path)}
-                  onOpen={() => handleOpen(r.path, r.name, r.branch)}
-                  onMenu={e => openMenu(r.path, e)}
-                />
-              ))}
-            </Section>
-          )}
-
-          {showRecent && (
-            <Section title="Recent repositories" count={filteredRecents.length} lastBranchLabel>
-              {filteredRecents.length === 0 ? (
-                <div className="rm-empty-section">최근 열람한 저장소가 없습니다.</div>
-              ) : filteredRecents.map(r => (
-                <RepoRow
-                  key={r.path}
-                  name={r.name}
-                  owner={owners[r.path]}
-                  branch={r.branch}
-                  isFavorite={favSet.has(r.path)}
-                  isSelected={selectedPath === r.path}
-                  faded
-                  onSelect={() => setSelectedPath(r.path)}
-                  onToggleStar={() => onToggleFavorite(r.path)}
-                  onOpen={() => handleOpen(r.path, r.name, r.branch)}
-                  onMenu={e => openMenu(r.path, e)}
-                />
-              ))}
-            </Section>
-          )}
-
-          {activeWs && (
-            <Section title={activeWs.name} count={wsPaths.length}>
-              {wsPaths.length === 0 ? (
-                <div className="rm-empty-section">이 워크스페이스에 저장소가 없습니다. 레포 행의 ⋯ 메뉴 → 워크스페이스에서 추가하세요.</div>
-              ) : wsPaths.map(p => {
-                const d = describe(p)
-                return (
-                  <RepoRow
-                    key={p}
-                    name={d.name}
-                    owner={owners[p]}
-                    branch={d.branch}
-                    dirty={d.dirty}
-                    isFavorite={favSet.has(p)}
-                    isSelected={selectedPath === p}
-                    faded={!d.open}
-                    onSelect={() => setSelectedPath(p)}
-                    onToggleStar={() => onToggleFavorite(p)}
-                    onOpen={() => handleOpen(p, d.name, d.branch)}
-                    onMenu={e => openMenu(p, e)}
+          <div className="rm-field">
+            {wsCards.length === 0 ? (
+              <div className="rm-empty-big">
+                <Geuru expr="sleepy" scale={3.4} title="그루" />
+                <b>이 그룹은 비어 있어요</b>
+                <span>레포 카드의 ⋯ 메뉴 → 워크스페이스에서 이 그룹에 추가하세요.</span>
+              </div>
+            ) : (
+              <div className="rm-grid">
+                {wsCards.map(c => (
+                  <GroveCard
+                    key={c.path}
+                    model={c}
+                    isFavorite={favSet.has(c.path)}
+                    isSelected={selectedPath === c.path}
+                    dim={!c.open}
+                    onSelect={() => setSelectedPath(c.path)}
+                    onToggleStar={() => onToggleFavorite(c.path)}
+                    onOpen={() => handleOpen(c.path, c.name, c.branch)}
+                    onMenu={e => openMenu(c.path, e)}
                   />
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+        ) : (
+        /* ── 그로브 카드 그리드 (전체/열림/즐겨찾기/최근/변경) ── */
+        <>
+          {/* 필터 바: 세그먼트 + 검색 + 정렬 */}
+          <div className="rm-filter-bar">
+            <div className="rm-seg">
+              {([['all', '전체'], ['open', '열림'], ['fav', '즐겨찾기'], ['recent', '최근'], ['dirty', '변경']] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  className={seg === k ? 'on' : ''}
+                  onClick={() => { setSeg(k); setSel({ kind: 'view', view: k === 'fav' ? 'favorites' : k === 'recent' ? 'recent' : 'all' }) }}
+                >
+                  {label}<span className="c">{segCounts[k]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="rm-search-wrap">
+              <IconSearch />
+              <input
+                type="text"
+                placeholder="저장소 검색…"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
+            </div>
+            <button className="rm-sort-btn" onClick={() => setSort(s => s === 'activity' ? 'name' : 'activity')} title="정렬 전환">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M4 4v8M4 12l-2-2M4 12l2-2M10 4h4M10 8h3M10 12h2"/></svg>
+              {sort === 'name' ? '이름순' : '최근 활동순'}
+            </button>
+          </div>
+
+          {/* 카드 필드 */}
+          <div className="rm-field">
+            {cardModels.length === 0 ? (
+              <div className="rm-empty-big">
+                <Geuru expr={query ? 'conflict' : 'sleepy'} scale={4} title="그루" />
+                <b>{query ? '검색 결과가 없어요' : '이 그로브는 비어 있어요'}</b>
+                <span>
+                  {query
+                    ? `"${query}" 와 일치하는 저장소가 없어요. 다른 키워드로 찾아보세요.`
+                    : '저장소를 Clone 하거나 폴더를 열어 첫 나무를 심어보세요. 커밋 하나, 새싹 하나.'}
+                </span>
+                {!query && (
+                  <button className="rm-action-btn rm-primary" style={{ marginTop: 4 }} onClick={() => setCloneOpen(true)}>저장소 Clone</button>
+                )}
+              </div>
+            ) : seg === 'all' ? (
+              /* 전체: 열린 저장소 / 다른 나무들 그룹 구분 */
+              (() => {
+                const open = cardModels.filter(c => c.open)
+                const rest = cardModels.filter(c => !c.open)
+                const renderGrid = (list: CardModel[]) => (
+                  <div className="rm-grid">
+                    {list.map(c => (
+                      <GroveCard
+                        key={c.path}
+                        model={c}
+                        isFavorite={favSet.has(c.path)}
+                        isSelected={selectedPath === c.path}
+                        dim={!c.open}
+                        onSelect={() => setSelectedPath(c.path)}
+                        onToggleStar={() => onToggleFavorite(c.path)}
+                        onOpen={() => handleOpen(c.path, c.name, c.branch)}
+                        onMenu={e => openMenu(c.path, e)}
+                      />
+                    ))}
+                  </div>
                 )
-              })}
-            </Section>
-          )}
-        </div>
+                return (
+                  <>
+                    {open.length > 0 && (
+                      <>
+                        <div className="rm-group-head">
+                          <span className="rm-gh-title">열린 저장소</span>
+                          <span className="rm-gh-count">{open.length}</span>
+                          <span className="rm-gh-line" />
+                        </div>
+                        {renderGrid(open)}
+                      </>
+                    )}
+                    {rest.length > 0 && (
+                      <>
+                        <div className="rm-group-head">
+                          <span className="rm-gh-title">그로브의 다른 나무들</span>
+                          <span className="rm-gh-count">{rest.length}</span>
+                          <span className="rm-gh-line" />
+                        </div>
+                        {renderGrid(rest)}
+                      </>
+                    )}
+                  </>
+                )
+              })()
+            ) : (
+              <div className="rm-grid">
+                {cardModels.map(c => (
+                  <GroveCard
+                    key={c.path}
+                    model={c}
+                    isFavorite={favSet.has(c.path)}
+                    isSelected={selectedPath === c.path}
+                    dim={!c.open}
+                    onSelect={() => setSelectedPath(c.path)}
+                    onToggleStar={() => onToggleFavorite(c.path)}
+                    onOpen={() => handleOpen(c.path, c.name, c.branch)}
+                    onMenu={e => openMenu(c.path, e)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </>
         )}
       </div>
