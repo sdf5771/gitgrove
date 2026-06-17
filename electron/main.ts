@@ -198,9 +198,18 @@ function createWindow() {
 
   // 윈도우 컨트롤 IPC
   ipcMain.on('win-minimize', () => win?.minimize())
+  // 최대화 토글. 패키징된 prod 앱(고유 번들ID)에선 macOS 윈도우 상태복원/zoom과
+  // 맞물려 한 번의 클릭이 maximize↔unmaximize를 여러 번 토글해 창이 "커졌다 줄었다"
+  // 반복하는 문제가 보고됨(dev는 Electron 기본 번들ID라 미발생). 짧은 잠금으로
+  // 연속 토글을 한 번으로 묶고, 풀스크린이면 먼저 해제한다.
+  let maxToggleLock = false
   ipcMain.on('win-maximize', () => {
-    if (win?.isMaximized()) win.unmaximize()
-    else win?.maximize()
+    if (!win || maxToggleLock) return
+    maxToggleLock = true
+    setTimeout(() => { maxToggleLock = false }, 300)
+    if (win.isFullScreen()) { win.setFullScreen(false); return }
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
   })
   ipcMain.on('win-close', () => win?.close())
 
