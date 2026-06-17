@@ -99,6 +99,12 @@ interface Window {
     githubIsEncryptionAvailable: () => Promise<boolean>
     githubSetToken: (token: string) => Promise<boolean>
     githubGetToken: () => Promise<string | null>
+    // GitLab PAT 멀티 인스턴스 안전 저장 (host→토큰 맵, safeStorage). host는 정규화 후 키로 사용.
+    gitlabIsEncryptionAvailable: () => Promise<boolean>
+    gitlabSetToken: (host: string, token: string) => Promise<boolean>
+    gitlabGetToken: (host: string) => Promise<string | null>
+    gitlabListHosts: () => Promise<string[]>
+    gitlabRemoveToken: (host: string) => Promise<boolean>
   }
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {
