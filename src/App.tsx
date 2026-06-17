@@ -1128,17 +1128,20 @@ export default function App() {
           onAdd={() => setShowAddRepo(true)}
           onClose={handleCloseRepoTab}
         />
-        <div className="sep" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>
-          <span style={{ color: 'var(--c-gold-300)' }}>⎇</span>{displayBranch}
-          {repo && repo.ahead > 0 && <span style={{ color: 'var(--c-success)' }}>↑{repo.ahead}</span>}
-          {repo && repo.behind > 0 && <span>↓{repo.behind}</span>}
+        {/* 우측 고정 그룹: 탭 개수 변동과 무관하게 항상 타이틀바 우측 끝에 핀.
+            margin-left:auto로 좌측 슬랙을 흡수하고, flex-shrink:0로 줄어들지 않는다. */}
+        <div className="tb-right">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>
+            <span style={{ color: 'var(--c-gold-300)' }}>⎇</span>{displayBranch}
+            {repo && repo.ahead > 0 && <span style={{ color: 'var(--c-success)' }}>↑{repo.ahead}</span>}
+            {repo && repo.behind > 0 && <span>↓{repo.behind}</span>}
+          </div>
+          <NotificationBell
+            githubToken={githubToken}
+            gitlabInstances={gitlabInstances}
+            onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
+          />
         </div>
-        <NotificationBell
-          githubToken={githubToken}
-          gitlabInstances={gitlabInstances}
-          onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
-        />
       </div>
 
       {/* Action bar — Repository Manager 활성 시 숨김 */}

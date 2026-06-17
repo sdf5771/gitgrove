@@ -78,9 +78,11 @@ body { display: flex; align-items: center; justify-content: center; }
   transition: border-color 120ms;
 }
 .repo-pill:hover { border-color: var(--c-border-strong); }
-/* 타이틀 바 우측 그룹 직전의 최소 간격. 탭 스트립이 가용폭을 우선 갖도록
-   더 이상 flex:1로 남는 공간을 독식하지 않는다(.repo-tabs가 채움). */
-.sep { flex: 0 0 auto; min-width: 16px; }
+/* 타이틀 바 우측 고정 그룹(브랜치 표시 + 알림 벨).
+   margin-left:auto로 남는 슬랙을 흡수해 항상 우측 끝에 핀되고,
+   flex-shrink:0로 탭 개수 변동에도 줄어들지 않는다. .repo-tabs(flex:1)가
+   가용폭을 먼저 채우는 v1.16.0 동작과 양립한다(탭이 넘칠 때만 탭 내부 스크롤). */
+.tb-right { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 12px; }
 
 /* ── Action bar ── */
 .action-bar {

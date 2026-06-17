@@ -39,7 +39,6 @@ describe('타이틀바 열린-리포지토리 영역 레이아웃', () => {
   )
   // `.repo-tabs{...}` 선언 블록만 추출(다른 .repo-tabs::-webkit-scrollbar 등은 제외).
   const repoTabs = css.match(/\.repo-tabs\s*\{([^}]*)\}/)?.[1] ?? ''
-  const sep = css.match(/\.sep\s*\{([^}]*)\}/)?.[1] ?? ''
 
   it('.repo-tabs에 max-width:500px 캡이 남아 있으면 안 된다', () => {
     expect(repoTabs).not.toMatch(/max-width:\s*500px/)
@@ -50,8 +49,30 @@ describe('타이틀바 열린-리포지토리 영역 레이아웃', () => {
     expect(repoTabs).toContain('overflow-x:auto')
     expect(repoTabs).toContain('min-width:0')
   })
+})
 
-  it('.sep는 더 이상 남는 공간을 독식(flex:1)하지 않는다', () => {
-    expect(sep).not.toMatch(/flex:\s*1\s*;/)
+// 타이틀바 맨 우측 그룹(브랜치 표시 + 알림 벨)은 열린-리포지토리 탭이 추가/닫혀
+// 탭 개수가 바뀌어도 항상 우측 끝에 고정(pin)돼야 한다. 과거에는 이 그룹이
+// 별도 컨테이너 없이 flex 흐름에 나열돼, .repo-tabs의 내용폭/스크롤 상태에 따라
+// 좌우로 흔들렸다. .tb-right 컨테이너 + margin-left:auto + flex-shrink:0 계약을
+// 고정해 회귀를 막는다(jsdom으로 실제 위치 흔들림 재현은 어려워 CSS 계약으로 가드).
+describe('타이틀바 우측 그룹 우측 고정(.tb-right pin)', () => {
+  const css = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), 'index.css'),
+    'utf-8',
+  )
+  const tbRight = css.match(/\.tb-right\s*\{([^}]*)\}/)?.[1] ?? ''
+
+  it('.tb-right 규칙이 존재해야 한다', () => {
+    expect(tbRight).not.toBe('')
+  })
+
+  it('.tb-right는 margin-left:auto로 우측 끝에 핀된다', () => {
+    expect(tbRight).toMatch(/margin-left:\s*auto/)
+  })
+
+  it('.tb-right는 탭 개수 변동에도 줄어들지 않는다(flex-shrink:0)', () => {
+    // `flex: 0 0 auto` 또는 명시적 `flex-shrink: 0` 둘 다 허용.
+    expect(tbRight).toMatch(/flex:\s*0\s+0|flex-shrink:\s*0/)
   })
 })
