@@ -21,8 +21,10 @@ import { DiffPanel } from './components/DiffPanel'
 import { DiffExplorer } from './components/DiffExplorer'
 import { BlameView } from './components/BlameView'
 import { PRView } from './components/PRView'
+import { MRView } from './components/MRView'
 import { StatusBar, type GithubUser } from './components/StatusBar'
 import { parseGitHubRepo, permissionToRole } from './utils/github'
+import { parseGitLabRepo } from './utils/gitlab'
 import type { RepoPermissions } from './utils/github'
 import { getGithubToken } from './utils/githubToken'
 import { getUser, getRepo } from './utils/githubClient'
@@ -706,6 +708,30 @@ export default function App() {
     return () => { cancelled = true }
   }, [repoPath, githubToken])
 
+  // ── 활성 레포의 provider 감지 (PR 탭에서 GitHub PRView ↔ GitLab MRView 분기) ──
+  // origin이 GitLab이고 그 host가 연결돼 있으면 'gitlab', 아니면 'github'(기존 동작).
+  const [repoProvider, setRepoProvider] = useState<'github' | 'gitlab'>('github')
+  useEffect(() => {
+    if (!repoPath) { setRepoProvider('github'); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const remotes = await window.gitAPI?.getRemotes(repoPath) ?? []
+        const origin = remotes.find(r => r.name === 'origin') ?? remotes[0]
+        const glInfo = origin && parseGitLabRepo(origin.url)
+        if (glInfo) {
+          const hosts = await window.appAPI?.gitlabListHosts() ?? []
+          const matched = hosts.some(h => h.replace(/\/+$/, '') === glInfo.host.replace(/\/+$/, ''))
+          if (!cancelled) { setRepoProvider(matched ? 'gitlab' : 'github'); return }
+        }
+        if (!cancelled) setRepoProvider('github')
+      } catch {
+        if (!cancelled) setRepoProvider('github')
+      }
+    })()
+    return () => { cancelled = true }
+  }, [repoPath, gitlabConnected])
+
   // ── 사이드바 리사이저 핸들러 ──
   const handleResizerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -1225,7 +1251,11 @@ export default function App() {
             />
 
             {view === 'pr' ? (
-              <PRView onOpenConflict={() => setShowConflict(true)} repoPath={repoPath} />
+              repoProvider === 'gitlab' ? (
+                <MRView repoPath={repoPath} onOpenUrl={url => window.appAPI?.openReleaseUrl(url)} />
+              ) : (
+                <PRView onOpenConflict={() => setShowConflict(true)} repoPath={repoPath} />
+              )
             ) : view === 'blame' ? (
               <>
                 <BlameView

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeGitlabHost, parseGitLabRepo, accessLevelToRole } from './gitlab'
+import { normalizeGitlabHost, parseGitLabRepo, accessLevelToRole, pipelineStatusToPipe } from './gitlab'
 
 describe('normalizeGitlabHost', () => {
   it('스킴 없으면 https 부여 + trailing slash 제거', () => {
@@ -146,6 +146,32 @@ describe('parseGitLabRepo', () => {
       namespace: 'group',
       project: 'proj',
     })
+  })
+})
+
+describe('pipelineStatusToPipe', () => {
+  it('success/manual → pass', () => {
+    expect(pipelineStatusToPipe('success')).toBe('pass')
+    expect(pipelineStatusToPipe('manual')).toBe('pass')
+  })
+  it('failed → fail', () => {
+    expect(pipelineStatusToPipe('failed')).toBe('fail')
+  })
+  it('running → run (info 블루, 주황 아님)', () => {
+    expect(pipelineStatusToPipe('running')).toBe('run')
+  })
+  it('pending/created/canceled/skipped/없음 → pend', () => {
+    expect(pipelineStatusToPipe('pending')).toBe('pend')
+    expect(pipelineStatusToPipe('created')).toBe('pend')
+    expect(pipelineStatusToPipe('canceled')).toBe('pend')
+    expect(pipelineStatusToPipe('skipped')).toBe('pend')
+    expect(pipelineStatusToPipe(undefined)).toBe('pend')
+    expect(pipelineStatusToPipe(null)).toBe('pend')
+    expect(pipelineStatusToPipe('')).toBe('pend')
+  })
+  it('대소문자 무관', () => {
+    expect(pipelineStatusToPipe('SUCCESS')).toBe('pass')
+    expect(pipelineStatusToPipe('Running')).toBe('run')
   })
 })
 

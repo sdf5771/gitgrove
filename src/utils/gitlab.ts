@@ -113,6 +113,30 @@ export function parseGitLabRepo(remoteUrl: string): GitLabRepoInfo | null {
 }
 
 /**
+ * GitLab 파이프라인/MR 머지 상태 문자열 → MR 뷰의 파이프라인 배지 상태.
+ * 디자인 매핑: pass(녹색) / fail(빨강) / run(info 블루, 스핀) / pend(회색).
+ *  - success/manual → pass
+ *  - failed → fail
+ *  - running → run
+ *  - 그 외(pending/created/scheduled/preparing/waiting_for_resource/canceled/skipped/없음) → pend
+ * GitLab pipeline running은 **주황이 아니라 info 블루**로 표기한다.
+ */
+export type PipeState = 'pass' | 'fail' | 'run' | 'pend'
+export function pipelineStatusToPipe(status?: string | null): PipeState {
+  switch ((status ?? '').toLowerCase()) {
+    case 'success':
+    case 'manual':
+      return 'pass'
+    case 'failed':
+      return 'fail'
+    case 'running':
+      return 'run'
+    default:
+      return 'pend'
+  }
+}
+
+/**
  * GitLab access_level 숫자 → 역할 라벨.
  * 10 Guest / 20 Reporter / 30 Developer / 40 Maintainer / 50 Owner.
  * null/undefined 또는 10 미만(No access=0)은 null(배지 숨김 — github permissionToRole 대응).

@@ -8,6 +8,11 @@ import {
   getCurrentUser,
   getProjects,
   getMergeRequests,
+  getMergeRequest,
+  getMergeRequestChanges,
+  getMergeRequestNotes,
+  getMergeRequestPipelines,
+  getMergeRequestApprovals,
   getTodos,
   clearGitlabCache,
 } from './gitlabClient'
@@ -196,5 +201,50 @@ describe('헬퍼 — 경로/파라미터 구성', () => {
     const url = fetchMock.mock.calls[0][0] as string
     expect(url).toContain('/api/v4/todos?')
     expect(url).toContain('state=pending')
+  })
+
+  // ── GL7: MR 상세/변경/노트/파이프라인/승인 헬퍼 ──
+  it('getMergeRequest → GET /projects/:id/merge_requests/:iid', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ id: 1, iid: 128 }))
+    await getMergeRequest('gitlab.com', 't', 'platform%2Fweb-client', 128)
+    const url = fetchMock.mock.calls[0][0] as string
+    expect(url).toContain('/api/v4/projects/platform%252Fweb-client/merge_requests/128')
+  })
+
+  it('getMergeRequestChanges → /changes 의 changes[] 추출', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ changes: [{ old_path: 'a', new_path: 'a', new_file: false, renamed_file: false, deleted_file: false }] }))
+    const res = await getMergeRequestChanges('gitlab.com', 't', 7, 128)
+    const url = fetchMock.mock.calls[0][0] as string
+    expect(url).toContain('/api/v4/projects/7/merge_requests/128/changes')
+    expect(res).toHaveLength(1)
+  })
+
+  it('getMergeRequestChanges → changes 없으면 빈 배열', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({}))
+    const res = await getMergeRequestChanges('gitlab.com', 't', 7, 1)
+    expect(res).toEqual([])
+  })
+
+  it('getMergeRequestNotes → /notes?per_page&sort=asc', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce([]))
+    await getMergeRequestNotes('gitlab.com', 't', 7, 128)
+    const url = fetchMock.mock.calls[0][0] as string
+    expect(url).toContain('/api/v4/projects/7/merge_requests/128/notes?')
+    expect(url).toContain('sort=asc')
+  })
+
+  it('getMergeRequestPipelines → /pipelines', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce([]))
+    await getMergeRequestPipelines('gitlab.com', 't', 7, 128)
+    const url = fetchMock.mock.calls[0][0] as string
+    expect(url).toContain('/api/v4/projects/7/merge_requests/128/pipelines')
+  })
+
+  it('getMergeRequestApprovals → /approvals', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ approvals_required: 2, approvals_left: 1 }))
+    const res = await getMergeRequestApprovals('gitlab.com', 't', 7, 128)
+    const url = fetchMock.mock.calls[0][0] as string
+    expect(url).toContain('/api/v4/projects/7/merge_requests/128/approvals')
+    expect(res.approvals_required).toBe(2)
   })
 })

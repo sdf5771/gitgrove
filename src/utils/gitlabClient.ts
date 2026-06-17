@@ -285,6 +285,129 @@ export async function getMergeRequests(
   return res.data
 }
 
+// ── 단일 MR 상세/변경/노트/파이프라인 (GL7 — MRView 상세 탭용) ──
+
+/** GET /projects/:id/merge_requests/:iid 응답 중 UI가 쓰는 필드(목록 + 승인/diff 통계) */
+export interface GitlabMergeRequestDetail extends GitlabMergeRequest {
+  /** changes_count는 "3" 또는 "3+" 문자열 */
+  changes_count?: string
+  /** approvals 요건이 활성화돼 있으면 별도 호출(getMergeRequestApprovals) */
+}
+
+/** GET /projects/:id/merge_requests/:iid — 단일 MR 상세 */
+export async function getMergeRequest(
+  host: string,
+  token: string,
+  projectId: number | string,
+  iid: number,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabMergeRequestDetail> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}`
+  const res = await glRequest<GitlabMergeRequestDetail>(host, path, { token, ...opts })
+  return res.data
+}
+
+/** GET /projects/:id/merge_requests/:iid/approvals 응답 중 UI가 쓰는 필드 */
+export interface GitlabMrApprovals {
+  approvals_required: number
+  approvals_left: number
+  approved?: boolean
+  approved_by?: Array<{ user: { id: number; username: string; name: string; avatar_url: string | null } }>
+}
+
+/**
+ * GET /projects/:id/merge_requests/:iid/approvals — 승인 요건/현황.
+ * Approval 기능이 비활성(예: gitlab.com 무료 self-managed)이면 404/403일 수 있어
+ * 호출부에서 catch해 graceful 처리한다.
+ */
+export async function getMergeRequestApprovals(
+  host: string,
+  token: string,
+  projectId: number | string,
+  iid: number,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabMrApprovals> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/approvals`
+  const res = await glRequest<GitlabMrApprovals>(host, path, { token, ...opts })
+  return res.data
+}
+
+/** GET /projects/:id/merge_requests/:iid/changes 의 changes[] 원소 중 UI가 쓰는 필드 */
+export interface GitlabMrChange {
+  old_path: string
+  new_path: string
+  new_file: boolean
+  renamed_file: boolean
+  deleted_file: boolean
+  /** unified diff 텍스트(라인 수 집계용) */
+  diff?: string
+}
+
+/** GET /projects/:id/merge_requests/:iid/changes — 변경 파일 목록 */
+export async function getMergeRequestChanges(
+  host: string,
+  token: string,
+  projectId: number | string,
+  iid: number,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabMrChange[]> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/changes`
+  const res = await glRequest<{ changes?: GitlabMrChange[] }>(host, path, { token, ...opts })
+  return res.data.changes ?? []
+}
+
+/** GET /projects/:id/merge_requests/:iid/notes 의 note 원소 중 UI가 쓰는 필드 */
+export interface GitlabMrNote {
+  id: number
+  body: string
+  /** 시스템 노트(상태변경 등)는 제외 권장 */
+  system: boolean
+  created_at: string
+  author: { id: number; username: string; name: string; avatar_url: string | null } | null
+}
+
+/** GET /projects/:id/merge_requests/:iid/notes — 토론/코멘트(시스템 노트 포함) */
+export async function getMergeRequestNotes(
+  host: string,
+  token: string,
+  projectId: number | string,
+  iid: number,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabMrNote[]> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/notes?per_page=50&sort=asc&order_by=created_at`
+  const res = await glRequest<GitlabMrNote[]>(host, path, { token, ...opts })
+  return res.data
+}
+
+/** GET /projects/:id/pipelines 의 원소 중 UI가 쓰는 필드 */
+export interface GitlabPipeline {
+  id: number
+  iid?: number
+  /** running/pending/success/failed/canceled/skipped 등 */
+  status: string
+  ref: string
+  sha: string
+  web_url: string
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * GET /projects/:id/merge_requests/:iid/pipelines — 해당 MR의 파이프라인 목록(최신순).
+ * 첫 원소가 가장 최근 실행.
+ */
+export async function getMergeRequestPipelines(
+  host: string,
+  token: string,
+  projectId: number | string,
+  iid: number,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabPipeline[]> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/pipelines`
+  const res = await glRequest<GitlabPipeline[]>(host, path, { token, ...opts })
+  return res.data
+}
+
 /** GET /todos 응답 중 UI가 쓰는 필드 */
 export interface GitlabTodo {
   id: number
