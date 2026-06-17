@@ -992,10 +992,11 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-inbox-row{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:6px;border:1px solid transparent;cursor:pointer;transition:background 120ms,border-color 120ms;}
 .rm-inbox-row:hover{background:var(--c-gold-bg-soft);border-color:rgba(45,53,81,.8);}
 .rm-inbox-row+.rm-inbox-row{margin-top:2px;}
-.rm-inbox-ic{flex-shrink:0;display:inline-flex;margin-top:2px;}
+.rm-inbox-ic{position:relative;flex-shrink:0;width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid;margin-top:1px;}
 .rm-inbox-ic svg{width:15px;height:15px;}
-.rm-inbox-ic.pr{color:var(--c-success);}
-.rm-inbox-ic.issue{color:var(--c-info);}
+/* .pr = 구 GitHub PR alias(boxed로 통일). .mr = MR(success), .issue = 이슈(info) */
+.rm-inbox-ic.pr,.rm-inbox-ic.mr{color:var(--c-success);background:rgba(111,207,124,.1);border-color:rgba(111,207,124,.35);}
+.rm-inbox-ic.issue{color:var(--c-info);background:rgba(95,184,230,.1);border-color:rgba(95,184,230,.35);}
 .rm-inbox-info{flex:1;min-width:0;}
 .rm-inbox-title{display:flex;align-items:baseline;gap:7px;}
 .rm-inbox-num{font-family:var(--font-mono);font-size:11px;color:var(--c-text-faint);flex-shrink:0;}
@@ -1003,6 +1004,22 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-inbox-sub{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:3px;font-size:11.5px;color:var(--c-text-muted);}
 .rm-inbox-repo{font-family:var(--font-mono);color:var(--c-text-muted);}
 .rm-inbox-label{font-size:9.5px;padding:1px 6px;border-radius:999px;background:var(--c-bg-elevated);color:var(--c-text-faint);border:1px solid var(--c-border);}
+.rm-inbox-scroll{flex:1;overflow-y:auto;}
+
+/* ── 프로바이더 통합: 배지(tb-prov) · 필터 칩(tb-pf) · 인박스 필터 바 (GL9/GL10) ── */
+/* 아이콘 우하단 프로바이더 배지 — GitHub/GitLab 식별 전용(승격 금지) */
+.tb-prov{position:absolute;right:-5px;bottom:-5px;width:16px;height:16px;border-radius:50%;background:var(--c-bg-inset);border:1px solid var(--c-border-strong);display:flex;align-items:center;justify-content:center;}
+.tb-prov svg{width:11px;height:11px;display:block;}
+/* 프로바이더 필터 칩 행 */
+.tb-prov-filter{display:flex;gap:5px;}
+.tb-pf{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border:1px solid var(--c-border);background:none;border-radius:999px;font-size:10.5px;color:var(--c-text-muted);cursor:pointer;font-family:var(--font-body);transition:all .1s;}
+.tb-pf:hover{color:var(--c-text);}
+/* 필터 on = 골드(앱의 유일한 인터랙션 액센트) */
+.tb-pf.on{border-color:var(--c-gold-border);color:var(--c-gold-300);background:var(--c-gold-bg-soft);}
+.tb-pf .pm{display:flex;}
+.tb-pf .pm svg{width:11px;height:11px;display:block;}
+/* 인박스 필터 바(필터 칩 + 검색 + 새로고침) */
+.inbox-filter{display:flex;align-items:center;gap:8px;padding:12px 28px 6px;}
 
 /* ── 글로벌 알림 벨 (B20) ── */
 .tb-bell{position:relative;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;flex-shrink:0;margin-left:6px;padding:0;border:1px solid transparent;border-radius:var(--r2);background:none;color:var(--c-text-muted);cursor:pointer;transition:all 80ms;}
@@ -1028,7 +1045,11 @@ body { display: flex; align-items: center; justify-content: center; }
 .nb-item:hover{background:var(--c-gold-bg-soft);}
 .nb-item.unread{background:rgba(230,165,54,.045);}
 .nb-item.unread::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--c-gold-300);}
-.nb-ico{flex-shrink:0;width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid;margin-top:1px;}
+.nb-ico{position:relative;flex-shrink:0;width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;border:1px solid;margin-top:1px;}
+/* GitLab 식별 아이콘 색(todo 등 — 주황은 식별 전용) */
+.nb-ico.ic-gl{color:var(--c-gitlab-3);background:var(--c-gitlab-bg-soft);border-color:var(--c-gitlab-border);}
+/* 알림 벨 패널 안의 프로바이더 필터 바 — 헤더 아래 구분선 포함 */
+.nb-panel .tb-prov-filter{padding:8px 12px;border-bottom:1px solid var(--c-divider);background:var(--c-bg-surface,var(--c-bg-inset));}
 .nb-ico svg{width:16px;height:16px;}
 .nb-ico.ic-gold{color:var(--c-gold-300);background:var(--c-gold-bg);border-color:var(--c-gold-border);}
 .nb-ico.ic-info{color:var(--c-info);background:rgba(95,184,230,.12);border-color:rgba(95,184,230,.4);}

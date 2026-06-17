@@ -27,6 +27,7 @@ import { parseGitHubRepo, permissionToRole } from './utils/github'
 import { parseGitLabRepo } from './utils/gitlab'
 import type { RepoPermissions } from './utils/github'
 import { getGithubToken } from './utils/githubToken'
+import { useGitlabConns } from './utils/useGitlabConns'
 import { getUser, getRepo } from './utils/githubClient'
 import { NotificationStack } from './components/NotificationStack'
 import { ContextMenu } from './components/ContextMenu'
@@ -656,6 +657,9 @@ export default function App() {
     }
   }, [])
 
+  // 연결된 GitLab 인스턴스(host+token+username) — 인박스·알림 벨 통합용.
+  const { instances: gitlabInstances } = useGitlabConns(gitlabConnected)
+
   // ── GitHub 사용자 정보 ──
   const [githubUser, setGithubUser] = useState<GithubUser | null>(null)
 
@@ -1132,6 +1136,7 @@ export default function App() {
         </div>
         <NotificationBell
           githubToken={githubToken}
+          gitlabInstances={gitlabInstances}
           onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
         />
       </div>
@@ -1198,6 +1203,7 @@ export default function App() {
             githubToken={githubToken}
             githubLogin={githubUser?.login ?? null}
             gitlabConnected={gitlabConnected}
+            gitlabInstances={gitlabInstances}
             recents={recents}
             favorites={favorites}
             workspaces={workspaces}

@@ -34,7 +34,7 @@ describe('GithubInbox (B19)', () => {
 
   it('미연결이면 안내 메시지를 표시', () => {
     render(<GithubInbox githubToken="" githubLogin={null} onOpenUrl={vi.fn()} />)
-    expect(screen.getByText(/GitHub 연결이 필요/)).toBeTruthy()
+    expect(screen.getByText(/GitHub 또는 GitLab 연결이 필요/)).toBeTruthy()
     expect(getSearchIssuesMock).not.toHaveBeenCalled()
   })
 
