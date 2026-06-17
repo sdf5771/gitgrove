@@ -22,6 +22,9 @@
   --c-info:         #5fb8e6;
   --c-danger:       #ff6b6b;
   --c-warning:      #ffce5a;
+  /* 그로브(나무·활동) 식별색 — 카드 스파크라인 활발 / 그로브 현황 활발. 디자인 정본 매핑. */
+  --c-grove:        #6fcf7c;
+  --c-grove-d:      #3f9550;
   /* GitLab 식별색 — 연결됨 카드 보더 / 탭 on 보더 / 종류 라디오 선택 표시 전용.
      버튼·포커스링·CTA는 골드(앱 유일 액센트)를 유지하고 주황을 승격하지 않는다. */
   --c-gitlab:       #fc6d26;
@@ -75,7 +78,9 @@ body { display: flex; align-items: center; justify-content: center; }
   transition: border-color 120ms;
 }
 .repo-pill:hover { border-color: var(--c-border-strong); }
-.sep { flex: 1; }
+/* 타이틀 바 우측 그룹 직전의 최소 간격. 탭 스트립이 가용폭을 우선 갖도록
+   더 이상 flex:1로 남는 공간을 독식하지 않는다(.repo-tabs가 채움). */
+.sep { flex: 0 0 auto; min-width: 16px; }
 
 /* ── Action bar ── */
 .action-bar {
@@ -558,7 +563,10 @@ body { display: flex; align-items: center; justify-content: center; }
 .sett-token-link-btn.gl:hover{border-color:var(--c-gitlab-border);color:var(--c-gitlab-3);}
 
 /* ── Repo tabs ── */
-.repo-tabs{display:flex;align-items:center;gap:0;overflow-x:auto;flex:1;max-width:500px;scrollbar-width:none;}
+/* 탭 스트립은 타이틀 바 가용 가로폭(우측 그룹 직전까지)을 채운다.
+   기존 max-width:500px 캡 제거 → 빈 공간이 있으면 탭이 펼쳐지고,
+   정말 넘칠 때만 내부 가로 스크롤(overflow-x:auto)이 동작한다. min-width:0로 축소 허용. */
+.repo-tabs{display:flex;align-items:center;gap:0;overflow-x:auto;flex:1 1 auto;min-width:0;scrollbar-width:none;}
 .repo-tabs::-webkit-scrollbar{display:none;}
 .repo-tab{display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;font-size:12px;color:var(--c-text-muted);border-right:1px solid var(--c-border);white-space:nowrap;transition:background 80ms,color 80ms;position:relative;flex-shrink:0;}
 .repo-tab:hover{background:rgba(244,236,210,.04);color:var(--c-text);}
@@ -980,6 +988,105 @@ body { display: flex; align-items: center; justify-content: center; }
 .rm-empty-big span{font-size:12.5px;color:var(--c-text-muted);line-height:1.6;max-width:300px;}
 .rm-empty-big .rm-empty-err{color:var(--c-danger);font-family:var(--font-mono);font-size:11.5px;}
 .rm-empty-big .rm-empty-err code{font-family:var(--font-mono);color:var(--c-gitlab-3);}
+
+/* ════════════════════════════════════════════════════════════
+   RM2~RM4 — "내 그로브" 카드 그리드 재디자인 (디자인 정본 포팅)
+   골드 = 유일 인터랙션 액센트. GitLab 주황 = 식별 전용.
+   ════════════════════════════════════════════════════════════ */
+
+/* main 영역 배경(그로브 분위기) */
+.rm-main{background:radial-gradient(120% 70% at 85% -10%,rgba(230,165,54,.06),transparent 50%),var(--c-bg-deep);}
+
+/* 헤더: 큰 그루 + 내 그로브 타이틀 + 액션 */
+.rm-head-top{display:flex;align-items:flex-end;gap:13px;padding:18px 26px 14px;}
+.rm-head-geuru{flex-shrink:0;filter:drop-shadow(0 4px 0 rgba(0,0,0,.3));}
+.rm-head-titles{min-width:0;}
+.rm-head-titles h1{font-family:var(--font-display);font-size:24px;color:var(--c-text-strong);letter-spacing:.3px;line-height:1.1;font-weight:400;}
+.rm-head-titles h1 .en{color:var(--c-text-faint);font-size:14px;margin-left:8px;}
+.rm-head-titles p{font-size:12.5px;color:var(--c-text-muted);margin-top:3px;}
+.rm-head-titles p b{color:var(--c-grove);font-family:var(--font-mono);font-weight:500;}
+.rm-head-actions{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0;}
+
+/* 필터 바: 세그먼트 + 검색 + 정렬 */
+.rm-seg{display:flex;background:var(--c-bg-inset);border:1px solid var(--c-border);border-radius:6px;overflow:hidden;flex-shrink:0;}
+.rm-seg button{display:flex;align-items:center;gap:6px;padding:6px 13px;background:none;border:none;border-right:1px solid var(--c-border);color:var(--c-text-muted);font-size:12px;cursor:pointer;transition:background 100ms,color 100ms;white-space:nowrap;font-family:var(--font-body);}
+.rm-seg button:last-child{border-right:none;}
+.rm-seg button.on{background:var(--c-gold-bg);color:var(--c-gold-300);}
+.rm-seg button:hover:not(.on){color:var(--c-text);}
+.rm-seg button .c{font-family:var(--font-mono);font-size:10px;opacity:.7;}
+.rm-sort-btn{margin-left:auto;display:flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:6px;border:1px solid var(--c-border);background:var(--c-bg-elevated);color:var(--c-text-muted);font-size:12px;cursor:pointer;flex-shrink:0;font-family:var(--font-body);transition:color 120ms,border-color 120ms;}
+.rm-sort-btn:hover{color:var(--c-text);border-color:var(--c-border-strong);}
+.rm-sort-btn svg{width:13px;height:13px;}
+
+/* 카드 필드 + 그리드 */
+.rm-field{flex:1;overflow-y:auto;padding:18px 26px 24px;}
+.rm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(322px,1fr));gap:14px;}
+
+/* 그룹 헤더(열린 저장소 / 다른 나무들) */
+.rm-group-head{display:flex;align-items:center;gap:9px;margin:6px 0 12px;}
+.rm-group-head:not(:first-child){margin-top:26px;}
+.rm-group-head .rm-gh-title{font-family:var(--font-display);font-size:14px;color:var(--c-text-strong);letter-spacing:.3px;}
+.rm-group-head .rm-gh-count{font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);background:var(--c-bg-elevated);border:1px solid var(--c-border);padding:1px 7px;border-radius:999px;}
+.rm-group-head .rm-gh-line{flex:1;height:1px;background:var(--c-divider);}
+
+/* 그로브 카드 = 나무 한 그루 */
+.rm-card{position:relative;background:var(--c-bg-surface);border:1px solid var(--c-border);border-radius:9px;overflow:hidden;cursor:pointer;transition:border-color 140ms,transform 140ms,box-shadow 140ms;box-shadow:0 2px 0 rgba(0,0,0,.32);user-select:none;}
+.rm-card:hover{border-color:var(--c-border-strong);transform:translateY(-2px);box-shadow:0 8px 22px rgba(0,0,0,.42);}
+.rm-card.sel{border-color:var(--c-gold-border);box-shadow:0 0 0 1px var(--c-gold-border),0 8px 22px rgba(0,0,0,.42);}
+.rm-card.dim{opacity:.72;}
+
+.rm-card-top{display:flex;gap:11px;padding:13px 13px 10px;}
+.rm-tree-tile{width:46px;height:46px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--c-bg-inset);border:1px solid var(--c-border);position:relative;overflow:hidden;}
+.rm-tree-ground{position:absolute;left:0;right:0;bottom:0;height:7px;background:linear-gradient(180deg,rgba(138,90,30,0),rgba(138,90,30,.28));}
+.rm-card-id{flex:1;min-width:0;}
+.rm-card-name-row{display:flex;align-items:center;gap:7px;}
+.rm-card-name{font-family:var(--font-mono);font-size:13.5px;font-weight:600;color:var(--c-text-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rm-card-owner{display:flex;align-items:center;gap:6px;margin-top:4px;font-size:11.5px;color:var(--c-text-muted);font-family:var(--font-mono);min-width:0;}
+.rm-card-owner .prov-mark{display:inline-flex;flex-shrink:0;}
+.rm-card-owner-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* 즐겨찾기 별(우상단) */
+.rm-card-star{position:absolute;top:11px;right:11px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--c-text-faint);border-radius:5px;border:none;background:none;padding:0;transition:color 120ms,background 120ms;z-index:2;}
+.rm-card-star:hover{background:var(--c-gold-bg-soft);}
+.rm-card-star svg{width:15px;height:15px;}
+.rm-card-star.on{color:var(--c-gold-400);}
+.rm-card-star:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--c-gold-border);}
+
+/* 카드 메타(브랜치 칩·dirty·sync) */
+.rm-card-meta{display:flex;align-items:center;gap:6px;padding:0 13px 11px;flex-wrap:wrap;}
+.rm-card-meta>.rm-branch-chip,.rm-card-meta>.rm-dirty-badge,.rm-card-meta>.rm-sync-chip{flex:0 0 auto;}
+.rm-card-meta .rm-branch-chip{max-width:220px;}
+.rm-sync-chip{display:inline-flex;align-items:center;gap:3px;height:21px;padding:0 7px;font-family:var(--font-mono);font-size:10.5px;color:var(--c-text-muted);}
+.rm-sync-chip svg{width:11px;height:11px;}
+
+/* 활동 스파크라인 */
+.rm-activity{padding:3px 13px 0;}
+.rm-act-label{display:flex;align-items:center;justify-content:space-between;font-size:9.5px;color:var(--c-text-faint);font-family:var(--font-mono);margin-bottom:5px;}
+.rm-act-row{display:flex;align-items:flex-end;gap:2px;height:26px;padding-bottom:5px;border-bottom:1px dashed var(--c-divider);}
+.rm-act-bar{flex:1;border-radius:1.5px 1.5px 0 0;min-height:2px;background:var(--c-border);transition:height .2s;}
+
+/* 푸터(그루 상태 + 열기/Clone + 파일탐색기) */
+.rm-card-foot{display:flex;align-items:center;gap:7px;padding:10px 13px;}
+.rm-geuru-state{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--c-text-muted);flex:1;min-width:0;}
+.rm-geuru-state .rm-gs-sprite{flex-shrink:0;display:inline-flex;}
+.rm-geuru-state .rm-gs-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.rm-foot-btns{display:flex;gap:5px;flex-shrink:0;}
+.rm-fbtn{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:27px;padding:0 11px;border-radius:5px;font-size:11.5px;cursor:pointer;border:1px solid;transition:background 120ms,border-color 120ms,color 120ms;font-family:var(--font-body);}
+.rm-fbtn svg{width:12px;height:12px;}
+.rm-fbtn.open{background:var(--c-gold-bg);border-color:var(--c-gold-border);color:var(--c-gold-300);}
+.rm-fbtn.open:hover{background:rgba(230,165,54,.22);}
+.rm-fbtn.ghost{width:27px;padding:0;background:var(--c-bg-elevated);border-color:var(--c-border);color:var(--c-text-muted);}
+.rm-fbtn.ghost:hover{border-color:var(--c-border-strong);color:var(--c-text);}
+
+/* 사이드바 그로브 현황 카드 */
+.rm-grove-card{margin:auto 12px 4px;background:var(--c-bg-inset);border:1px solid var(--c-border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:9px;}
+.rm-grove-card-top{display:flex;align-items:center;gap:9px;}
+.rm-grove-card-top .rm-gc-txt b{font-family:var(--font-display);font-size:12px;color:var(--c-text-strong);display:block;letter-spacing:.2px;font-weight:400;}
+.rm-grove-card-top .rm-gc-txt span{font-size:10.5px;color:var(--c-text-muted);}
+.rm-grove-bar{height:6px;border-radius:3px;background:var(--c-bg-elevated);overflow:hidden;display:flex;}
+.rm-grove-bar i{height:100%;display:block;}
+.rm-grove-legend{display:flex;gap:10px;font-size:9.5px;color:var(--c-text-muted);font-family:var(--font-mono);}
+.rm-grove-legend i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:3px;vertical-align:0;}
 
 /* ── Cross-repo 인박스 (B19) ── */
 .rm-inbox{flex:1;display:flex;flex-direction:column;min-height:0;}

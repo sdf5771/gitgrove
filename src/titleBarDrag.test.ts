@@ -28,3 +28,30 @@ describe('타이틀바 클릭 영역 (-webkit-app-region)', () => {
     expect(match![1]).toContain('.tb-repos-tab')
   })
 })
+
+// 열린-리포지토리 탭 스트립(.repo-tabs)이 500px 캡에 묶이면, 타이틀 바에 빈 공간이
+// 남는데도 탭이 욱여넣어져 불필요한 가로 스크롤이 생긴다. 캡을 제거하고 flex로
+// 가용폭을 채우되, 넘칠 때만 내부 스크롤이 동작하도록 한 계약을 고정한다.
+describe('타이틀바 열린-리포지토리 영역 레이아웃', () => {
+  const css = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), 'index.css'),
+    'utf-8',
+  )
+  // `.repo-tabs{...}` 선언 블록만 추출(다른 .repo-tabs::-webkit-scrollbar 등은 제외).
+  const repoTabs = css.match(/\.repo-tabs\s*\{([^}]*)\}/)?.[1] ?? ''
+  const sep = css.match(/\.sep\s*\{([^}]*)\}/)?.[1] ?? ''
+
+  it('.repo-tabs에 max-width:500px 캡이 남아 있으면 안 된다', () => {
+    expect(repoTabs).not.toMatch(/max-width:\s*500px/)
+  })
+
+  it('.repo-tabs는 가용폭을 채우도록 flex grow + overflow-x:auto + min-width:0', () => {
+    expect(repoTabs).toMatch(/flex:\s*1/)
+    expect(repoTabs).toContain('overflow-x:auto')
+    expect(repoTabs).toContain('min-width:0')
+  })
+
+  it('.sep는 더 이상 남는 공간을 독식(flex:1)하지 않는다', () => {
+    expect(sep).not.toMatch(/flex:\s*1\s*;/)
+  })
+})
