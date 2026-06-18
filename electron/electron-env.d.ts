@@ -152,6 +152,14 @@ interface Window {
     gitlabGetToken: (host: string) => Promise<string | null>
     gitlabListHosts: () => Promise<string[]>
     gitlabRemoveToken: (host: string) => Promise<boolean>
+    // OS 네이티브 알림 / Dock (기능 B). 렌더러가 신규 알림 감지 시 호출.
+    // showNotification: title/body 표시, silent로 무음, sound는 macOS 시스템 사운드 이름('Glass' 등).
+    //   알림 클릭 시 메인 윈도우를 앞으로 가져옴. 미지원 환경은 graceful no-op.
+    showNotification: (opts: { title: string; body: string; silent?: boolean; sound?: string }) => Promise<void>
+    // Dock 배지 카운트(macOS). 0이면 배지 제거. 비-macOS는 무시.
+    setBadgeCount: (count: number) => Promise<void>
+    // macOS Dock 아이콘 1회 바운스(informational). 비-macOS no-op.
+    bounceDock: () => Promise<void>
   }
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {

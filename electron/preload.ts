@@ -28,6 +28,13 @@ contextBridge.exposeInMainWorld('appAPI', {
   gitlabGetToken: (host: string) => ipcRenderer.invoke('gitlab:getToken', host) as Promise<string | null>,
   gitlabListHosts: () => ipcRenderer.invoke('gitlab:listHosts') as Promise<string[]>,
   gitlabRemoveToken: (host: string) => ipcRenderer.invoke('gitlab:removeToken', host) as Promise<boolean>,
+
+  // OS 네이티브 알림 / Dock (기능 B). 렌더러가 신규 알림 감지 시 호출.
+  // 미지원/비-macOS 환경은 메인에서 graceful no-op.
+  showNotification: (opts: { title: string; body: string; silent?: boolean; sound?: string }) =>
+    ipcRenderer.invoke('app:show-notification', opts) as Promise<void>,
+  setBadgeCount: (count: number) => ipcRenderer.invoke('app:set-badge-count', count) as Promise<void>,
+  bounceDock: () => ipcRenderer.invoke('app:bounce-dock') as Promise<void>,
 })
 
 // --------- Expose ipcRenderer to the Renderer process ---------
