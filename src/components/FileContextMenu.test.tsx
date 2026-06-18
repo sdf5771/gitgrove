@@ -18,9 +18,10 @@ function installClipboard() {
   return writeText
 }
 
-function renderStage(unstaged: FileEntry[], staged: FileEntry[] = [], onCommitDone = vi.fn()) {
+function renderStage(unstaged: FileEntry[], staged: FileEntry[] = [], onCommitDone = vi.fn(), onTreeChanged = vi.fn()) {
   return {
     onCommitDone,
+    onTreeChanged,
     ...render(
       <StageArea
         onSelDiffFile={() => {}}
@@ -28,6 +29,7 @@ function renderStage(unstaged: FileEntry[], staged: FileEntry[] = [], onCommitDo
         staged={staged}
         repoPath={REPO}
         onCommitDone={onCommitDone}
+        onTreeChanged={onTreeChanged}
       />,
     ),
   }
@@ -91,8 +93,8 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
     expect(screen.getByText('Discard Changes…')).toBeTruthy()
   })
 
-  it('Discard → ConfirmModal → confirm 시 discardChanges 호출 + onCommitDone', async () => {
-    const { onCommitDone } = renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
+  it('Discard → ConfirmModal → confirm 시 discardChanges 호출 + onTreeChanged(Discarded), Committed 토스트 없음', async () => {
+    const { onCommitDone, onTreeChanged } = renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
     fireEvent.mouseDown(screen.getByText('Discard Changes…'))
 
@@ -104,7 +106,9 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
     await Promise.resolve(); await Promise.resolve()
 
     expect(gitAPI.discardChanges).toHaveBeenCalledWith(REPO, ['src/App.tsx'])
-    expect(onCommitDone).toHaveBeenCalled()
+    // 파괴적 액션은 'Committed' 토스트용 onCommitDone이 아닌 onTreeChanged를 호출해야 한다.
+    expect(onCommitDone).not.toHaveBeenCalled()
+    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: 'Discarded', msg: '변경사항을 되돌렸습니다' })
   })
 
   it('Discard 취소 시 discardChanges 미호출', async () => {
@@ -116,21 +120,24 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
     expect(gitAPI.discardChanges).not.toHaveBeenCalled()
   })
 
-  it('Ignore File → addToGitignore([f.p]) + onCommitDone', async () => {
-    const { onCommitDone } = renderStage([{ p: 'secret.env.ts', s: 'A', a: 3, d: 0 }])
+  it('Ignore File → addToGitignore([f.p]) + onTreeChanged(Ignored), Committed 토스트 없음', async () => {
+    const { onCommitDone, onTreeChanged } = renderStage([{ p: 'secret.env.ts', s: 'A', a: 3, d: 0 }])
     openMenuFor('secret.env.ts')
     fireEvent.mouseDown(screen.getByText('Ignore File (Add to .gitignore)'))
     await Promise.resolve(); await Promise.resolve()
     expect(gitAPI.addToGitignore).toHaveBeenCalledWith(REPO, ['secret.env.ts'])
-    expect(onCommitDone).toHaveBeenCalled()
+    expect(onCommitDone).not.toHaveBeenCalled()
+    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
   })
 
-  it('Ignore All .ext → addToGitignore(["*.ext"])', async () => {
-    renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
+  it('Ignore All .ext → addToGitignore(["*.ext"]) + onTreeChanged(Ignored), Committed 토스트 없음', async () => {
+    const { onCommitDone, onTreeChanged } = renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
     fireEvent.mouseDown(screen.getByText('Ignore All .tsx Files (Add to .gitignore)'))
     await Promise.resolve(); await Promise.resolve()
     expect(gitAPI.addToGitignore).toHaveBeenCalledWith(REPO, ['*.tsx'])
+    expect(onCommitDone).not.toHaveBeenCalled()
+    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
   })
 
   it('Copy File Path → 절대경로를 clipboard에 write', async () => {

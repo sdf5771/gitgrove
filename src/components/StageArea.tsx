@@ -10,10 +10,13 @@ interface Props {
   unstaged?: FileEntry[]
   staged?: FileEntry[]
   repoPath?: string | null      // 실제 IPC 호출에 사용
-  onCommitDone?: () => void     // 커밋 완료 후 콜백 (상태 새로고침)
+  onCommitDone?: () => void     // 커밋/amend 완료 후 콜백 ('Committed' 토스트 포함)
+  // 컨텍스트 메뉴의 워킹트리 변경(discard/ignore) 후 git 상태만 갱신하는 콜백.
+  // onCommitDone과 달리 'Committed' 토스트를 띄우지 않는다. 액션별 토스트는 액션 인자로 전달.
+  onTreeChanged?: (toast?: { cls: 'success' | 'error' | 'warning'; title: string; msg: string }) => void | Promise<void>
 }
 
-export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone }: Props) {
+export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone, onTreeChanged }: Props) {
   // controlled: props(unstaged/staged)를 단일 소스로 소비하되, stage/unstage 클릭은
   // 즉시 반영(낙관적)을 위해 로컬 state에 담는다. 이후 props가 바뀌면(=loadRepo 확정
   // 결과 도착) 그 값으로 재동기화 → 낙관 → 서버확정 순서가 자연스럽게 이어진다.
@@ -51,7 +54,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         if (!repoPath) return
         try {
           await window.gitAPI?.addToGitignore(repoPath, [f.p])
-          onCommitDone?.()
+          await onTreeChanged?.({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
         } catch (e) { console.error('addToGitignore failed:', e) }
         break
       case 'ignore-ext': {
@@ -60,7 +63,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         if (!ext) return
         try {
           await window.gitAPI?.addToGitignore(repoPath, ['*.' + ext])
-          onCommitDone?.()
+          await onTreeChanged?.({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
         } catch (e) { console.error('addToGitignore failed:', e) }
         break
       }
@@ -91,7 +94,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
     if (!f || !repoPath) return
     try {
       await window.gitAPI?.discardChanges(repoPath, [f.p])
-      onCommitDone?.()
+      await onTreeChanged?.({ cls: 'success', title: 'Discarded', msg: '변경사항을 되돌렸습니다' })
     } catch (e) { console.error('discardChanges failed:', e) }
   }
 
