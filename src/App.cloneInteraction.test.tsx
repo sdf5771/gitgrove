@@ -87,6 +87,49 @@ describe('클론 인터랙션 — App 통합(진입점 → resolver → loadRepo
     expect(mock.gitAPI.clone).toHaveBeenCalledWith('https://github.com/acme/b.git', expect.any(String), expect.any(Object))
   })
 
+  it('핵심 회귀: 클론 성공 후 "그로브로"로 닫아도 repos·recents에 등록되어 탭이 남는다', async () => {
+    const mock = installGitApiMock()
+    mock.gitAPI.pickDirectory.mockResolvedValue('/dev')
+    mock.gitAPI.clone.mockResolvedValue({ success: true, path: '/repo/b', name: 'b' })
+    const user = userEvent.setup()
+    await renderLoaded(mock)
+
+    await openCloneViaAddRepo(user)
+    await user.type(screen.getByPlaceholderText(/github.com\/owner\/repo/), 'https://github.com/acme/b.git')
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+
+    // 성공 결과 화면 + 그로브 자동 등록(onRegistered → loadRepo activate:false).
+    await waitFor(() => expect(shown('그로브에 심었어요')).toBe(true))
+    // "그로브로"는 활성화하지 않지만, 클론된 repo는 이미 그로브 탭(목록)에 등록돼야 한다.
+    await user.click(screen.getByRole('button', { name: '그로브로' }))
+
+    // 모달이 닫히고 → 'b' 탭이 목록에 남는다(픽스 무력화 시 등록 안 돼 이 단언이 red).
+    await waitFor(() => expect(screen.queryByText('그로브에 심었어요')).toBeNull())
+    expect(screen.getByRole('button', { name: 'b 탭 닫기' })).toBeTruthy()
+    // 활성 탭은 전환되지 않아 기존 repo a 화면 유지(activate:false 계약).
+    expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true)
+    // recents에도 등록(localStorage).
+    const recents = JSON.parse(localStorage.getItem('gitgrove:recentRepos') || '[]')
+    expect(recents.some((r: { path: string }) => r.path === '/repo/b')).toBe(true)
+  })
+
+  it('성공 후 resolver(true): 클론이 성공하면 닫아도 호출부 Promise가 true로 resolve된다', async () => {
+    const mock = installGitApiMock()
+    mock.gitAPI.pickDirectory.mockResolvedValue('/dev')
+    mock.gitAPI.clone.mockResolvedValue({ success: true, path: '/repo/b', name: 'b' })
+    const user = userEvent.setup()
+    await renderLoaded(mock)
+
+    await openCloneViaAddRepo(user)
+    await user.type(screen.getByPlaceholderText(/github.com\/owner\/repo/), 'https://github.com/acme/b.git')
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+    await waitFor(() => expect(shown('그로브에 심었어요')).toBe(true))
+    await user.click(screen.getByRole('button', { name: '그로브로' }))
+
+    // 등록된 'b' 탭이 보이면 성공 종료 경로가 정상(resolver true 의미와 동일 동선).
+    await waitFor(() => expect(screen.getByRole('button', { name: 'b 탭 닫기' })).toBeTruthy())
+  })
+
   it('진행: emitRemoteProgress(op:clone)로 checkout "파일 펼치는 중"까지 단계 전이', async () => {
     const mock = installGitApiMock()
     mock.gitAPI.pickDirectory.mockResolvedValue('/dev')

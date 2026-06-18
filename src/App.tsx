@@ -566,25 +566,52 @@ export default function App() {
   // 새 CloneModal을 열고, 모달 결과(심음=true / 취소=false)로 Promise를 resolve해
   // 호출부 스피너 동선(GH/GL 행 cloning 표시)을 보존한다.
   const cloneResolveRef = useRef<((ok: boolean) => void) | null>(null)
+  // 이번 클론 흐름이 성공했는지(등록 완료) 추적. 성공 후 어떤 종료 경로(그로브로/저장소 열기/X)든
+  // 호출부 Promise는 true로 resolve돼야 한다(호출부 cloning 스피너가 성공으로 풀림).
+  const cloneSucceededRef = useRef(false)
   const handleClone = useCallback((url: string): Promise<boolean> => {
     // 이전에 열려 있던 클론 흐름이 미해결이면 false로 정리(중복 진입 방지).
     cloneResolveRef.current?.(false)
+    cloneSucceededRef.current = false
     setCloneModal({ url })
     return new Promise<boolean>(resolve => { cloneResolveRef.current = resolve })
   }, [])
 
-  // 클론 성공 → 그로브에 반영(loadRepo로 적재/활성화) + recents 갱신은 loadRepo 동선 재사용.
+  // 클론 성공 즉시 호출 — repos·recents에만 적재(그로브에 새 나무 등록).
+  // 활성 탭 전환도, 현재 표시 중인 git 데이터 교체도 하지 않는다(loadRepo는 repoPath/real*까지
+  // 바꿔 활성탭↔표시데이터 desync를 만들므로 등록 전용은 쓰지 않는다). 사용자가 "그로브로"/X로
+  // 닫아도 목록에 클론된 repo가 남고, 화면(활성 탭)은 그대로 유지된다.
+  const handleCloneRegistered = useCallback((path: string) => {
+    cloneSucceededRef.current = true
+    void (async () => {
+      // 이미 목록에 있으면(중복 클론 등) 재등록하지 않는다(path dedupe).
+      if (reposRef.current.some(r => r.path === path)) return
+      const name = path.split('/').pop() || path
+      let branch = ''
+      try { branch = (await window.gitAPI?.getBranches?.(path))?.current || '' } catch { /* ignore */ }
+      setRepos(prev => prev.some(r => r.path === path)
+        ? prev
+        : [...prev, { id: String(Date.now()), name, path, branch, dirty: false, ahead: 0, behind: 0 }])
+      setRecents(pushRecent({ path, name, branch }))
+    })()
+  }, [])
+
+  // "저장소 열기"(골드 CTA): 클론된 repo를 활성화 + 모달/매니저 닫기. 성공이므로 resolve(true).
+  // (등록은 onRegistered에서 이미 됐지만 loadRepo는 path dedupe라 activate 재호출이 안전.)
   const handleClonePlanted = useCallback((path: string) => {
     cloneResolveRef.current?.(true)
     cloneResolveRef.current = null
+    cloneSucceededRef.current = false
     setCloneModal(null)
     setShowRepoManager(false)
     void loadRepo(path, { activate: true })
   }, [loadRepo])
 
+  // 모달 닫기("그로브로"/X/바깥): 성공한 클론이면 resolve(true)(이미 등록됨), 취소/실패면 false.
   const handleCloneModalClose = useCallback(() => {
-    cloneResolveRef.current?.(false)
+    cloneResolveRef.current?.(cloneSucceededRef.current)
     cloneResolveRef.current = null
+    cloneSucceededRef.current = false
     setCloneModal(null)
   }, [])
 
@@ -1585,6 +1612,7 @@ export default function App() {
           <CloneModal
             initialUrl={cloneModal.url}
             onCloned={handleClonePlanted}
+            onRegistered={handleCloneRegistered}
             onClose={handleCloneModalClose}
           />
         )}

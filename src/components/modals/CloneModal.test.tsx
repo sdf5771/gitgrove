@@ -90,6 +90,33 @@ describe('CloneModal — 3상태', () => {
     expect(onCloned).toHaveBeenCalledWith('/dev/widget')
   })
 
+  it('성공: onRegistered(path)가 성공 시점에 1회 호출(어느 버튼 누르기 전 등록)', async () => {
+    const onRegistered = vi.fn()
+    const user = userEvent.setup()
+    mock.gitAPI.clone.mockResolvedValue({ success: true, path: '/dev/widget', name: 'widget' })
+    render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} onRegistered={onRegistered} pickDirectory={pickOk('/dev')} initialUrl="https://github.com/acme/widget.git" />)
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+
+    await waitFor(() => expect(screen.getByText('그로브에 심었어요')).toBeTruthy())
+    // 버튼을 누르지 않아도 성공 진입 즉시 등록(1회).
+    expect(onRegistered).toHaveBeenCalledTimes(1)
+    expect(onRegistered).toHaveBeenCalledWith('/dev/widget')
+    // "그로브로"로 닫아도 추가 등록 없음(중복 방지).
+    await user.click(screen.getByRole('button', { name: '그로브로' }))
+    expect(onRegistered).toHaveBeenCalledTimes(1)
+  })
+
+  it('실패(auth): onRegistered 미호출(실패는 그로브에 등록하지 않음)', async () => {
+    const onRegistered = vi.fn()
+    const user = userEvent.setup()
+    mock.gitAPI.clone.mockResolvedValue({ success: false, errorKind: 'auth', message: '401' })
+    render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} onRegistered={onRegistered} pickDirectory={pickOk('/dev')} initialUrl="https://github.com/acme/private.git" />)
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+
+    await waitFor(() => expect(screen.getByText('인증이 필요해요')).toBeTruthy())
+    expect(onRegistered).not.toHaveBeenCalled()
+  })
+
   it('성공: "그로브로"는 onCloned 없이 모달만 닫음(그로브 유지)', async () => {
     const onCloned = vi.fn()
     const onClose = vi.fn()
