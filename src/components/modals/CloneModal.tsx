@@ -37,6 +37,9 @@ interface Props {
   onClose: () => void
   // 성공 시 클론된 경로를 알린다(그로브 갱신 + recents 적재 + 활성화는 호출부가 책임).
   onCloned: (path: string) => void
+  // 클론 성공 즉시 호출(어느 버튼/X로 닫든 무관하게 그로브 등록 보장). 활성 탭 전환 없음.
+  // 호출부에서 loadRepo(path, { activate:false, silent:true })로 repos·recents에만 적재한다.
+  onRegistered?: (path: string) => void
   // 부모 폴더 선택(없으면 window.gitAPI.pickDirectory). 테스트 주입용.
   pickDirectory?: (title?: string) => Promise<string | null>
   // 폼 초기 URL(브라우저에서 특정 레포 Clone 진입 시 프리필).
@@ -77,7 +80,7 @@ const PhaseIcon = ({ status }: { status: PhaseStatus }) => {
   return <span className="pdot" />
 }
 
-export function CloneModal({ onClose, onCloned, pickDirectory, initialUrl }: Props) {
+export function CloneModal({ onClose, onCloned, onRegistered, pickDirectory, initialUrl }: Props) {
   const [phase, setPhase] = useState<Phase>('form')
   const [url, setUrl] = useState(initialUrl ?? '')
   const [dest, setDest] = useState('')
@@ -92,6 +95,8 @@ export function CloneModal({ onClose, onCloned, pickDirectory, initialUrl }: Pro
   // 진행 단계에서만 이벤트를 누적하기 위한 guard(구독은 마운트 1회 — 레이스 방지).
   const phaseRef = useRef<Phase>(phase)
   useEffect(() => { phaseRef.current = phase }, [phase])
+  // 성공 시 그로브 등록을 정확히 1회만 호출하기 위한 guard(effect 재실행/중복 방지).
+  const registeredPathRef = useRef<string | null>(null)
 
   const target = detectCloneTarget(url)
   const repoName = target.repo || deriveRepoName(url)
@@ -111,13 +116,18 @@ export function CloneModal({ onClose, onCloned, pickDirectory, initialUrl }: Pro
     return () => { off?.() }
   }, [])
 
-  // 결과 성공 진입 시 나무 sprout 애니메이션 트리거.
+  // 결과 성공 진입 시: ① 그로브 등록(1회, 활성화 없음) ② 나무 sprout 애니메이션 트리거.
+  // 등록을 성공 시점에 해두면 어느 버튼/X로 닫든 클론된 repo가 그로브·최근에 남는다.
   useEffect(() => {
-    if (phase === 'result' && result?.kind === 'success') {
+    if (phase === 'result' && result?.kind === 'success' && result.path) {
+      if (registeredPathRef.current !== result.path) {
+        registeredPathRef.current = result.path
+        onRegistered?.(result.path)
+      }
       const id = window.setTimeout(() => setSprout(true), 60)
       return () => window.clearTimeout(id)
     }
-  }, [phase, result])
+  }, [phase, result, onRegistered])
 
   const pick = pickDirectory ?? ((t?: string) => window.gitAPI!.pickDirectory(t))
 
@@ -357,7 +367,8 @@ function ResultBody({ view, sprout, token, setToken, onPlanted, onRetryToken, on
       <div className="rm-modal-actions">
         {success ? (
           <>
-            {/* "그로브로"=모달만 닫고 그로브(RepoManager) 유지 · "저장소 열기"=클론 repo 활성화(골드 CTA) */}
+            {/* 성공 시 이미 그로브에 등록됨(onRegistered). "그로브로"=모달만 닫아도 새 나무가 보임 ·
+                "저장소 열기"=클론 repo 활성화(골드 CTA). 둘 다 클론 성공이므로 호출부 resolve(true). */}
             <button className="rm-modal-btn" onClick={onClose}>그로브로</button>
             <button className="rm-modal-btn rm-primary" onClick={onPlanted}>저장소 열기</button>
           </>
