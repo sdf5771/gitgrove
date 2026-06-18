@@ -21,6 +21,14 @@ function seedRepo() {
   localStorage.setItem('gitgrove:lastRepoPath', '/repo/a')
 }
 
+function seedTwoRepos() {
+  localStorage.setItem('gitgrove:repos', JSON.stringify([
+    { id: 'repo-a-id', name: 'a', path: '/repo/a', branch: 'main', dirty: false, ahead: 0, behind: 0 },
+    { id: 'repo-b-id', name: 'b', path: '/repo/b', branch: 'develop', dirty: false, ahead: 0, behind: 0 },
+  ]))
+  localStorage.setItem('gitgrove:lastRepoPath', '/repo/a')
+}
+
 const prog = (op: RemoteProgress['op'], stage: string, progress: number, processed?: number, total?: number): RemoteProgress =>
   ({ op, stage, progress, processed, total })
 
@@ -177,5 +185,59 @@ describe('동기화 인터랙션 — App 통합', () => {
     // op 종료(remoteOp=null) 후 늦게 온 진행 이벤트 — 무시되어 충돌/단계 텍스트로 바뀌지 않아야.
     act(() => { mock.emitRemoteProgress(prog('pull', 'receiving', 50, 10, 20)) })
     expect(shown('이미 최신 상태예요')).toBe(true)
+  })
+
+  // ── M1 회귀: repo 전환 시 이전 repo의 결과 HUD/상태바 신호등이 새 repo에 남지 않음 ──
+  it('repo A의 Pull 결과 HUD를 확인 안 누른 채 repo B로 전환하면, B 화면에 A의 결과 HUD가 남지 않는다', async () => {
+    localStorage.clear()
+    seedTwoRepos()
+    const mock = installGitApiMock()
+    mock.gitAPI.pull.mockResolvedValue({
+      success: true, op: 'pull', summary: '', newCommits: 3, changedFiles: 12, insertions: 340, deletions: 88,
+    })
+    const user = userEvent.setup()
+
+    render(<App />)
+    await waitFor(() => expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true))
+
+    // repo A에서 Pull 완료 → 결과 HUD/녹색 신호등이 떠 있음.
+    await user.click(screen.getByRole('button', { name: /Pull/ }))
+    await waitFor(() => expect(shown('최신으로 맞췄어요')).toBe(true))
+    expect(screen.queryByRole('dialog', { name: /Pull 진행 상황/ })).toBeTruthy()
+
+    // 확인 안 누른 채 repo B 탭으로 전환.
+    await user.click(screen.getByText('b'))
+    await waitFor(() => expect(shown(FIXTURES['/repo/b'].commitMsg)).toBe(true), { timeout: 3000 })
+
+    // 픽스 무력화 시 red: B 위에 A의 결과 HUD가 그대로 남는다.
+    expect(screen.queryByRole('dialog', { name: /Pull 진행 상황/ })).toBeNull()
+    expect(shown('최신으로 맞췄어요')).toBe(false)
+  })
+
+  it('repo A로 다시 돌아오면 미닫힌 결과 HUD가 복원된다(op은 A에 바인딩, 닫지 않았으므로)', async () => {
+    localStorage.clear()
+    seedTwoRepos()
+    const mock = installGitApiMock()
+    mock.gitAPI.pull.mockResolvedValue({
+      success: true, op: 'pull', summary: '', newCommits: 3, changedFiles: 12, insertions: 340, deletions: 88,
+    })
+    const user = userEvent.setup()
+
+    render(<App />)
+    await waitFor(() => expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true))
+
+    await user.click(screen.getByRole('button', { name: /Pull/ }))
+    await waitFor(() => expect(shown('최신으로 맞췄어요')).toBe(true))
+
+    // B로 갔다가
+    await user.click(screen.getByText('b'))
+    await waitFor(() => expect(shown(FIXTURES['/repo/b'].commitMsg)).toBe(true), { timeout: 3000 })
+    expect(screen.queryByRole('dialog', { name: /Pull 진행 상황/ })).toBeNull()
+
+    // 다시 A로 — A의 결과 HUD가 다시 보인다(닫지 않았으므로 가려졌던 것).
+    await user.click(screen.getByText('a'))
+    await waitFor(() => expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true), { timeout: 3000 })
+    expect(screen.queryByRole('dialog', { name: /Pull 진행 상황/ })).toBeTruthy()
+    expect(shown('최신으로 맞췄어요')).toBe(true)
   })
 })

@@ -83,6 +83,10 @@ export function phaseIndexForStage(op: RemoteOp, stage: string): number {
 // op + 그동안 본 stage들로 각 phase의 status를 계산한다.
 // "지금까지 도달한 최대 phase 인덱스"(maxReached)와 진행 이벤트의 마지막 stage로
 // active를 판정: maxReached보다 앞은 done, 같으면 active, 뒤는 pending.
+//
+// done(완료) 시: 실제 진입(maxReached까지 도달)한 phase만 done으로 찍는다.
+// 도달 안 한 뒤쪽 phase는 중립(pending)으로 둔다 — indeterminate만 거치고 빠르게
+// 끝난 경우 도달 안 한 단계까지 녹색 체크되는 m3 버그 방지. (디자인 "실제 단계 로그" 의도.)
 export function computePhaseStatuses(
   op: RemoteOp,
   maxReached: number,
@@ -96,7 +100,7 @@ export function computePhaseStatuses(
       if (i === errorAt) return 'err'
       return 'pending'
     }
-    if (done) return 'done'
+    if (done) return i <= maxReached ? 'done' : 'pending'
     if (i < maxReached) return 'done'
     if (i === maxReached) return 'active'
     return 'pending'

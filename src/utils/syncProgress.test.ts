@@ -103,9 +103,22 @@ describe('computePhaseStatuses', () => {
     expect(s[3]).toBe('active')
     expect(s[4]).toBe('pending')
   })
-  it('done=true면 전부 done', () => {
+  it('done=true면 도달한 phase(<=maxReached)만 done, 뒤는 중립(pending) — m3', () => {
+    // pull은 6단계. maxReached=3이면 0~3만 도달 → done, 4·5는 미도달 → pending.
     const s = computePhaseStatuses('pull', 3, { done: true })
+    expect(s.slice(0, 4).every(x => x === 'done')).toBe(true)
+    expect(s[4]).toBe('pending')
+    expect(s[5]).toBe('pending')
+  })
+  it('done=true이고 마지막 phase까지 도달했으면 전부 done', () => {
+    const phases = phasesFor('pull')
+    const s = computePhaseStatuses('pull', phases.length - 1, { done: true })
     expect(s.every(x => x === 'done')).toBe(true)
+  })
+  it('done=true이고 indet만 거쳐 일찍 끝난 경우(maxReached=0) — 첫 칸만 done', () => {
+    const s = computePhaseStatuses('pull', 0, { done: true })
+    expect(s[0]).toBe('done')
+    expect(s.slice(1).every(x => x === 'pending')).toBe(true)
   })
   it('errorAt이면 해당 칸 err, 앞은 done, 뒤는 pending', () => {
     const s = computePhaseStatuses('pull', 5, { errorAt: 5 })
