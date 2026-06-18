@@ -197,5 +197,15 @@ interface Window {
     revert: (repoPath: string, hash: string) => Promise<void>
     reset: (repoPath: string, mode: 'soft' | 'mixed' | 'hard', hash: string) => Promise<void>
     rebaseInteractive: (repoPath: string, items: Array<{ hash: string; action: string; msg: string }>) => Promise<void>
+    // Stage 탭 파일 컨텍스트 메뉴
+    // OS 파일 탐색기(Finder)에서 파일 위치 표시.
+    revealInFinder: (absPath: string) => Promise<void>
+    // OS 기본 앱으로 파일/폴더 열기. 성공 시 { ok:true }, 실패 시 { ok:false, error }.
+    openPath: (absPath: string) => Promise<{ ok: boolean; error?: string }>
+    // 변경사항 되돌리기(파괴적). files=repo 루트 상대경로. 추적=checkout 원복, 미추적=삭제.
+    // repoPath 밖(.. 트래버설) 경로는 skip. 전부 실패 시 throw.
+    discardChanges: (repoPath: string, files: string[]) => Promise<void>
+    // <repoPath>/.gitignore 에 patterns의 각 줄을 중복(trim 비교) 제외하고 append(없으면 생성).
+    addToGitignore: (repoPath: string, patterns: string[]) => Promise<void>
   }
 }

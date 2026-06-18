@@ -98,4 +98,9 @@ contextBridge.exposeInMainWorld('gitAPI', {
   revert: (repoPath: string, hash: string) => ipcRenderer.invoke('git:revert', repoPath, hash),
   reset: (repoPath: string, mode: 'soft' | 'mixed' | 'hard', hash: string) => ipcRenderer.invoke('git:reset', repoPath, mode, hash),
   rebaseInteractive: (repoPath: string, items: Array<{ hash: string; action: string; msg: string }>) => ipcRenderer.invoke('git:rebase-interactive', repoPath, items),
+  // Stage 탭 파일 컨텍스트 메뉴
+  revealInFinder: (absPath: string) => ipcRenderer.invoke('git:reveal-in-finder', absPath) as Promise<void>,
+  openPath: (absPath: string) => ipcRenderer.invoke('git:open-path', absPath) as Promise<{ ok: boolean; error?: string }>,
+  discardChanges: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:discard', repoPath, files) as Promise<void>,
+  addToGitignore: (repoPath: string, patterns: string[]) => ipcRenderer.invoke('git:add-to-gitignore', repoPath, patterns) as Promise<void>,
 })
