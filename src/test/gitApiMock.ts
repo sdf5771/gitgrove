@@ -160,6 +160,10 @@ export function installGitApiMock() {
     gitlabGetToken: vi.fn(async (): Promise<string | null> => null),
     gitlabListHosts: vi.fn(async () => [] as string[]),
     gitlabRemoveToken: vi.fn(async () => true),
+    // OS 네이티브 알림 / Dock (기능 B) — 테스트에서 호출 검증 가능하도록 vi.fn.
+    showNotification: vi.fn(async () => {}) as Mock<(opts: { title: string; body: string; silent?: boolean; sound?: string }) => Promise<void>>,
+    setBadgeCount: vi.fn(async () => {}) as Mock<(count: number) => Promise<void>>,
+    bounceDock: vi.fn(async () => {}) as Mock<() => Promise<void>>,
   }
 
   window.gitAPI = gitAPI

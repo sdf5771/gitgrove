@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -138,6 +138,19 @@ let win: BrowserWindow | null
 let splash: BrowserWindow | null = null
 let splashCreatedAt = 0
 
+// ──────────────────────────────────────────────
+// 업데이트 체크 주기/포커스/디듀프 상태 (기능 A)
+// ──────────────────────────────────────────────
+// 주기 체크 핸들(앱 종료/모든 창 닫힘 시 정리). focus 체크는 throttle용 마지막 시각.
+// lastNotifiedVersion: 같은 버전으로 이미 'app:update-available'를 보냈으면 재전송 skip
+// (주기/포커스 체크가 동일 버전을 반복 send해 시작 토스트가 매번 뜨는 것 방지).
+let updateCheckInterval: ReturnType<typeof setInterval> | null = null
+let lastUpdateCheckAt = 0
+let lastNotifiedVersion: string | null = null
+
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6시간
+const UPDATE_FOCUS_THROTTLE_MS = 30 * 60 * 1000      // 포커스 체크 최소 간격 30분
+
 // 스플래시 최소 표시시간 / 페이드아웃 시간 (깜빡임 방지 + 모션 가이드 일치)
 const SPLASH_MIN_MS = 1200
 const SPLASH_FADE_MS = 180
@@ -258,8 +271,19 @@ function createWindow() {
 
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
-    // 업데이트 체크 — 로드 후 3초 뒤 (UX 방해 최소화)
-    setTimeout(() => checkForUpdates(), 3000)
+    // 업데이트 체크 — 로드 후 3초 뒤 (UX 방해 최소화). 이후 주기 체크 스케줄.
+    setTimeout(() => {
+      checkForUpdates()
+      scheduleUpdateChecks()
+    }, 3000)
+  })
+
+  // 창 포커스 시 업데이트 체크 — 단, 마지막 체크로부터 30분 경과 시에만(throttle).
+  // 재시작 없이 새 버전을 빠르게 감지하되, 잦은 포커스로 API를 두드리지 않게 한다.
+  win.on('focus', () => {
+    if (Date.now() - lastUpdateCheckAt >= UPDATE_FOCUS_THROTTLE_MS) {
+      checkForUpdates()
+    }
   })
 
   if (VITE_DEV_SERVER_URL) {
@@ -1384,10 +1408,18 @@ ipcMain.handle('gitlab:removeToken', (_event, host: string): boolean => {
 // ──────────────────────────────────────────────
 
 app.on('window-all-closed', () => {
+  // 창이 모두 닫히면 주기 체크 정리(앞으로 창이 없으면 send 대상도 없음).
+  // macOS는 앱이 계속 살아있다가 activate로 창을 다시 만들 수 있어 재스케줄됨.
+  stopUpdateChecks()
   if (process.platform !== 'darwin') {
     app.quit()
     win = null
   }
+})
+
+// 앱 종료 직전 주기 체크 핸들 최종 정리(누수 방지).
+app.on('before-quit', () => {
+  stopUpdateChecks()
 })
 
 app.on('activate', () => {
@@ -1402,7 +1434,23 @@ app.on('activate', () => {
 
 const REPO = 'sdf5771/gitgrove'
 
+// 6시간 주기 업데이트 체크 스케줄링(중복 등록 방지). 핸들은 종료 시 정리.
+function scheduleUpdateChecks() {
+  if (updateCheckInterval) return
+  updateCheckInterval = setInterval(() => checkForUpdates(), UPDATE_CHECK_INTERVAL_MS)
+}
+
+// 주기 체크 정리(window-all-closed / 앱 종료). 중복 호출 안전.
+function stopUpdateChecks() {
+  if (updateCheckInterval) {
+    clearInterval(updateCheckInterval)
+    updateCheckInterval = null
+  }
+}
+
 function checkForUpdates() {
+  // 모든 체크 진입점(초기/주기/포커스)에서 마지막 체크 시각 갱신 → focus throttle 기준.
+  lastUpdateCheckAt = Date.now()
   const currentVersion = app.getVersion()
   const url = `https://api.github.com/repos/${REPO}/releases/latest`
 
@@ -1413,7 +1461,10 @@ function checkForUpdates() {
       try {
         const release = JSON.parse(data)
         const latest = (release.tag_name as string)?.replace(/^v/, '') ?? ''
-        if (latest && isNewer(latest, currentVersion)) {
+        // 현재 버전보다 새롭고(isNewer), 직전에 같은 버전으로 알린 적이 없을 때만 send.
+        // (주기/포커스 체크가 동일 버전을 반복 전송해 시작 토스트가 매번 뜨는 것 방지)
+        if (latest && isNewer(latest, currentVersion) && latest !== lastNotifiedVersion) {
+          lastNotifiedVersion = latest
           const dmgAsset = pickDmgAsset(release.assets)
           const notes = buildReleaseNotes(release.body)
           win?.webContents.send('app:update-available', {
@@ -1443,6 +1494,57 @@ function isNewer(latest: string, current: string): boolean {
 
 ipcMain.on('app:open-release-url', (_e, url: string) => {
   shell.openExternal(url)
+})
+
+// ──────────────────────────────────────────────
+// app:* — OS 네이티브 알림 / Dock (기능 B)
+//
+// 실제 알림 폴링/신규 감지는 렌더러(getNotifications)가 수행하고, 신규 발견 시
+// 아래 IPC로 네이티브 알림/배지/바운스 원시 기능만 호출한다(메인은 표시만 담당).
+// 모두 방어적: 미지원/비-macOS 환경에서 throw하지 않고 graceful no-op.
+// ──────────────────────────────────────────────
+
+// app:show-notification — OS 네이티브 알림 표시.
+//   - silent:true면 무음. sound가 있으면 macOS 시스템 사운드 이름으로 재생.
+//   - 클릭 시 메인 윈도우를 앞으로(show+focus, macOS는 app.focus steal).
+//   - Notification 미지원 환경은 조용히 무시.
+ipcMain.handle('app:show-notification', async (_event, opts: { title: string; body: string; silent?: boolean; sound?: string }): Promise<void> => {
+  if (!Notification.isSupported()) return
+  const notification = new Notification({
+    title: opts.title,
+    body: opts.body,
+    silent: opts.silent ?? false,
+    ...(opts.sound ? { sound: opts.sound } : {}),
+  })
+  notification.on('click', () => {
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
+    if (process.platform === 'darwin') {
+      app.focus({ steal: true })
+    }
+  })
+  notification.show()
+})
+
+// app:set-badge-count — Dock 배지 카운트(macOS). 0이면 배지 제거.
+//   비-macOS는 setBadgeCount가 false/예외일 수 있어 try/catch로 무시.
+ipcMain.handle('app:set-badge-count', async (_event, count: number): Promise<void> => {
+  try {
+    const n = Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0
+    app.setBadgeCount(n)
+  } catch {
+    // 비-macOS / 미지원 → 무시
+  }
+})
+
+// app:bounce-dock — macOS Dock 아이콘 1회 바운스(informational). 비-macOS no-op.
+ipcMain.handle('app:bounce-dock', async (): Promise<void> => {
+  if (process.platform === 'darwin') {
+    app.dock?.bounce('informational')
+  }
 })
 
 // ──────────────────────────────────────────────

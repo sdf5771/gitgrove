@@ -2,11 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ReactElement } from 'rea
 import { getNotifications, GithubApiError, type GithubNotification } from '../utils/githubClient'
 import { getTodos, GitlabApiError, type GitlabTodo } from '../utils/gitlabClient'
 import type { GitlabConn } from '../utils/useGitlabConns'
+import { readNotifSoundSettings } from '../utils/notifSettings'
 import { Geuru } from './Geuru'
 import { ProviderBadge, ProviderFilterChips, type ProviderFilter } from './ProviderMark'
 
 // 포커스 복귀 시 refetch 최소 간격(rate-limit 보호).
 const MIN_REFETCH_MS = 60_000
+// 백그라운드 주기 폴링 간격(불포커스 중 신규 알림 감지).
+const POLL_MS = 60_000
 
 // ── 프로바이더 통합 알림 항목 ──
 type ReasonKind = 'review' | 'mention' | 'ci_fail' | 'ci_pass' | 'merge' | 'comment' | 'assign'
@@ -189,6 +192,9 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
   const [permDenied, setPermDenied] = useState(false)
   const lastFetchRef = useRef(0)
   const seqRef = useRef(0)
+  // 직전까지 본 알림 고유키 집합. 첫 fetch는 시드만 하고 무알림(seededRef로 가드).
+  const seenRef = useRef<Set<string>>(new Set())
+  const seededRef = useRef(false)
 
   const hasGithub = !!githubToken
   const hasGitlab = gitlabInstances.length > 0
@@ -215,6 +221,9 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
 
     const merged: NotifItem[] = []
     let ghPermDenied = false
+    // 이번 fetch에서 정상 응답한 소스가 하나라도 있었는지 — 신규감지/시드의 신뢰 기준.
+    // (GitHub 403 단독처럼 신뢰할 결과가 전혀 없으면 seen 갱신을 건너뛴다.)
+    let hasTrustedSource = false
     const errors: string[] = []
     let idx = 0
     for (const r of results) {
@@ -222,6 +231,7 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
       idx++
       if (r.status === 'fulfilled') {
         merged.push(...r.value)
+        hasTrustedSource = true
       } else {
         const err = r.reason
         if (isGithubSource && err instanceof GithubApiError && err.status === 403 && !err.rateLimited) {
@@ -237,6 +247,40 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
     }
 
     merged.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+
+    // ── 신규 감지 + OS 네이티브 알림/Dock ──
+    // 첫 fetch(시드)에는 알림을 띄우지 않는다 — 쌓여있던 알림이 쏟아지면 안 됨.
+    // 신뢰할 결과가 하나도 없을 때(예: GitHub 단독이고 403)만 신규판정/시드 갱신을 건너뛴다
+    // — 잘못 비운 seen 집합 때문에 다음 폴링에서 전부 신규로 오인하는 것을 방지.
+    // GitLab 소스가 정상 응답했다면 GitHub 403 여부와 무관하게 시드/신규감지를 진행한다
+    // (GitLab 단독 사용자도 신규감지·배지·사운드가 동작해야 함).
+    // merged는 이번에 실제로 조회 성공한 소스의 항목만 담으므로, 403으로 누락된 소스의
+    // 항목을 신규로 오인하지 않는다.
+    if (hasTrustedSource) {
+      const currentKeys = new Set(merged.map(n => n.key))
+      const newItems = seededRef.current
+        ? merged.filter(n => !seenRef.current.has(n.key))
+        : []
+
+      if (newItems.length > 0) {
+        const { enabled, sound } = readNotifSoundSettings()
+        const soundOpts = enabled ? { silent: false, sound } : { silent: true }
+        const body = newItems.length === 1
+          ? `${newItems[0].title} · ${newItems[0].repo}`
+          : `새 알림 ${newItems.length}개`
+        try { void window.appAPI?.showNotification({ title: 'GitGrove', body, ...soundOpts }) } catch { /* ignore */ }
+        try { void window.appAPI?.bounceDock() } catch { /* ignore */ }
+      }
+
+      // 현재 보이는 항목 기준으로 seen 집합 갱신(prune) — 무한정 커지지 않게.
+      seenRef.current = currentKeys
+      seededRef.current = true
+
+      // 미읽음 개수를 Dock 배지에 반영(0이면 제거).
+      const unread = merged.filter(n => n.unread).length
+      try { void window.appAPI?.setBadgeCount(unread) } catch { /* ignore */ }
+    }
+
     setItems(merged)
     // 전부 실패(권한 거부 제외)면 에러. 일부라도 결과 있으면 표시 우선.
     if (merged.length === 0 && ghPermDenied && errors.length === 0) {
@@ -246,6 +290,12 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
     }
     setLoading(false)
   }, [hasGithub, hasGitlab, githubToken, gitlabInstances])
+
+  // 최신 load를 ref에 보관 — 폴링 effect가 load 재생성(부모 리렌더로 gitlabInstances
+  // 배열 참조가 바뀌면 useCallback이 재생성됨)에 흔들려 interval을 teardown/재등록하면
+  // 60초 카운트다운이 매번 리셋돼 실제 주기가 늘어진다. ref로 끊어 effect를 안정화한다.
+  const loadRef = useRef(load)
+  useEffect(() => { loadRef.current = load }, [load])
 
   // 마운트/토큰/인스턴스 변경 시 1회.
   useEffect(() => {
@@ -258,11 +308,21 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
   useEffect(() => {
     if (!hasGithub && !hasGitlab) return
     const onFocus = () => {
-      if (Date.now() - lastFetchRef.current >= MIN_REFETCH_MS) void load()
+      if (Date.now() - lastFetchRef.current >= MIN_REFETCH_MS) void loadRef.current()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-  }, [hasGithub, hasGitlab, load])
+  }, [hasGithub, hasGitlab])
+
+  // 백그라운드 60초 주기 폴링 — 불포커스 중에도 신규 알림을 감지.
+  // 폴링은 항상 fetch(throttle 미적용); focus 핸들러의 throttle은 그대로 유지.
+  // deps는 [hasGithub, hasGitlab]로 고정 — 부모 리렌더로 load가 재생성돼도
+  // interval은 재등록되지 않아 60초 주기가 정확히 유지된다.
+  useEffect(() => {
+    if (!hasGithub && !hasGitlab) return
+    const id = setInterval(() => { void loadRef.current() }, POLL_MS)
+    return () => clearInterval(id)
+  }, [hasGithub, hasGitlab])
 
   // 벨 토글: 패널을 열 때마다 항상 최신을 다시 가져온다.
   const toggle = useCallback(() => {
