@@ -47,6 +47,18 @@ import { NotificationBell } from './components/NotificationBell'
 import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loadWorkspaces, saveWorkspaces, createWorkspaceId, type RecentRepoEntry, type Workspace } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
 import { SyncHud } from './components/SyncHud'
+import { UpdateIndicator } from './components/UpdateIndicator'
+import {
+  type UpdateState,
+  INITIAL_UPDATE_STATE,
+  receiveUpdate,
+  startDownload,
+  applyProgress as applyUpdateProgress,
+  finishDownload,
+  failDownload,
+  shouldShowIndicator,
+  hasInAppDownload,
+} from './utils/updateIndicator'
 import {
   type ProgressModel,
   type ResultView,
@@ -656,12 +668,68 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 마운트 시 1회만
 
-  // ── 새 버전 알림 ──
+  // ── 새 버전 알림 + 상시 인디케이터 상태(UP2) ──
+  // onUpdateAvailable 페이로드를 앱 레벨 상태로 보관(1회성 토스트로만 소비하지 않음).
+  // 기존 시작 알림 토스트는 그대로 유지하고, 같은 정보를 상시 코너 인디케이터에 공급한다.
+  const [updateState, setUpdateState] = useState<UpdateState>(INITIAL_UPDATE_STATE)
+  const updateStateRef = useRef(updateState)
+  useEffect(() => { updateStateRef.current = updateState }, [updateState])
+
   useEffect(() => {
-    window.appAPI?.onUpdateAvailable(({ version, url }) => {
-      notify('info', `GitGrove ${version} 출시`, '새 버전이 있습니다', () => window.appAPI?.openReleaseUrl(url), 8000)
+    const off = window.appAPI?.onUpdateAvailable(info => {
+      const { version, url } = info
+      // 상시 인디케이터에 공급(진행 중/완료면 보존).
+      setUpdateState(prev => receiveUpdate(prev, info))
+      // 기존 시작 알림 토스트(회귀 보존) — dmgUrl 있으면 인앱 다운로드, 없으면 브라우저 폴백.
+      notify(
+        'info',
+        `GitGrove ${version} 출시`,
+        '새 버전이 있습니다',
+        () => {
+          if (info.dmgUrl) handleUpdateActivateRef.current()
+          else window.appAPI?.openReleaseUrl(url)
+        },
+        8000,
+      )
     })
+    // 누수 방지: 언마운트/재마운트 시 'app:update-available' 리스너 해제.
+    return () => { off?.() }
   }, [notify])
+
+  // ── 다운로드 진행률 구독(누수 방지: cleanup에서 해제) ──
+  useEffect(() => {
+    const off = window.appAPI?.onUpdateDownloadProgress(p => {
+      setUpdateState(prev => applyUpdateProgress(prev, p))
+    })
+    return () => { off?.() }
+  }, [])
+
+  // 인디케이터/시작알림 클릭 → 다운로드 시작(또는 브라우저 폴백). 중복 클릭은 isClickable에서 차단.
+  const handleUpdateActivate = useCallback(() => {
+    const state = updateStateRef.current
+    const payload = state.payload
+    if (!payload) return
+    if (state.phase === 'downloading') return
+    // dmgUrl 없으면 브라우저 폴백(기존 동작).
+    if (!hasInAppDownload(state)) {
+      window.appAPI?.openReleaseUrl(payload.url)
+      return
+    }
+    setUpdateState(prev => startDownload(prev))
+    window.appAPI?.downloadUpdate(payload.dmgUrl!)
+      .then(() => {
+        setUpdateState(prev => finishDownload(prev))
+        notify('success', '다운로드 완료', '설치 창이 열렸어요. 안내에 따라 GitGrove를 교체해 주세요.', undefined, 6000)
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        setUpdateState(prev => failDownload(prev, msg))
+        notify('error', '업데이트 다운로드 실패', `${msg}\n인디케이터를 다시 클릭하면 재시도합니다.`, undefined, 8000)
+      })
+  }, [notify])
+  // 토스트 콜백이 항상 최신 핸들러를 부르도록 ref로 고정.
+  const handleUpdateActivateRef = useRef(handleUpdateActivate)
+  useEffect(() => { handleUpdateActivateRef.current = handleUpdateActivate }, [handleUpdateActivate])
 
   // ── 탭 전환 시 해당 레포 로드 ──
   // 탭 클릭 → onSelect=setActiveRepo → 이 effect가 데이터만 교체(activate:false).
@@ -1200,6 +1268,9 @@ export default function App() {
             {repo && repo.ahead > 0 && <span style={{ color: 'var(--c-success)' }}>↑{repo.ahead}</span>}
             {repo && repo.behind > 0 && <span>↓{repo.behind}</span>}
           </div>
+          {shouldShowIndicator(updateState) && (
+            <UpdateIndicator state={updateState} onActivate={handleUpdateActivate} />
+          )}
           <NotificationBell
             githubToken={githubToken}
             gitlabInstances={gitlabInstances}

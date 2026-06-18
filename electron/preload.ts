@@ -2,10 +2,22 @@ import { ipcRenderer, contextBridge } from 'electron'
 
 // --------- App update bridge ---------
 contextBridge.exposeInMainWorld('appAPI', {
-  onUpdateAvailable: (cb: (info: { version: string; url: string }) => void) => {
-    ipcRenderer.on('app:update-available', (_e, info) => cb(info))
+  // 'app:update-available' 구독. 반환된 함수를 호출해 구독 해제(effect cleanup, 리스너 누수 방지).
+  onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, info: { version: string; url: string; dmgUrl?: string; notes?: string }) => cb(info)
+    ipcRenderer.on('app:update-available', handler)
+    return () => ipcRenderer.removeListener('app:update-available', handler)
   },
   openReleaseUrl: (url: string) => ipcRenderer.send('app:open-release-url', url),
+  // 옵션 1: 무서명 인앱 DMG 다운로드 → quarantine 제거 → DMG 열기. 저장 경로 반환.
+  downloadUpdate: (dmgUrl: string) =>
+    ipcRenderer.invoke('app:download-update', dmgUrl) as Promise<{ path: string }>,
+  // 다운로드 진행률 구독. 반환된 함수를 호출해 구독 해제(effect cleanup, 리스너 누수 방지).
+  onUpdateDownloadProgress: (cb: (p: { received: number; total?: number; pct?: number }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: { received: number; total?: number; pct?: number }) => cb(p)
+    ipcRenderer.on('app:update-download-progress', listener)
+    return () => ipcRenderer.removeListener('app:update-download-progress', listener)
+  },
   // GitHub PAT 안전 저장 (safeStorage)
   githubIsEncryptionAvailable: () => ipcRenderer.invoke('github:isEncryptionAvailable') as Promise<boolean>,
   githubSetToken: (token: string) => ipcRenderer.invoke('github:setToken', token) as Promise<boolean>,
