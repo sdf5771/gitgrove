@@ -64,9 +64,43 @@ interface GitFileEntry {
   deletions: number
 }
 
+// 동기화(pull/push/fetch) 실시간 진행률 이벤트('git:remote-progress' 채널).
+// backend는 simple-git가 주는 raw stage/progress에 op만 붙여 패스(가공은 frontend).
+interface RemoteProgress {
+  op: 'pull' | 'push' | 'fetch' | 'clone'
+  stage: string       // 'remote'|'receiving'|'resolving'|'counting'|'compressing'|'writing'|'checkout' 등 raw
+  progress: number    // 0~100
+  processed?: number
+  total?: number
+}
+
+// 원격 연산 결과(보강). 기존 success/summary는 하위호환 유지.
 interface GitRemoteResult {
   success: boolean
+  op: 'pull' | 'push' | 'fetch'
   summary: string
+  upToDate?: boolean
+  changedFiles?: number       // pull
+  insertions?: number         // pull
+  deletions?: number          // pull
+  newCommits?: number         // pull/fetch 받은 커밋 수 (best-effort)
+  pushedCommits?: number      // push 올린 커밋 수 (best-effort)
+  conflict?: boolean
+  conflictedFiles?: string[]
+}
+
+// 클론(CL1) 결과 — 구조화 반환. success=true면 path/name 보장, false면 errorKind/message 보장.
+// errorKind: 'auth'(인증/403/자격증명) | 'notfound'(저장소 없음/404) | 'error'(그 외).
+// receivedObjects/receivedBytes/fileCount는 best-effort(현재 미산출 — 옵셔널, 추후 보강 여지).
+interface GitCloneResult {
+  success: boolean
+  path?: string
+  name?: string
+  receivedObjects?: number
+  receivedBytes?: number
+  fileCount?: number
+  errorKind?: 'auth' | 'notfound' | 'error'
+  message?: string
 }
 
 interface GitRemoteInfo {
@@ -119,7 +153,7 @@ interface Window {
     openDialog: () => Promise<string | null>
     pickDirectory: (title?: string) => Promise<string | null>
     isRepo: (repoPath: string) => Promise<boolean>
-    clone: (url: string, parentDir: string, opts?: { shallow?: boolean }) => Promise<{ path: string; name: string }>
+    clone: (url: string, parentDir: string, opts?: { shallow?: boolean; recurseSubmodules?: boolean }) => Promise<GitCloneResult>
     getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => Promise<GitCommit[]>
     getActivity: (repoPath: string, opts?: { days?: number }) => Promise<RepoActivity>
     getActivityBatch: (paths: string[], opts?: { days?: number }) => Promise<Record<string, RepoActivity>>
@@ -136,6 +170,8 @@ interface Window {
     pull: (repoPath: string) => Promise<GitRemoteResult>
     push: (repoPath: string) => Promise<GitRemoteResult>
     fetch: (repoPath: string) => Promise<GitRemoteResult>
+    // pull/push/fetch 진행률 구독. 반환된 함수를 호출해 구독 해제(effect cleanup).
+    onRemoteProgress: (cb: (p: RemoteProgress) => void) => () => void
     checkout: (repoPath: string, branch: string) => Promise<void>
     blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
     getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>

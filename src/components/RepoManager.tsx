@@ -312,44 +312,6 @@ function NewWorkspaceModal({ onCreate, onClose }: { onCreate: (name: string) => 
   )
 }
 
-// ── Clone 모달 ──
-function CloneModal({ onClone, onClose }: { onClone: (url: string) => Promise<boolean>; onClose: () => void }) {
-  const [url, setUrl] = useState('')
-  const [busy, setBusy] = useState(false)
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => { ref.current?.focus() }, [])
-  const submit = async () => {
-    const t = url.trim()
-    if (!t || busy) return
-    setBusy(true)
-    const ok = await onClone(t)
-    if (!ok) setBusy(false) // 성공 시엔 매니저가 닫히며 언마운트됨
-  }
-  return (
-    <ModalShell title="원격 저장소 클론" icon={<span className="rm-modal-ic"><IconOpenExternal /></span>} width={460} onClose={busy ? () => {} : onClose}>
-      <div className="rm-modal-body">
-        <label className="rm-modal-label">저장소 URL</label>
-        <input
-          ref={ref}
-          className="rm-modal-input"
-          placeholder="https://github.com/owner/repo.git"
-          value={url}
-          disabled={busy}
-          onChange={e => setUrl(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') void submit(); if (e.key === 'Escape' && !busy) onClose() }}
-        />
-        <div className="rm-modal-hint">{busy ? '클론 중…' : '다음 단계에서 저장할 부모 폴더를 선택합니다.'}</div>
-        <div className="rm-modal-actions">
-          <button className="rm-modal-btn" disabled={busy} onClick={onClose}>취소</button>
-          <button className="rm-modal-btn rm-primary" disabled={!url.trim() || busy} onClick={() => void submit()}>
-            {busy ? '클론 중…' : '폴더 선택 후 클론'}
-          </button>
-        </div>
-      </div>
-    </ModalShell>
-  )
-}
-
 // ── GitHub 레포 브라우저 (B18) ──
 const IconLock = () => (
   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3.5" y="7" width="9" height="6" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
@@ -692,7 +654,6 @@ export function RepoManager({
   // 행 케밥 메뉴 / 모달 상태
   const [menu, setMenu] = useState<{ path: string; x: number; y: number } | null>(null)
   const [wsModal, setWsModal] = useState<{ pendingPath: string | null } | null>(null)
-  const [cloneOpen, setCloneOpen] = useState(false)
   // 파괴적 액션 확인 모달
   const [deleteWsConfirm, setDeleteWsConfirm] = useState<Workspace | null>(null)
   const [removeRepoConfirm, setRemoveRepoConfirm] = useState<{ path: string; name: string } | null>(null)
@@ -1341,7 +1302,7 @@ export function RepoManager({
               <p><b>{segCounts.all}그루</b>가 자라고 있어요 · {segCounts.open} 열림 · {segCounts.dirty} 변경 대기</p>
             </div>
             <div className="rm-head-actions">
-              <button className="rm-action-btn rm-primary" onClick={() => setCloneOpen(true)} title="원격 저장소 클론">
+              <button className="rm-action-btn rm-primary" onClick={() => { void onClone('') }} title="원격 저장소 클론">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 8a6 6 0 1 1 12 0"/><path d="M8 3v2M5.5 4.5L7 6M10.5 4.5L9 6"/></svg>
                 Clone
               </button>
@@ -1485,7 +1446,7 @@ export function RepoManager({
                     : '저장소를 Clone 하거나 폴더를 열어 첫 나무를 심어보세요. 커밋 하나, 새싹 하나.'}
                 </span>
                 {!query && (
-                  <button className="rm-action-btn rm-primary" style={{ marginTop: 4 }} onClick={() => setCloneOpen(true)}>저장소 Clone</button>
+                  <button className="rm-action-btn rm-primary" style={{ marginTop: 4 }} onClick={() => { void onClone('') }}>저장소 Clone</button>
                 )}
               </div>
             ) : seg === 'all' ? (
@@ -1590,12 +1551,6 @@ export function RepoManager({
 
       {wsModal && (
         <NewWorkspaceModal onCreate={handleCreateWorkspace} onClose={() => setWsModal(null)} />
-      )}
-      {cloneOpen && (
-        <CloneModal
-          onClone={async url => { const ok = await onClone(url); return ok }}
-          onClose={() => setCloneOpen(false)}
-        />
       )}
       {deleteWsConfirm && (
         <ConfirmModal

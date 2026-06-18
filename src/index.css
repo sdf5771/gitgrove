@@ -78,9 +78,13 @@ body { display: flex; align-items: center; justify-content: center; }
   transition: border-color 120ms;
 }
 .repo-pill:hover { border-color: var(--c-border-strong); }
-/* 타이틀 바 우측 그룹 직전의 최소 간격. 탭 스트립이 가용폭을 우선 갖도록
-   더 이상 flex:1로 남는 공간을 독식하지 않는다(.repo-tabs가 채움). */
-.sep { flex: 0 0 auto; min-width: 16px; }
+/* 타이틀 바 우측 고정 그룹(브랜치 표시 + 알림 벨).
+   margin-left:auto로 남는 슬랙을 흡수해 항상 우측 끝에 핀되고,
+   flex-shrink:0로 탭 개수 변동에도 줄어들지 않는다. .repo-tabs(flex:1)가
+   가용폭을 먼저 채우는 v1.16.0 동작과 양립한다(탭이 넘칠 때만 탭 내부 스크롤).
+   padding-left:16px는 탭 스트립과의 최소 간격을 보장한다(기존 .sep min-width:16px 대체).
+   slack이 0이어도 padding은 auto margin에 흡수되지 않아 간격이 유지된다. */
+.tb-right { flex: 0 0 auto; margin-left: auto; padding-left: 16px; display: flex; align-items: center; gap: 12px; }
 
 /* ── Action bar ── */
 .action-bar {
@@ -346,6 +350,11 @@ body { display: flex; align-items: center; justify-content: center; }
 }
 .sbranch { display: flex; align-items: center; gap: 6px; color: var(--c-text-strong); }
 .sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-gold-400); box-shadow: 0 0 6px rgba(230,165,54,.5); }
+/* 동기화 신호등(SY2): running=골드 펄스 / err=빨강. done/idle은 기본 dot 유지. */
+.sdot.sync { background: var(--c-gold-400); animation: barPulse 1s ease-in-out infinite; box-shadow: 0 0 6px rgba(230,165,54,.55); }
+.sdot.err { background: var(--c-danger); box-shadow: 0 0 6px rgba(255,107,107,.5); }
+@keyframes barPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.sstate { display: flex; align-items: center; gap: 7px; }
 .ssep { color: var(--c-border-strong); }
 .sahead { color: var(--c-success); } .sbehind { color: var(--c-warning); }
 .send { margin-left: auto; }
@@ -1263,3 +1272,140 @@ body { display: flex; align-items: center; justify-content: center; }
 
 /* 토스트 좌측 그루 */
 .notif-geuru{flex-shrink:0;display:flex;align-items:center;margin-top:1px;}
+
+/* ════ 동기화 인터랙션 (SY2) ════ */
+/* 디자인 정본: GitGrove 동기화 인터랙션.html. 골드=진행 액센트, 녹색=완료, info=push 카운트, 빨강=충돌. */
+
+@keyframes hudIn { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes hudBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes hudStripe { to { background-position: 24px 0; } }
+@keyframes hudIndet { 0% { transform: translateX(-120%); } 100% { transform: translateX(400%); } }
+
+/* ── busy 버튼: 스피너 + 카운트 배지 + 하단 미니 진행바 ── */
+.sync-btn { position: relative; overflow: hidden; }
+.sync-btn.busy { color: var(--c-gold-300); border-color: var(--c-gold-border); background: var(--c-gold-bg-soft); }
+.sync-btn:disabled { opacity: .5; cursor: default; }
+.abt-spin {
+  display: inline-block; box-sizing: border-box; width: 12px; height: 12px;
+  border: 2px solid var(--c-gold-border); border-top-color: var(--c-gold-300);
+  border-radius: 50%; animation: spin .6s linear infinite;
+}
+.abt-cnt {
+  font-family: var(--font-mono); font-size: 9px; line-height: 1; color: var(--c-text-on-gold, #1a1206);
+  background: var(--c-gold-400); border-radius: 999px; padding: 0 5px; min-width: 14px; height: 14px;
+  display: inline-flex; align-items: center; justify-content: center; margin-left: 1px;
+}
+.abt-cnt.info { background: var(--c-info); color: #06222e; }
+.abt-mini { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--c-gold-400); width: 0%; transition: width .2s ease; }
+
+/* ── 진행 HUD 팝오버 ── */
+.hud {
+  position: absolute; top: 12px; left: 12px; width: 412px; z-index: 60;
+  background: var(--c-bg-elevated); border: 1px solid var(--c-border); border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0,0,0,.6), inset 0 1px 0 rgba(244,236,210,.05);
+  overflow: hidden; animation: hudIn .18s cubic-bezier(.2,.8,.2,1);
+}
+.hud-head { display: flex; align-items: center; gap: 11px; padding: 13px 14px 12px; border-bottom: 1px solid var(--c-divider); background: linear-gradient(180deg, rgba(230,165,54,.06), transparent 90%); }
+.hud-geuru { flex-shrink: 0; display: flex; }
+.hud-geuru.bob { animation: hudBob 1.6s ease-in-out infinite; }
+.hud-titles { flex: 1; min-width: 0; }
+.hud-op { font-family: var(--font-display); font-size: 15px; color: var(--c-text-strong); letter-spacing: .3px; }
+.hud-sub { font-family: var(--font-mono); font-size: 11px; color: var(--c-text-muted); margin-top: 3px; }
+.hud-pct { font-family: var(--font-mono); font-size: 18px; color: var(--c-gold-300); font-weight: 500; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; min-width: 42px; }
+.hud-pct svg { width: 21px; height: 21px; display: block; }
+.hud-pct.done { color: var(--c-grove); }
+.hud-pct.err { color: var(--c-danger); }
+
+.hud-bar-wrap { padding: 12px 14px 8px; }
+.hud-bar { height: 7px; border-radius: 4px; background: var(--c-bg-inset); border: 1px solid var(--c-border); overflow: hidden; position: relative; }
+.hud-bar-fill { height: 100%; width: 0%; border-radius: 3px; background: var(--c-gold-400); transition: width .18s ease; position: relative; }
+.hud-bar-fill.indet { width: 35% !important; background: linear-gradient(90deg, transparent, var(--c-gold-400), transparent); animation: hudIndet 1.1s ease-in-out infinite; }
+.hud-bar-fill.striped { background-image: linear-gradient(45deg, rgba(255,255,255,.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.12) 50%, rgba(255,255,255,.12) 75%, transparent 75%); background-size: 24px 24px; animation: hudStripe .6s linear infinite; }
+.hud-bar-fill.done { width: 100%; background: var(--c-grove); }
+.hud-bar-fill.err { width: 62%; background: var(--c-danger); animation: none; }
+.hud-rate { display: flex; justify-content: space-between; margin-top: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); }
+
+.hud-phases { padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 1px; max-height: 166px; overflow-y: auto; }
+.hud-phase { display: flex; align-items: center; gap: 9px; padding: 5px 2px; font-size: 12px; transition: color .15s; }
+.hud-phase .pico { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.hud-phase .pico svg { width: 14px; height: 14px; }
+.hud-phase .ptxt { flex: 1; color: var(--c-text-muted); }
+.hud-phase .pmeta { font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); flex-shrink: 0; }
+.hud-phase.pending .ptxt, .hud-phase.pending .pico { color: var(--c-text-faint); }
+.hud-phase.active .ptxt { color: var(--c-gold-200); }
+.hud-phase.active .pico { color: var(--c-gold-300); }
+.hud-phase.done .ptxt { color: var(--c-text); }
+.hud-phase.done .pico { color: var(--c-grove); }
+.hud-phase.err .ptxt, .hud-phase.err .pico { color: var(--c-danger); }
+.pspin { display: inline-block; box-sizing: border-box; width: 13px; height: 13px; border: 2px solid var(--c-gold-border); border-top-color: var(--c-gold-300); border-radius: 50%; animation: spin .6s linear infinite; }
+.pdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+
+.hud-foot { border-top: 1px solid var(--c-divider); background: var(--c-bg-inset); padding: 11px 14px; display: flex; align-items: center; gap: 10px; }
+.hud-result { flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; }
+.hud-result b { color: var(--c-text-strong); font-family: var(--font-display); font-weight: 400; letter-spacing: .2px; }
+.hud-result b.err { color: var(--c-danger); }
+.hud-result-detail { color: var(--c-text-muted); margin-top: 2px; }
+.hud-result .diff { font-family: var(--font-mono); font-size: 11px; }
+.hud-result .ins { color: var(--c-success); }
+.hud-result .del { color: var(--c-danger); }
+.hud-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid; white-space: nowrap; flex-shrink: 0; font-family: var(--font-display); letter-spacing: .2px; }
+.hud-btn.danger { background: rgba(255,107,107,.12); border-color: rgba(255,107,107,.4); color: var(--c-danger); }
+.hud-btn.danger:hover { background: rgba(255,107,107,.22); }
+.hud-btn.ghost { background: var(--c-bg-elevated); border-color: var(--c-border); color: var(--c-text-muted); }
+.hud-btn.ghost:hover { color: var(--c-text); border-color: var(--c-border-strong); }
+
+/* ── CL2: 클론 모달 (3상태) ── */
+.clone-form { gap: 9px; }
+/* 진행 HUD를 모달 본문 안에 임베드(팝오버 그림자/배경 제거, 모달 box가 담는다). */
+.hud.hud-embed { position: static; width: auto; box-shadow: none; border: none; border-radius: 0; background: transparent; }
+
+/* 폼: 프로바이더 + owner/repo 자동 인식 줄 */
+.clone-detect { display: flex; align-items: center; gap: 7px; padding: 2px 1px; min-height: 18px; }
+.clone-prov { display: inline-flex; align-items: center; flex-shrink: 0; }
+.clone-prov-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-text-faint); display: inline-block; }
+.clone-detect-name { font-family: var(--font-mono); font-size: 12px; color: var(--c-gold-200); }
+.clone-detect-host { font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); margin-left: auto; }
+.clone-prov-title { display: flex; align-items: center; gap: 7px; }
+
+/* 옵션 체크박스 */
+.clone-opts { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.clone-opt { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text); cursor: pointer; }
+.clone-opt input { accent-color: var(--c-gold-400); width: 14px; height: 14px; flex-shrink: 0; }
+.clone-opt em { font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); font-style: normal; }
+.repo-browse-btn { display: inline-flex; align-items: center; gap: 5px; }
+
+/* 결과 공통 */
+.clone-result { padding: 18px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.clone-result .rm-modal-actions { width: 100%; margin-top: 12px; }
+.clone-result-title { font-family: var(--font-display); font-size: 15px; letter-spacing: .3px; margin-top: 4px; }
+.clone-result-title.ok { color: var(--c-grove); }
+.clone-result-title.err { color: var(--c-danger); }
+.clone-result-detail { font-size: 12px; color: var(--c-text-muted); text-align: center; line-height: 1.5; word-break: break-all; }
+
+/* 성공: 흙에서 나무 sprout */
+.clone-sprout { display: flex; justify-content: center; padding: 6px 0 2px; }
+.clone-soil { position: relative; width: 78px; height: 78px; display: flex; align-items: flex-end; justify-content: center; }
+.clone-soil::after { content: ''; position: absolute; bottom: 4px; width: 56px; height: 10px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(138,90,30,.55), transparent 70%); }
+.clone-tree-wrap { transform-origin: bottom center; transform: scale(.2) translateY(14px); opacity: 0; transition: transform .55s cubic-bezier(.2,1.3,.4,1), opacity .35s ease; }
+.clone-soil.grown .clone-tree-wrap { transform: scale(1) translateY(0); opacity: 1; }
+
+/* 실패: 그루 표정 */
+.clone-fail-geuru { display: flex; justify-content: center; padding: 4px 0; }
+
+/* 성공 통계 행 */
+.clone-stats { display: flex; gap: 16px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
+.clone-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.clone-stat span { font-size: 10px; color: var(--c-text-faint); text-transform: uppercase; letter-spacing: .04em; }
+.clone-stat b { font-family: var(--font-mono); font-size: 13px; color: var(--c-text-strong); font-weight: 500; }
+
+/* auth 토큰칸 */
+.clone-token { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.clone-token-label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--c-text-muted); }
+
+/* 결과 "그로브로" 녹색 CTA(완료 동선) */
+.rm-modal-btn.rm-grove { background: var(--c-grove); color: #0d1a10; border-color: var(--c-grove-d); font-weight: 600; }
+.rm-modal-btn.rm-grove:hover { background: #82dc8e; }
+
+/* AddRepoModal Clone 탭 → 전용 모달 진입 안내 */
+.addrepo-clone-redirect { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 18px 8px 10px; }
+.addrepo-clone-redirect-txt { font-size: 12px; color: var(--c-text-muted); line-height: 1.6; max-width: 280px; }

@@ -29,6 +29,14 @@ interface Props {
   repoSummary?: { total: number; dirty: number } | null
   // 좌측 끝 그루 표정 — 저장소 상태에 1:1 매핑. clean→sleepy, syncing→think, conflict→conflict.
   geuruState?: GeuruExpr
+  // 동기화 신호등(SY2). running=골드 펄스 / done=녹색 / err=빨강 / idle=평시.
+  syncState?: 'running' | 'done' | 'err' | 'idle'
+}
+
+const SYNC_STATE_TEXT: Record<'running' | 'done' | 'err', { txt: string; color: string }> = {
+  running: { txt: '동기화 중…', color: 'var(--c-gold-300)' },
+  done: { txt: '방금 동기화됨', color: 'var(--c-grove)' },
+  err: { txt: '충돌 · 해결 필요', color: 'var(--c-danger)' },
 }
 
 const GEURU_TITLE: Partial<Record<GeuruExpr, string>> = {
@@ -39,7 +47,10 @@ const GEURU_TITLE: Partial<Record<GeuruExpr, string>> = {
   conflict: '그루 — 충돌 해결 필요',
 }
 
-export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary, geuruState = 'idle' }: Props) {
+export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary, geuruState = 'idle', syncState = 'idle' }: Props) {
+  // 신호등 dot 수식어 — running=골드 펄스, err=빨강, 그 외(done/idle)=녹색 기본.
+  const dotClass = syncState === 'running' ? 'sdot sync' : syncState === 'err' ? 'sdot err' : 'sdot'
+  const stateText = syncState !== 'idle' ? SYNC_STATE_TEXT[syncState] : null
   return (
     <div className="sbar">
       <span className="geuru-status" title={GEURU_TITLE[geuruState]}>
@@ -62,7 +73,7 @@ export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUse
       ) : (
         <>
           <div className="sbranch">
-            <span className="sdot" />
+            <span className={dotClass} />
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ opacity: .7 }}>
               <line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/>
             </svg>
@@ -82,6 +93,14 @@ export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUse
               <span>{remote}</span>
             </>
           )}
+        </>
+      )}
+      {stateText && (
+        <>
+          <span className="ssep">·</span>
+          <span className="sstate" aria-live="polite">
+            <span style={{ color: stateText.color }}>{stateText.txt}</span>
+          </span>
         </>
       )}
       {githubUser && <GithubProfileButton user={githubUser} repoRole={repoRole} />}

@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('gitAPI', {
   openDialog: () => ipcRenderer.invoke('git:open-dialog'),
   pickDirectory: (title?: string) => ipcRenderer.invoke('git:pick-directory', title),
   isRepo: (repoPath: string) => ipcRenderer.invoke('git:is-repo', repoPath),
-  clone: (url: string, parentDir: string, opts?: { shallow?: boolean }) => ipcRenderer.invoke('git:clone', url, parentDir, opts),
+  clone: (url: string, parentDir: string, opts?: { shallow?: boolean; recurseSubmodules?: boolean }) => ipcRenderer.invoke('git:clone', url, parentDir, opts),
   getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => ipcRenderer.invoke('git:log', repoPath, opts),
   getActivity: (repoPath: string, opts?: { days?: number }) => ipcRenderer.invoke('git:activity', repoPath, opts),
   getActivityBatch: (paths: string[], opts?: { days?: number }) => ipcRenderer.invoke('git:activity-batch', paths, opts),
@@ -60,6 +60,12 @@ contextBridge.exposeInMainWorld('gitAPI', {
   pull: (repoPath: string) => ipcRenderer.invoke('git:pull', repoPath),
   push: (repoPath: string) => ipcRenderer.invoke('git:push', repoPath),
   fetch: (repoPath: string) => ipcRenderer.invoke('git:fetch', repoPath),
+  // pull/push/fetch 실시간 진행률 구독. 구독 해제 함수를 반환 → effect cleanup에서 호출(리스너 누수 방지).
+  onRemoteProgress: (cb: (p: RemoteProgress) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: RemoteProgress) => cb(p)
+    ipcRenderer.on('git:remote-progress', listener)
+    return () => ipcRenderer.removeListener('git:remote-progress', listener)
+  },
   checkout: (repoPath: string, branch: string) => ipcRenderer.invoke('git:checkout', repoPath, branch),
   blame: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:blame', repoPath, filePath),
   getRemotes: (repoPath: string) => ipcRenderer.invoke('git:remotes', repoPath),

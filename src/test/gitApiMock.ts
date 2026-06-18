@@ -1,4 +1,5 @@
 import { vi } from 'vitest'
+import type { RemoteProgress } from '../utils/syncResult'
 
 // Per-repo fixture data. Keyed by absolute repo path.
 export interface RepoFixture {
@@ -66,11 +67,34 @@ export function installGitApiMock() {
     return f ? [{ name: 'origin', url: `git@github.com:test/${path.split('/').pop()}.git` }] : []
   })
 
+  // onRemoteProgress 구독자/해제 추적 — 테스트에서 진행 이벤트를 수동 발사하고
+  // (emitRemoteProgress) 리스너 누수(구독/해제 카운트)를 검증하기 위함.
+  const remoteProgressListeners = new Set<(p: RemoteProgress) => void>()
+  let remoteSubscribeCount = 0
+  let remoteUnsubscribeCount = 0
+  const onRemoteProgress = vi.fn((cb: (p: RemoteProgress) => void) => {
+    remoteSubscribeCount++
+    remoteProgressListeners.add(cb)
+    return () => {
+      remoteUnsubscribeCount++
+      remoteProgressListeners.delete(cb)
+    }
+  })
+  // 테스트 헬퍼: 등록된 모든 구독자에게 진행 이벤트를 발사.
+  const emitRemoteProgress = (p: RemoteProgress) => {
+    for (const cb of remoteProgressListeners) cb(p)
+  }
+  const remoteProgressStats = () => ({
+    subscribed: remoteSubscribeCount,
+    unsubscribed: remoteUnsubscribeCount,
+    active: remoteProgressListeners.size,
+  })
+
   const gitAPI = {
     openDialog: vi.fn(async () => null),
-    pickDirectory: vi.fn(async () => null),
+    pickDirectory: vi.fn((): Promise<string | null> => Promise.resolve(null)),
     isRepo: vi.fn(async () => true),
-    clone: vi.fn(async (_url: string, parentDir: string) => ({ path: `${parentDir}/cloned`, name: 'cloned' })),
+    clone: vi.fn(async (_url: string, parentDir: string): Promise<GitCloneResult> => ({ success: true, path: `${parentDir}/cloned`, name: 'cloned' })),
     getLog,
     getActivity: vi.fn(async (_path: string, opts?: { days?: number }) => {
       const days = Math.max(1, Math.floor(opts?.days ?? 14))
@@ -92,9 +116,10 @@ export function installGitApiMock() {
     stage: vi.fn(async () => {}),
     unstage: vi.fn(async () => {}),
     commit: vi.fn(async () => {}),
-    pull: vi.fn(async () => ({ success: true, summary: '' })),
-    push: vi.fn(async () => ({ success: true, summary: '' })),
-    fetch: vi.fn(async () => ({ success: true, summary: '' })),
+    pull: vi.fn(async (): Promise<GitRemoteResult> => ({ success: true, op: 'pull', summary: '' })),
+    push: vi.fn(async (): Promise<GitRemoteResult> => ({ success: true, op: 'push', summary: '' })),
+    fetch: vi.fn(async (): Promise<GitRemoteResult> => ({ success: true, op: 'fetch', summary: '' })),
+    onRemoteProgress,
     checkout: vi.fn(async () => {}),
     blame: vi.fn(async () => []),
     getRemotes,
@@ -134,7 +159,7 @@ export function installGitApiMock() {
   window.appAPI = appAPI
   window.ipcRenderer = { send: vi.fn(), on: vi.fn(), off: vi.fn(), invoke: vi.fn() } as unknown as Window['ipcRenderer']
 
-  return { gitAPI, appAPI }
+  return { gitAPI, appAPI, emitRemoteProgress, remoteProgressStats }
 }
 
 /**
