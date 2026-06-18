@@ -275,9 +275,9 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
       setVerifyState('error')
       if (err instanceof GithubApiError) {
         if (err.status === 401) {
-          setVerifyError('토큰이 유효하지 않습니다 (401). 만료되었거나 잘못된 토큰입니다.')
+          setVerifyError('토큰이 유효하지 않아요 · 401 · 만료되었거나 잘못된 토큰이에요')
         } else if (err.status === 403) {
-          setVerifyError('접근이 거부되었습니다 (403). rate limit 또는 권한 부족일 수 있습니다.')
+          setVerifyError('접근이 거부됐어요 · 403 · 사용 한도 또는 권한 부족일 수 있어요')
         } else {
           setVerifyError(`검증 실패 (HTTP ${err.status}).`)
         }
@@ -332,11 +332,11 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
       setGlVerifyState('error')
       if (err instanceof GitlabApiError) {
         if (err.status === 401) {
-          setGlVerifyError('토큰이 유효하지 않습니다 (401). 만료되었거나 api scope가 없는 토큰입니다. 위 링크에서 새로 발급하세요.')
+          setGlVerifyError('토큰이 유효하지 않아요 · 401 · 만료되었거나 api scope가 없는 토큰이에요. 위 링크에서 새로 발급해요')
         } else if (err.rateLimited) {
           setGlVerifyError(err.message)
         } else if (err.status === 403) {
-          setGlVerifyError('접근이 거부되었습니다 (403). 토큰 권한(api, read_user)을 확인하세요.')
+          setGlVerifyError('접근이 거부됐어요 · 403 · 토큰 권한(api, read_user)을 확인해요')
         } else if (err.status === 0) {
           setGlVerifyError('Host URL이 올바른지 확인하세요.')
         } else {

@@ -176,7 +176,7 @@ describe('mapResult — 결과 → HUD/토스트', () => {
     expect(v.geuru).toBe('conflict')
     expect(v.detail).toContain('3개 파일')
     expect(v.toast.cls).toBe('warning')
-    expect(v.toast.msg).toBe('3 files conflicted')
+    expect(v.toast.msg).toBe('3개 파일 · 해결이 필요해요')
   })
   it('이미 최신(upToDate): happy 표정 + info 토스트', () => {
     const r: GitRemoteResult = { success: true, op: 'pull', summary: 'Already up to date', upToDate: true }

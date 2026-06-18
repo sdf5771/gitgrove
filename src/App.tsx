@@ -657,7 +657,7 @@ export default function App() {
       await window.gitAPI?.checkout(repoPath, name)
       setActiveBranch(name)
       await loadRepo(repoPath)
-      notify('success', `Switched to ${name}`, '')
+      notify('success', `브랜치 전환 · ${name}`, '')
     } catch (err) {
       notify('error', 'Checkout 실패', err instanceof Error ? err.message : String(err))
     }
@@ -1504,7 +1504,7 @@ export default function App() {
                       onCommitDone={async () => {
                         if (repoPath) {
                           await loadRepo(repoPath)
-                          notify('success', 'Committed', '변경사항이 커밋되었습니다')
+                          notify('success', '커밋 완료', '변경을 심었어요')
                         }
                       }}
                       onTreeChanged={async toast => {
@@ -1574,7 +1574,7 @@ export default function App() {
         {/* Modals */}
         {showMerge       && <MergeModal
           onClose={() => setShowMerge(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', 'Merge complete', '', undefined, 4000, 'merge') } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', '머지 완료', '', undefined, 4000, 'merge') } }}
           branches={realBranches.length > 0 ? realBranches : undefined}
           repoPath={repoPath}
           currentBranch={activeBranch}
