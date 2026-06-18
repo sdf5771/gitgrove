@@ -71,50 +71,50 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
   it('파일 행 우클릭 시 메뉴 7개 항목이 노출된다', () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    expect(screen.getByText('Discard Changes…')).toBeTruthy()
-    expect(screen.getByText('Ignore File (Add to .gitignore)')).toBeTruthy()
-    expect(screen.getByText('Ignore All .tsx Files (Add to .gitignore)')).toBeTruthy()
-    expect(screen.getByText('Copy File Path')).toBeTruthy()
-    expect(screen.getByText('Copy Relative File Path')).toBeTruthy()
-    expect(screen.getByText('Reveal in Finder')).toBeTruthy()
-    expect(screen.getByText('Open with Default Program')).toBeTruthy()
+    expect(screen.getByText('변경 되돌리기…')).toBeTruthy()
+    expect(screen.getByText('파일 무시 (.gitignore에 추가)')).toBeTruthy()
+    expect(screen.getByText('이 확장자 무시 · .tsx (.gitignore에 추가)')).toBeTruthy()
+    expect(screen.getByText('파일 경로 복사')).toBeTruthy()
+    expect(screen.getByText('상대 경로 복사')).toBeTruthy()
+    expect(screen.getByText('Finder에서 보기')).toBeTruthy()
+    expect(screen.getByText('기본 앱으로 열기')).toBeTruthy()
   })
 
-  it('확장자 없는 파일은 "Ignore All .ext Files" 항목을 숨긴다', () => {
+  it('확장자 없는 파일은 "이 확장자 무시" 항목을 숨긴다', () => {
     renderStage([{ p: 'Makefile', s: 'M', a: 1, d: 0 }])
     openMenuFor('Makefile')
-    expect(screen.getByText('Ignore File (Add to .gitignore)')).toBeTruthy()
-    expect(screen.queryByText(/Ignore All/)).toBeNull()
+    expect(screen.getByText('파일 무시 (.gitignore에 추가)')).toBeTruthy()
+    expect(screen.queryByText(/확장자 무시/)).toBeNull()
   })
 
   it('staged 파일 행에서도 메뉴가 뜬다', () => {
     renderStage([], [{ p: 'staged.ts', s: 'M', a: 2, d: 1 }])
     openMenuFor('staged.ts')
-    expect(screen.getByText('Discard Changes…')).toBeTruthy()
+    expect(screen.getByText('변경 되돌리기…')).toBeTruthy()
   })
 
   it('Discard → ConfirmModal → confirm 시 discardChanges 호출 + onTreeChanged(Discarded), Committed 토스트 없음', async () => {
     const { onCommitDone, onTreeChanged } = renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    fireEvent.mouseDown(screen.getByText('Discard Changes…'))
+    fireEvent.mouseDown(screen.getByText('변경 되돌리기…'))
 
     // ConfirmModal 제목 + 메시지에 파일명 포함
-    expect(screen.getByText('Discard Changes')).toBeTruthy()
+    expect(screen.getByText('변경 되돌리기')).toBeTruthy()
     expect(screen.getByText(/src\/App\.tsx/)).toBeTruthy()
 
-    fireEvent.click(screen.getByText('Discard'))
+    fireEvent.click(screen.getByText('되돌리기'))
     await Promise.resolve(); await Promise.resolve()
 
     expect(gitAPI.discardChanges).toHaveBeenCalledWith(REPO, ['src/App.tsx'])
     // 파괴적 액션은 'Committed' 토스트용 onCommitDone이 아닌 onTreeChanged를 호출해야 한다.
     expect(onCommitDone).not.toHaveBeenCalled()
-    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: 'Discarded', msg: '변경사항을 되돌렸습니다' })
+    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: '되돌림', msg: '변경사항을 되돌렸어요' })
   })
 
   it('Discard 취소 시 discardChanges 미호출', async () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    fireEvent.mouseDown(screen.getByText('Discard Changes…'))
+    fireEvent.mouseDown(screen.getByText('변경 되돌리기…'))
     fireEvent.click(screen.getByText('Cancel'))
     await Promise.resolve()
     expect(gitAPI.discardChanges).not.toHaveBeenCalled()
@@ -123,27 +123,27 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
   it('Ignore File → addToGitignore([f.p]) + onTreeChanged(Ignored), Committed 토스트 없음', async () => {
     const { onCommitDone, onTreeChanged } = renderStage([{ p: 'secret.env.ts', s: 'A', a: 3, d: 0 }])
     openMenuFor('secret.env.ts')
-    fireEvent.mouseDown(screen.getByText('Ignore File (Add to .gitignore)'))
+    fireEvent.mouseDown(screen.getByText('파일 무시 (.gitignore에 추가)'))
     await Promise.resolve(); await Promise.resolve()
     expect(gitAPI.addToGitignore).toHaveBeenCalledWith(REPO, ['secret.env.ts'])
     expect(onCommitDone).not.toHaveBeenCalled()
-    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
+    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
   })
 
   it('Ignore All .ext → addToGitignore(["*.ext"]) + onTreeChanged(Ignored), Committed 토스트 없음', async () => {
     const { onCommitDone, onTreeChanged } = renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    fireEvent.mouseDown(screen.getByText('Ignore All .tsx Files (Add to .gitignore)'))
+    fireEvent.mouseDown(screen.getByText('이 확장자 무시 · .tsx (.gitignore에 추가)'))
     await Promise.resolve(); await Promise.resolve()
     expect(gitAPI.addToGitignore).toHaveBeenCalledWith(REPO, ['*.tsx'])
     expect(onCommitDone).not.toHaveBeenCalled()
-    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
+    expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
   })
 
   it('Copy File Path → 절대경로를 clipboard에 write', async () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    fireEvent.mouseDown(screen.getByText('Copy File Path'))
+    fireEvent.mouseDown(screen.getByText('파일 경로 복사'))
     await Promise.resolve()
     expect(writeText).toHaveBeenCalledWith(`${REPO}/src/App.tsx`)
   })
@@ -151,7 +151,7 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
   it('Copy Relative File Path → 상대경로를 clipboard에 write', async () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    fireEvent.mouseDown(screen.getByText('Copy Relative File Path'))
+    fireEvent.mouseDown(screen.getByText('상대 경로 복사'))
     await Promise.resolve()
     expect(writeText).toHaveBeenCalledWith('src/App.tsx')
   })
@@ -159,7 +159,7 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
   it('Reveal in Finder → revealInFinder(절대경로)', async () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    fireEvent.mouseDown(screen.getByText('Reveal in Finder'))
+    fireEvent.mouseDown(screen.getByText('Finder에서 보기'))
     await Promise.resolve()
     expect(gitAPI.revealInFinder).toHaveBeenCalledWith(`${REPO}/src/App.tsx`)
   })
@@ -167,7 +167,7 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
   it('Open with Default Program → openPath(절대경로)', async () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    fireEvent.mouseDown(screen.getByText('Open with Default Program'))
+    fireEvent.mouseDown(screen.getByText('기본 앱으로 열기'))
     await Promise.resolve()
     expect(gitAPI.openPath).toHaveBeenCalledWith(`${REPO}/src/App.tsx`)
   })
@@ -175,17 +175,17 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
   it('액션 실행 후 메뉴가 닫힌다', async () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    expect(screen.getByText('Reveal in Finder')).toBeTruthy()
-    fireEvent.mouseDown(screen.getByText('Reveal in Finder'))
+    expect(screen.getByText('Finder에서 보기')).toBeTruthy()
+    fireEvent.mouseDown(screen.getByText('Finder에서 보기'))
     await Promise.resolve()
-    expect(screen.queryByText('Reveal in Finder')).toBeNull()
+    expect(screen.queryByText('Finder에서 보기')).toBeNull()
   })
 
   it('ESC로 메뉴가 닫힌다', () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
-    expect(screen.getByText('Reveal in Finder')).toBeTruthy()
+    expect(screen.getByText('Finder에서 보기')).toBeTruthy()
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByText('Reveal in Finder')).toBeNull()
+    expect(screen.queryByText('Finder에서 보기')).toBeNull()
   })
 })

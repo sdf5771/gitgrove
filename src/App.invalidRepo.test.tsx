@@ -36,7 +36,7 @@ describe('비-Git 디렉토리 예외처리', () => {
 
     // 친절한 에러 토스트가 떠야 한다.
     await waitFor(() => {
-      expect(shown('Git 저장소가 아닙니다')).toBe(true)
+      expect(shown('Git 저장소가 아니에요')).toBe(true)
     }, { timeout: 3000 })
 
     // 커밋 데이터는 로드되지 않는다.

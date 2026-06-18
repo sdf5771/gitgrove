@@ -38,11 +38,11 @@ export function CommandPalette({ onClose, onAction }: Props) {
       <div className="cmd-box" onMouseDown={e => e.stopPropagation()}>
         <div className="cmd-inp-wrap">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-text-faint)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input ref={ref} className="cmd-inp" placeholder="Search actions…" value={q} onChange={e => { setQ(e.target.value); setIdx(0) }} onKeyDown={handleKey} />
+          <input ref={ref} className="cmd-inp" placeholder="명령 검색…" value={q} onChange={e => { setQ(e.target.value); setIdx(0) }} onKeyDown={handleKey} />
           <span style={{ fontSize: 10, color: 'var(--c-text-faint)', background: 'var(--c-bg-inset)', border: '1px solid var(--c-border)', borderRadius: 3, padding: '2px 6px', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>ESC</span>
         </div>
         <div className="cmd-list">
-          {filtered.length === 0 && <div className="cmd-empty">No actions match "<strong>{q}</strong>"</div>}
+          {filtered.length === 0 && <div className="cmd-empty">"<strong>{q}</strong>"에 맞는 명령이 없어요</div>}
           {Object.entries(grouped).map(([cat, cmds]) => (
             <div key={cat}>
               <div className="cmd-cat">{cat}</div>
@@ -64,10 +64,10 @@ export function CommandPalette({ onClose, onAction }: Props) {
           ))}
         </div>
         <div className="cmd-footer">
-          <span><span className="cmd-fkey">↑↓</span> navigate</span>
-          <span><span className="cmd-fkey">↵</span> run</span>
-          <span><span className="cmd-fkey">ESC</span> close</span>
-          <span style={{ marginLeft: 'auto' }}>{filtered.length} action{filtered.length !== 1 ? 's' : ''}</span>
+          <span><span className="cmd-fkey">↑↓</span> 이동</span>
+          <span><span className="cmd-fkey">↵</span> 실행</span>
+          <span><span className="cmd-fkey">ESC</span> 닫기</span>
+          <span style={{ marginLeft: 'auto' }}>{filtered.length}개 명령</span>
         </div>
       </div>
     </div>

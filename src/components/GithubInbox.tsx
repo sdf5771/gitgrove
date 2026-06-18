@@ -314,7 +314,7 @@ export function GithubInbox({ githubToken, githubLogin, gitlabInstances = [], on
           <div className="rm-gh-status rm-gh-error">{current.error}</div>
         ) : filtered.length === 0 ? (
           <div className="rm-empty-section">
-            {allItems.length > 0 ? '검색 결과가 없습니다.' : '표시할 항목이 없습니다.'}
+            {allItems.length > 0 ? '검색 결과가 없어요.' : '표시할 항목이 없어요.'}
           </div>
         ) : (
           filtered.map(item => {

@@ -131,21 +131,21 @@ export const BLAME_LINES: BlameLine[] = [
 ]
 
 export const COMMANDS: Command[] = [
-  {id:'pull',label:'Pull',icon:'↓',cat:'Git',kbd:'⌘⇧P',desc:'Pull from remote'},
-  {id:'push',label:'Push',icon:'↑',cat:'Git',kbd:'⌘P',desc:'Push to remote'},
-  {id:'fetch',label:'Fetch',icon:'⟳',cat:'Git',kbd:'⌘⇧F',desc:'Fetch all remotes'},
-  {id:'merge',label:'Merge / Rebase…',icon:'⎇',cat:'Git',kbd:'⌘M',desc:'Merge or rebase branches'},
-  {id:'stash',label:'Stash Changes',icon:'⧉',cat:'Git',kbd:'⌘⇧S',desc:'Save current work in progress'},
-  {id:'cherry',label:'Cherry-pick…',icon:'✦',cat:'Git',kbd:'',desc:'Apply a commit to this branch'},
-  {id:'rebase',label:'Interactive Rebase…',icon:'⇄',cat:'Git',kbd:'⌘⇧R',desc:'Reorder and edit recent commits'},
-  {id:'branch-new',label:'New Branch…',icon:'+',cat:'Branch',kbd:'⌘⇧B',desc:'Create a new local branch'},
-  {id:'branch-rename',label:'Rename Branch…',icon:'✎',cat:'Branch',kbd:'',desc:'Rename a local branch'},
-  {id:'branch-delete',label:'Delete Branch…',icon:'×',cat:'Branch',kbd:'',desc:'Delete a local branch'},
-  {id:'view-history',label:'History',icon:'①',cat:'View',kbd:'⌘1',desc:'Show commit history graph'},
-  {id:'view-stage',label:'Stage',icon:'②',cat:'View',kbd:'⌘2',desc:'Stage and commit changes'},
-  {id:'view-diff',label:'Diff Explorer',icon:'③',cat:'View',kbd:'⌘3',desc:'Browse file diffs side-by-side'},
-  {id:'view-blame',label:'Git Blame',icon:'④',cat:'View',kbd:'⌘⇧L',desc:'Show blame for current file'},
-  {id:'settings',label:'Settings…',icon:'⚙',cat:'App',kbd:'⌘,',desc:'Open application preferences'},
+  {id:'pull',label:'Pull',icon:'↓',cat:'Git',kbd:'⌘⇧P',desc:'원격에서 Pull'},
+  {id:'push',label:'Push',icon:'↑',cat:'Git',kbd:'⌘P',desc:'원격으로 Push'},
+  {id:'fetch',label:'Fetch',icon:'⟳',cat:'Git',kbd:'⌘⇧F',desc:'모든 원격 Fetch'},
+  {id:'merge',label:'Merge / Rebase…',icon:'⎇',cat:'Git',kbd:'⌘M',desc:'브랜치 Merge 또는 Rebase'},
+  {id:'stash',label:'Stash',icon:'⧉',cat:'Git',kbd:'⌘⇧S',desc:'작업 중 변경을 Stash'},
+  {id:'cherry',label:'Cherry-pick…',icon:'✦',cat:'Git',kbd:'',desc:'커밋 하나를 이 브랜치에 적용'},
+  {id:'rebase',label:'Interactive Rebase…',icon:'⇄',cat:'Git',kbd:'⌘⇧R',desc:'최근 커밋 순서·내용 편집'},
+  {id:'branch-new',label:'새 브랜치…',icon:'+',cat:'브랜치',kbd:'⌘⇧B',desc:'로컬 브랜치 새로 만들기'},
+  {id:'branch-rename',label:'브랜치 이름 변경…',icon:'✎',cat:'브랜치',kbd:'',desc:'로컬 브랜치 이름 변경'},
+  {id:'branch-delete',label:'브랜치 삭제…',icon:'×',cat:'브랜치',kbd:'',desc:'로컬 브랜치 삭제'},
+  {id:'view-history',label:'히스토리',icon:'①',cat:'보기',kbd:'⌘1',desc:'커밋 히스토리 그래프'},
+  {id:'view-stage',label:'스테이지',icon:'②',cat:'보기',kbd:'⌘2',desc:'변경을 올리고 커밋'},
+  {id:'view-diff',label:'Diff 탐색기',icon:'③',cat:'보기',kbd:'⌘3',desc:'파일 Diff를 나란히 보기'},
+  {id:'view-blame',label:'Git Blame',icon:'④',cat:'보기',kbd:'⌘⇧L',desc:'현재 파일의 Blame 보기'},
+  {id:'settings',label:'설정…',icon:'⚙',cat:'앱',kbd:'⌘,',desc:'앱 환경설정 열기'},
 ]
 
 export const REPOS: Repo[] = [

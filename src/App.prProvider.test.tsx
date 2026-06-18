@@ -57,7 +57,7 @@ describe('PR 탭 provider 분기 (GitHub PRView ↔ GitLab MRView)', () => {
     await waitFor(() => expect(shown('No open merge requests')).toBe(true))
     expect(getMergeRequestsMock).toHaveBeenCalled()
     // PRView 전용 문구는 없어야
-    expect(shown('GitHub 토큰이 설정되지 않았습니다')).toBe(false)
+    expect(shown('GitHub 토큰이 설정되지 않았어요')).toBe(false)
   })
 
   it('origin이 GitHub이면 기존 PRView를 렌더한다', async () => {
@@ -68,7 +68,7 @@ describe('PR 탭 provider 분기 (GitHub PRView ↔ GitLab MRView)', () => {
     render(<App />)
     await openPRTab()
     // PRView: 토큰 없음 안내(MRView엔 없는 문구)
-    await waitFor(() => expect(shown('GitHub 토큰이 설정되지 않았습니다')).toBe(true))
+    await waitFor(() => expect(shown('GitHub 토큰이 설정되지 않았어요')).toBe(true))
     expect(shown('No open merge requests')).toBe(false)
     expect(getMergeRequestsMock).not.toHaveBeenCalled()
   })
@@ -94,7 +94,7 @@ describe('PR 탭 provider 분기 (GitHub PRView ↔ GitLab MRView)', () => {
     })
     render(<App />)
     await openPRTab()
-    await waitFor(() => expect(shown('GitHub 토큰이 설정되지 않았습니다')).toBe(true))
+    await waitFor(() => expect(shown('GitHub 토큰이 설정되지 않았어요')).toBe(true))
     expect(getMergeRequestsMock).not.toHaveBeenCalled()
   })
 })

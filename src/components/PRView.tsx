@@ -122,7 +122,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
       <div className="pr-empty">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ color: 'var(--c-text)', marginBottom: 6 }}>GitHub 토큰이 설정되지 않았습니다</div>
+          <div style={{ color: 'var(--c-text)', marginBottom: 6 }}>GitHub 토큰이 설정되지 않았어요</div>
           <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>Settings → GitHub 탭에서 토큰을 입력해주세요</div>
         </div>
       </div>
@@ -221,7 +221,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
                   <div style={{ fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)' }}>Description</div>
                   {sel.body
                     ? <Markdown source={sel.body} className="pr-desc" />
-                    : <div className="pr-desc" style={{ color: 'var(--c-text-faint)' }}>설명이 없습니다</div>}
+                    : <div className="pr-desc" style={{ color: 'var(--c-text-faint)' }}>설명이 없어요</div>}
                   <div className="divl" />
                   <div style={{ fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)' }}>Reviewers</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -233,7 +233,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
                       </div>
                     ))}
                     {sel.reviewers.length === 0 && (
-                      <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>리뷰어가 없습니다</div>
+                      <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>리뷰어가 없어요</div>
                     )}
                   </div>
                   {sel.status === 'open' && sel.checks.some(c => c.s === 'fail') && (
@@ -277,7 +277,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
               {dtab === 'checks' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {sel.checks.length === 0 && (
-                    <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '12px 0' }}>CI 체크 정보가 없습니다</div>
+                    <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '12px 0' }}>CI 체크 정보가 없어요</div>
                   )}
                   {sel.checks.map((c, i) => (
                     <div key={i} className="pr-check">

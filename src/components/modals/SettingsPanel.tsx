@@ -279,10 +279,10 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
         } else if (err.status === 403) {
           setVerifyError('접근이 거부됐어요 · 403 · 사용 한도 또는 권한 부족일 수 있어요')
         } else {
-          setVerifyError(`검증 실패 (HTTP ${err.status}).`)
+          setVerifyError(`검증에 실패했어요 · HTTP ${err.status}`)
         }
       } else {
-        setVerifyError('네트워크 오류로 검증에 실패했습니다.')
+        setVerifyError('네트워크 오류 · 검증에 실패했어요')
       }
     }
   }
@@ -340,10 +340,10 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
         } else if (err.status === 0) {
           setGlVerifyError('Host URL이 올바른지 확인하세요.')
         } else {
-          setGlVerifyError(`검증 실패 (HTTP ${err.status}). 토큰 또는 호스트를 확인하세요.`)
+          setGlVerifyError(`검증에 실패했어요 · HTTP ${err.status} · 토큰 또는 호스트를 확인하세요`)
         }
       } else {
-        setGlVerifyError('네트워크 오류로 검증에 실패했습니다. 호스트에 연결할 수 있는지 확인하세요.')
+        setGlVerifyError('네트워크 오류 · 검증에 실패했어요 · 호스트에 연결할 수 있는지 확인하세요')
       }
     }
   }
@@ -508,7 +508,7 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                   </button>
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.4 }}>
-                  PR 뷰에서 실제 Pull Request를 조회하는 데 사용됩니다.
+                  PR 뷰에서 실제 Pull Request를 조회하는 데 써요.
                   <br />
                   필요 scope: <span className="sett-scope-chip">repo</span>{' '}
                   <span className="sett-scope-chip">read:user</span>{' '}
@@ -538,7 +538,7 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                     <div className="sett-verify-meta" style={{ color: 'var(--c-warning)' }}>
                       <span className="sett-verify-meta-lbl">알림</span>
                       <span className="sett-verify-meta-val">
-                        notifications 권한이 없어 알림 벨이 동작하지 않습니다. 위 링크로 토큰을 다시 발급하세요.
+                        notifications 권한이 없어 알림 벨이 동작하지 않아요. 위 링크로 토큰을 다시 발급하세요.
                       </span>
                     </div>
                   )}
@@ -582,11 +582,11 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                 <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
                   Classic 링크에는 <code className="sett-code-inline">repo</code>,{' '}
                   <code className="sett-code-inline">read:user</code>,{' '}
-                  <code className="sett-code-inline">notifications</code> scope와 설명이 미리 채워져 있습니다.
+                  <code className="sett-code-inline">notifications</code> scope와 설명이 미리 채워져 있어요.
                   <br />
-                  알림 벨은 <code className="sett-code-inline">notifications</code> 권한이 있어야 동작합니다.
+                  알림 벨은 <code className="sett-code-inline">notifications</code> 권한이 있어야 동작해요.
                   {' '}이미 토큰을 발급해 쓰고 있다면, 알림 벨을 쓰려면 위 링크로{' '}
-                  <strong style={{ color: 'var(--c-text)' }}>새로 발급</strong>해야 합니다 — scope는 발급 후 변경할 수 없습니다.
+                  <strong style={{ color: 'var(--c-text)' }}>새로 발급</strong>해야 해요 — scope는 발급 후 바꿀 수 없어요.
                 </div>
               </div>
             </div>
@@ -695,7 +695,7 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                     </button>
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
-                    MR 뷰·인박스에서 실제 Merge Request와 이슈를 조회하는 데 사용됩니다.
+                    MR 뷰·인박스에서 실제 Merge Request와 이슈를 조회하는 데 써요.
                     <br />
                     필요 scope: <span className="sett-scope-chip">api</span>{' '}
                     <span className="sett-scope-chip">read_user</span>{' '}

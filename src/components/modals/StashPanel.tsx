@@ -141,7 +141,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
       {dropConfirm !== null && (
         <ConfirmModal
           title="Stash 삭제"
-          message={`stash@{${dropConfirm}}을 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다.`}
+          message={`stash@{${dropConfirm}}을 영구적으로 삭제해요. 이 작업은 되돌릴 수 없어요.`}
           confirmLabel="Drop"
           danger={true}
           onConfirm={() => { drop(dropConfirm); setDropConfirm(null) }}
