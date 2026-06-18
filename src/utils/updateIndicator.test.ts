@@ -88,6 +88,20 @@ describe('updateIndicator — receiveUpdate 보존 규칙', () => {
     expect(next.phase).toBe('idle')
     expect(next.payload?.version).toBe('3.0.0')
   })
+
+  it('같은 버전이 done 단계에서 재수신돼도 완료 상태 보존(재다운로드 안 함)', () => {
+    const done = finishDownload(startDownload(receiveUpdate(INITIAL_UPDATE_STATE, PAYLOAD)))
+    const again = receiveUpdate(done, PAYLOAD)
+    expect(again.phase).toBe('done')
+  })
+
+  it('error 단계에서 같은 버전 재수신은 idle로 리셋(다시 시도 가능해짐 — 보존 대상 아님)', () => {
+    const failed = failDownload(startDownload(receiveUpdate(INITIAL_UPDATE_STATE, PAYLOAD)), 'net')
+    const again = receiveUpdate(failed, PAYLOAD)
+    // 보존 규칙은 downloading/done만 — error는 idle로 떨어져 재시도 클릭 가능.
+    expect(again.phase).toBe('idle')
+    expect(again.error).toBeNull()
+  })
 })
 
 describe('updateIndicator — 라벨/타이틀', () => {

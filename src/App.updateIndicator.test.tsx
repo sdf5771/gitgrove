@@ -74,6 +74,27 @@ describe('업데이트 인디케이터 — App 통합', () => {
     expect(shown('GitGrove 2.0.0 출시')).toBe(true)
   })
 
+  it('[.tb-right 회귀] 인디케이터는 우측 핀 영역(.tb-right) 안에 추가되고 브랜치 표시는 유지', async () => {
+    const mock = installWithUpdateCapture()
+    const { container } = render(<App />)
+    await waitFor(() => expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true))
+
+    // 타이틀바 우측 영역과 브랜치 표시는 인디케이터 등장 전부터 존재.
+    const tbRight = container.querySelector('.tb-right')
+    expect(tbRight).not.toBeNull()
+    // 인디케이터 미수신 상태에선 인디케이터가 우측 영역에 없음.
+    expect(screen.queryByText(/새 버전 v/)).toBeNull()
+
+    mock.emitAvailable(PAYLOAD)
+    await waitFor(() => expect(shown('새 버전 v2.0.0')).toBe(true))
+
+    // 인디케이터(.update-pill)가 .tb-right 내부에 추가됨(우측 핀 레이아웃 무파괴).
+    const pill = screen.getByText('새 버전 v2.0.0').closest('button')
+    expect(pill).not.toBeNull()
+    expect(pill).toHaveClass('update-pill')
+    expect(tbRight!.contains(pill)).toBe(true)
+  })
+
   it('인디케이터 클릭 → downloadUpdate(dmgUrl) 호출 + 진행률 반영 + 완료', async () => {
     const mock = installWithUpdateCapture()
     let resolveDl: (v: { path: string }) => void = () => {}
@@ -132,5 +153,24 @@ describe('업데이트 인디케이터 — App 통합', () => {
     await waitFor(() => expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true))
     unmount()
     expect(mock.unsub).toHaveBeenCalled()
+  })
+
+  // ⚠️ 알려진 버그(QA, Medium): onUpdateAvailable 구독은 cleanup으로 해제되지 않는다.
+  //   - preload.ts onUpdateAvailable 는 unsub 함수를 반환하지 않음(onUpdateDownloadProgress 와 비대칭).
+  //   - App.tsx 의 onUpdateAvailable effect 도 cleanup return 이 없음.
+  //   StrictMode(dev) 이중 마운트/향후 remount 시 'app:update-available' 리스너가
+  //   누적되어 시작 알림 토스트가 중복 발생할 수 있다.
+  //   it.fails: 현재 코드에선 '해제 안 됨'이 기대 → 통과. 프론트가 cleanup을 붙이면
+  //   이 테스트가 red 로 뒤집혀 가드가 작동한다(그 시점에 .fails 제거 + 양성 단언으로 교체).
+  it.fails('[알려진 누수] 언마운트 시 onUpdateAvailable 구독은 (현재) 해제되지 않는다', async () => {
+    const mock = installGitApiMock()
+    const availUnsub = vi.fn()
+    // 픽스가 적용된 preload 라면 unsub 함수를 반환할 것이라고 가정한 mock.
+    mock.appAPI.onUpdateAvailable.mockImplementation(() => () => { availUnsub() })
+    const { unmount } = render(<App />)
+    await waitFor(() => expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true))
+    unmount()
+    // 픽스 전: App이 반환 unsub을 호출하지 않으므로 이 단언은 실패 → it.fails 로 통과.
+    expect(availUnsub).toHaveBeenCalled()
   })
 })

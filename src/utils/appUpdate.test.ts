@@ -33,6 +33,19 @@ describe('isAllowedUpdateHost', () => {
     expect(isAllowedUpdateHost('https://notgithub.com/x.dmg')).toBe(false)
   })
 
+  it('호스트 토큰을 도메인이 아닌 경로/서브도메인 우회로 끼워넣어도 — 토큰이 호스트명에 있으면만 허용', () => {
+    // SSRF: 악성 호스트가 경로에 토큰을 넣어도 hostname에는 없으므로 거부.
+    expect(isAllowedUpdateHost('https://evil.com/github-releases/x.dmg')).toBe(false)
+    expect(isAllowedUpdateHost('https://evil.com/github-production-release-asset/x.dmg')).toBe(false)
+    // 단, 토큰이 호스트명에 포함되면 허용(현 정책의 의도된 동작 — 회귀 감지용 고정).
+    expect(isAllowedUpdateHost('https://github-releases.evil.com/x.dmg')).toBe(true)
+  })
+
+  it('포트가 붙어도 호스트 판정은 hostname 기준(포트 무관)', () => {
+    expect(isAllowedUpdateHost('https://github.com:443/a/b.dmg')).toBe(true)
+    expect(isAllowedUpdateHost('https://evil.com:443/a/b.dmg')).toBe(false)
+  })
+
   it('잘못된 URL/빈 문자열 거부', () => {
     expect(isAllowedUpdateHost('')).toBe(false)
     expect(isAllowedUpdateHost('not a url')).toBe(false)
@@ -77,6 +90,21 @@ describe('pickDmgAsset', () => {
   it('null/undefined 입력은 null', () => {
     expect(pickDmgAsset(null)).toBeNull()
     expect(pickDmgAsset(undefined)).toBeNull()
+  })
+
+  // SSRF 방어-심층: 신뢰 호스트 .dmg가 하나도 없으면 비신뢰 첫 .dmg로 폴백한다.
+  // (다운로드 시점에 main의 isAllowedUpdateHost가 재검증하므로 여기서 거르지 않아도 안전.)
+  it('신뢰 호스트 .dmg가 전무하면 비신뢰 첫 .dmg로 폴백(다운로드 단계가 재검증)', () => {
+    const evilA: ReleaseAsset = { name: 'a.dmg', browser_download_url: 'https://evil.com/a.dmg' }
+    const evilB: ReleaseAsset = { name: 'b.dmg', browser_download_url: 'http://github.com/b.dmg' }
+    expect(pickDmgAsset([evilA, evilB])).toEqual(evilA)
+    // 폴백 자산은 화이트리스트를 통과하지 못함 → 다운로드 단계에서 차단됨을 보증.
+    expect(isAllowedUpdateHost(evilA.browser_download_url)).toBe(false)
+  })
+
+  it('이름이 .dmg가 아닌 자산은 후보에서 제외(확장자 위장 차단)', () => {
+    const fake: ReleaseAsset = { name: 'GitGrove.dmg.txt', browser_download_url: 'https://github.com/a/GitGrove.dmg.txt' }
+    expect(pickDmgAsset([fake])).toBeNull()
   })
 })
 
