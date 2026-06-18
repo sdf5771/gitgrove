@@ -7,11 +7,11 @@
 <div align="center">
 
   [![License: MIT](https://img.shields.io/badge/License-MIT-6fcf7c.svg?style=flat-square)](LICENSE)
-  [![Platform](https://img.shields.io/badge/Platform-macOS-b8c0d8.svg?style=flat-square)](https://github.com/seobisback/gitgrove/releases)
+  [![Platform](https://img.shields.io/badge/Platform-macOS-b8c0d8.svg?style=flat-square)](https://github.com/sdf5771/gitgrove/releases)
   [![React](https://img.shields.io/badge/React-18.3-5fb8e6.svg?style=flat-square&logo=react&logoColor=white)](https://react.dev)
   [![Electron](https://img.shields.io/badge/Electron-30-c39ad9.svg?style=flat-square&logo=electron&logoColor=white)](https://electronjs.org)
   [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-5fb8e6.svg?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
-  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e6a536.svg?style=flat-square)](https://github.com/seobisback/gitgrove/pulls)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-e6a536.svg?style=flat-square)](https://github.com/sdf5771/gitgrove/pulls)
 
 </div>
 
@@ -19,7 +19,7 @@
 
 <div align="center">
   <strong>A professional dark-mode Git GUI desktop app for macOS.</strong><br>
-  Visual branch graph · Staging area · Diff explorer · PR review — all in one window.
+  Visual branch graph · Staging area · Diff explorer · PR / MR review · GitHub notifications — all in one window.
 </div>
 
 <br>
@@ -38,6 +38,16 @@
   <strong>그루 (Geuru)</strong> — GitGrove의 마스코트.<br>
   커밋을 심으면 무럭무럭 자라는 작은 새싹 정령이에요. 머지·푸시·충돌마다 표정이 바뀌며,<br>
   타이틀바 · 상태바 · 저장소 관리 화면 곳곳에서 함께합니다.
+</div>
+
+<br>
+
+---
+
+## ✦ 둘러보기 (Tour)
+
+<div align="center">
+  <img src="assets/geuru-tour.svg" alt="GitGrove 둘러보기 — 그루가 안내하는 기능 투어" width="100%">
 </div>
 
 <br>
@@ -86,7 +96,8 @@
 | **Stage** | Two-column unstaged ↔ staged file mover, commit message editor, amend support — **per-hunk Stage / Unstage** (`git add -p` style) |
 | **Diff Explorer** | Full-screen side-by-side diff with syntax highlighting and file list |
 | **Git Blame** | Line-by-line blame with author info — click to jump to commit |
-| **PR Review** | Open / Merged PR list, file changes, inline comments, CI checks, approve / request-changes — **GitHub-flavored Markdown** rendering for descriptions & comments |
+| **PR / MR Review** | Open / Merged list, file changes, inline comments, CI / pipeline checks, approve / request-changes — for both **GitHub** Pull Requests and **GitLab** Merge Requests, with **GitHub-flavored Markdown** rendering for descriptions & comments |
+| **Notifications** | Global GitHub notification inbox (reason-grouped) with unread badge — **background polling** surfaces new items as **native macOS notifications** (Dock badge + bounce), and clicking brings the app forward |
 
 ### Git Operations
 | Operation | Details |
@@ -108,8 +119,10 @@
 - **Multi-repo Tabs** — open multiple repos in one window, with dirty-state indicator
 - **Right-click Context Menu** — Cherry-pick · Revert · Reset (soft / mixed / hard) · Branch here · Tag here
 - **Branch Context Menu** — right-click any branch to Checkout / Merge / Rebase / Rename / Delete / Push / Pull
+- **Stage File Context Menu** — right-click a changed file to Discard changes (with confirm) · add to `.gitignore` (file / extension) · copy path · reveal in Finder · open with default app
+- **In-app Auto-update** — checks for new releases while running (periodic + on focus), then downloads and opens the `.dmg` in-app with a corner update indicator — no manual re-download
 - **Confirm Dialogs** — every destructive operation (delete, reset --hard, drop, etc.) requires confirmation
-- **Settings Panel** — Git config · Appearance · **GitHub integration**: PAT setup guide with one-click token pages, in-place token **verify** (scopes + rate limit), and **secure token storage** via OS keychain (Electron `safeStorage`)
+- **Settings Panel** — Git config · Appearance · notification sound · **GitHub & GitLab integration**: PAT / token setup guide with one-click token pages, in-place token **verify** (scopes + rate limit), and **secure token storage** via OS keychain (Electron `safeStorage`)
 - **GitHub Profile Card** — click the status-bar profile to preview account info (name, bio, followers / following, repos, location) and your **permission role** on the current repo, then jump to GitHub
 - **Focus Auto-refresh** — repository state refreshes when the app regains focus
 
@@ -293,6 +306,10 @@ gitgrove/
 - [x] Settings: PAT setup guide, token verification, secure storage (OS keychain)
 - [x] GitHub-flavored Markdown rendering for PR descriptions & comments
 - [x] Repository Manager: workspaces, remote clone (shallow option), favorites / recent, safe non-git folder handling
+- [x] GitLab integration — Merge Request review with pipeline checks
+- [x] Global GitHub notifications — background polling + native macOS alerts (Dock badge / bounce)
+- [x] In-app auto-update — periodic / on-focus checks, in-app `.dmg` download
+- [x] Stage file right-click context menu — discard · `.gitignore` · copy path · reveal / open
 - [ ] SSH / HTTPS authentication manager
 - [ ] Commit graph virtualization (large repos)
 - [ ] Split-diff editor with inline editing
