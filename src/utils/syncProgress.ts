@@ -227,7 +227,7 @@ export function mapResult(result: GitRemoteResult): ResultView {
       geuru: 'conflict',
       title: '병합 충돌이 생겼어요',
       detail: `${filesTxt}이 양쪽에서 바뀌었어요 · 직접 해결이 필요해요`,
-      toast: { cls: 'warning', geuru: 'conflict', title: '충돌 발생', msg: n > 0 ? `${n} files conflicted` : 'conflicted' },
+      toast: { cls: 'warning', geuru: 'conflict', title: '충돌 발생', msg: n > 0 ? `${n}개 파일 · 해결이 필요해요` : '해결이 필요해요' },
     }
   }
 
@@ -238,7 +238,7 @@ export function mapResult(result: GitRemoteResult): ResultView {
       geuru: 'happy',
       title: '이미 최신 상태예요',
       detail: opTarget(op).from + ' 과 같은 커밋이에요 · 받을 변경사항이 없어요',
-      toast: { cls: 'info', geuru: 'happy', title: '이미 최신', msg: '변경사항 없음 · up to date' },
+      toast: { cls: 'info', geuru: 'happy', title: '이미 최신', msg: '변경사항 없음 · 최신 상태' },
     }
   }
 
