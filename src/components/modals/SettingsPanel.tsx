@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { getUser, getRateLimit, GithubApiError } from '../../utils/githubClient'
 import { getCurrentUser, GitlabApiError, type GitlabUser } from '../../utils/gitlabClient'
 import { normalizeGitlabHost } from '../../utils/gitlab'
+import { NOTIFICATION_SOUNDS } from '../../utils/notifSettings'
 import { Geuru } from '../Geuru'
 
 export type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github' | 'gitlab'
@@ -151,6 +152,13 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
   const [showDiffStats, setShowDiffStats] = useState<boolean>(
     typeof _saved.showDiffStats === 'boolean' ? _saved.showDiffStats : true
   )
+  // 알림 사운드 설정 (NotificationBell이 소비) — 기본 on / 'Glass'.
+  const [notificationSoundEnabled, setNotificationSoundEnabled] = useState<boolean>(
+    typeof _saved.notificationSoundEnabled === 'boolean' ? _saved.notificationSoundEnabled : true
+  )
+  const [notificationSound, setNotificationSound] = useState<string>(
+    typeof _saved.notificationSound === 'string' && _saved.notificationSound ? _saved.notificationSound : 'Glass'
+  )
 
   useEffect(() => {
     if (!repoPath) return
@@ -206,7 +214,7 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
   }, [])
 
   const save = async () => {
-    const settings = { density, fontSize, tabWidth, showDiffStats }
+    const settings = { density, fontSize, tabWidth, showDiffStats, notificationSoundEnabled, notificationSound }
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* ignore */ }
     await persistToken(githubToken)
     document.documentElement.style.setProperty('--editor-font-size', `${fontSize}px`)
@@ -418,6 +426,24 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                 <div className="sett-field"><div className="sett-lbl">Tab width</div>
                   <select className="sett-sel" value={tabWidth} onChange={e => setTabWidth(e.target.value)}>
                     {['2','4','8'].map(v => <option key={v} value={v}>{v} spaces</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="sett-section">
+                <div className="sett-sec-ttl">알림</div>
+                <div className="sett-toggle" onClick={() => setNotificationSoundEnabled(v => !v)}>
+                  <div className="sett-toggle-info"><div className="sett-toggle-lbl">알림 소리</div><div className="sett-toggle-sub">새 알림이 오면 소리로 알려줘요</div></div>
+                  <button className={`sett-sw ${notificationSoundEnabled ? 'on' : 'off'}`} />
+                </div>
+                <div className="sett-field"><div className="sett-lbl">사운드</div>
+                  <select
+                    className="sett-sel"
+                    aria-label="알림 사운드"
+                    value={notificationSound}
+                    disabled={!notificationSoundEnabled}
+                    onChange={e => setNotificationSound(e.target.value)}
+                  >
+                    {NOTIFICATION_SOUNDS.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
               </div>
