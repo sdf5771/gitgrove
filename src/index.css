@@ -576,6 +576,12 @@ body { display: flex; align-items: center; justify-content: center; }
 /* 탭 스트립은 타이틀 바 가용 가로폭(우측 그룹 직전까지)을 채운다.
    기존 max-width:500px 캡 제거 → 빈 공간이 있으면 탭이 펼쳐지고,
    정말 넘칠 때만 내부 가로 스크롤(overflow-x:auto)이 동작한다. min-width:0로 축소 허용. */
+/* 탭 스트립 + '+'(추가) 버튼을 감싸는 래퍼. .title-bar(flex)의 직접 자식으로서
+   flex:1 1 auto + min-width:0로 가용폭만 점유하고 줄어든다. 이게 없으면 래퍼가
+   max-content(전체 탭 너비)로 팽창해 .tb-right(우측 고정 그룹)를 뷰포트 밖으로 밀어낸다.
+   overflow:hidden으로 래퍼가 넘치지 않고, 내부 .repo-tabs의 overflow-x:auto가
+   실제 탭 가로 스크롤을 담당한다. '+'(repo-tab-add)는 flex-shrink:0로 항상 보인다. */
+.repo-tabs-wrap{display:flex;align-items:center;gap:0;flex:1 1 auto;min-width:0;overflow:hidden;}
 .repo-tabs{display:flex;align-items:center;gap:0;overflow-x:auto;flex:1 1 auto;min-width:0;scrollbar-width:none;}
 .repo-tabs::-webkit-scrollbar{display:none;}
 .repo-tab{display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;font-size:12px;color:var(--c-text-muted);border-right:1px solid var(--c-border);white-space:nowrap;transition:background 80ms,color 80ms;position:relative;flex-shrink:0;}
