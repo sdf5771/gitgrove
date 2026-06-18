@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitGrove — 라이팅 가이드</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;700&family=DotGothic16&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --c-bg-deep:#0d1220; --c-bg-surface:#161d30; --c-bg-elevated:#1f273e; --c-bg-inset:#0a0f1c;
+  --c-border:#2d3551; --c-border-strong:#45506e; --c-divider:#232a44;
+  --c-gold-200:#ffd770; --c-gold-300:#f5b94a; --c-gold-400:#e6a536; --c-gold-500:#c98a22;
+  --c-gold-bg:rgba(230,165,54,.14); --c-gold-bg-soft:rgba(230,165,54,.07); --c-gold-border:rgba(230,165,54,.4);
+  --c-grove:#6fcf7c; --c-grove-d:#3f9550;
+  --c-success:#6fcf7c; --c-info:#5fb8e6; --c-danger:#ff6b6b; --c-warning:#ffce5a; --c-purple:#c39ad9;
+  --c-text:#b8c0d8; --c-text-strong:#f4ecd2; --c-text-muted:#6d7798; --c-text-faint:#4a5273; --c-text-on-gold:#1a1206;
+  --font-display:'Pixelify Sans','DotGothic16',system-ui,sans-serif;
+  --font-body:'Noto Sans KR',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{background:#070b14;}
+body{font-family:var(--font-body);color:var(--c-text);line-height:1.6;-webkit-font-smoothing:antialiased;}
+.sprite{display:block;image-rendering:pixelated;image-rendering:crisp-edges;}
+::selection{background:rgba(230,165,54,.3);color:var(--c-text-strong);}
+
+.page{max-width:920px;margin:0 auto;padding:62px 40px 120px;}
+
+/* hero */
+.hero{display:flex;align-items:flex-start;gap:22px;margin-bottom:14px;}
+.hero-geuru{flex-shrink:0;filter:drop-shadow(0 4px 0 rgba(0,0,0,.3));margin-top:6px;}
+.eyebrow{font-family:var(--font-display);font-size:11px;text-transform:uppercase;letter-spacing:.16em;color:var(--c-text-faint);margin-bottom:10px;}
+.page-name{font-family:var(--font-display);font-size:40px;color:var(--c-gold-200);letter-spacing:.5px;line-height:1.05;margin-bottom:12px;}
+.page-sub{font-size:14px;color:var(--c-text-muted);max-width:560px;line-height:1.7;}
+.page-sub b{color:var(--c-text);font-weight:500;}
+
+.rule{height:1px;background:var(--c-divider);margin:48px 0;}
+.rule.tight{margin:34px 0;}
+
+.sec-label{font-family:var(--font-display);font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:var(--c-text-faint);margin-bottom:14px;display:flex;align-items:center;gap:9px;}
+.sec-label .num{color:var(--c-gold-400);}
+.sec-title{font-family:var(--font-display);font-size:23px;color:var(--c-text-strong);letter-spacing:.4px;margin-bottom:9px;}
+.sec-desc{font-size:13px;color:var(--c-text-muted);margin-bottom:26px;line-height:1.7;max-width:640px;}
+.sec-desc code{font-family:var(--font-mono);font-size:12px;color:var(--c-gold-300);}
+
+/* the line — hero statement */
+.theline{position:relative;border:1px solid var(--c-gold-border);border-radius:14px;padding:42px 38px;background:
+  radial-gradient(120% 90% at 25% 0%,rgba(230,165,54,.1),transparent 60%),var(--c-bg-surface);overflow:hidden;}
+.theline::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--c-gold-400),transparent);opacity:.55;}
+.theline .lead{font-family:var(--font-display);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--c-text-faint);margin-bottom:16px;}
+.theline .big{font-family:var(--font-display);font-size:42px;color:var(--c-gold-200);letter-spacing:.5px;line-height:1.15;margin-bottom:16px;}
+.theline .pos{font-size:15px;color:var(--c-text);line-height:1.7;max-width:600px;}
+.theline .pos b{color:var(--c-grove);font-weight:500;}
+
+/* pitch blocks */
+.pitch{display:flex;flex-direction:column;gap:12px;}
+.pblock{background:var(--c-bg-surface);border:1px solid var(--c-border);border-radius:10px;overflow:hidden;}
+.pblock-hd{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--c-divider);background:var(--c-bg-inset);}
+.pblock-tag{font-family:var(--font-display);font-size:11px;color:var(--c-gold-300);letter-spacing:.05em;}
+.pblock-len{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);}
+.pblock-body{padding:16px 18px;font-size:14.5px;color:var(--c-text-strong);line-height:1.7;}
+.pblock-body.lg{font-size:16px;}
+.pblock-body.sm{font-size:13.5px;color:var(--c-text);line-height:1.75;}
+.pblock-body b{color:var(--c-grove);font-weight:500;}
+.pblock-body .mono{font-family:var(--font-mono);color:var(--c-gold-300);font-size:.92em;}
+
+/* voice principles */
+.principles{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+.principle{background:var(--c-bg-surface);border:1px solid var(--c-border);border-radius:10px;padding:16px 17px;display:flex;flex-direction:column;gap:8px;}
+.principle .pnum{font-family:var(--font-display);font-size:13px;color:var(--c-gold-400);}
+.principle h4{font-family:var(--font-display);font-size:14.5px;color:var(--c-text-strong);font-weight:400;letter-spacing:.2px;}
+.principle p{font-size:12.5px;color:var(--c-text-muted);line-height:1.65;}
+.principle .ex{margin-top:4px;display:flex;flex-direction:column;gap:4px;font-size:12px;font-family:var(--font-mono);}
+.principle .ex .ok{color:var(--c-grove);}
+.principle .ex .ok::before{content:'○ ';color:var(--c-grove);}
+.principle .ex .no{color:var(--c-text-faint);text-decoration:line-through;}
+.principle .ex .no::before{content:'✕ ';color:var(--c-danger);text-decoration:none;}
+
+/* feature copy table */
+.ftable{border:1px solid var(--c-border);border-radius:10px;overflow:hidden;}
+.frow{display:flex;align-items:center;gap:16px;padding:14px 18px;border-bottom:1px solid var(--c-divider);}
+.frow:last-child{border-bottom:none;}
+.frow:hover{background:var(--c-gold-bg-soft);}
+.frow .fscreen{font-family:var(--font-display);font-size:13.5px;color:var(--c-text-strong);width:150px;flex-shrink:0;letter-spacing:.2px;}
+.frow .fcopy{font-size:14px;color:var(--c-text);flex:1;}
+.frow .fcopy b{color:var(--c-grove);font-weight:500;}
+
+/* microcopy cards */
+.micro{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+.mcard{background:var(--c-bg-surface);border:1px solid var(--c-border);border-radius:10px;overflow:hidden;}
+.mcard-hd{padding:8px 14px;border-bottom:1px solid var(--c-divider);font-family:var(--font-display);font-size:11px;letter-spacing:.06em;color:var(--c-text-faint);text-transform:uppercase;background:var(--c-bg-inset);}
+.mcard-body{padding:14px 16px;display:flex;flex-direction:column;gap:11px;}
+.mrow{display:flex;align-items:center;gap:11px;}
+.mrow .geu{flex-shrink:0;}
+.mrow .mtxt b{display:block;font-family:var(--font-display);font-size:13px;color:var(--c-text-strong);font-weight:400;letter-spacing:.2px;}
+.mrow .mtxt span{font-size:11.5px;color:var(--c-text-muted);font-family:var(--font-mono);}
+.mbtns{display:flex;gap:7px;flex-wrap:wrap;}
+.mbtn{font-family:var(--font-display);font-size:12px;letter-spacing:.2px;padding:6px 13px;border-radius:5px;}
+.mbtn.gold{background:linear-gradient(180deg,var(--c-gold-400),var(--c-gold-500));color:var(--c-text-on-gold);box-shadow:inset 0 1px 0 rgba(255,235,170,.25);}
+.mbtn.ghost{background:var(--c-bg-elevated);border:1px solid var(--c-border);color:var(--c-text-muted);}
+.merr{display:flex;align-items:center;gap:9px;font-family:var(--font-mono);font-size:12.5px;color:var(--c-danger);padding:7px 11px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.3);border-radius:6px;}
+
+/* do/dont */
+.dd{display:grid;grid-template-columns:1fr 1fr;gap:13px;}
+.ddcard{border-radius:10px;overflow:hidden;border:1px solid;}
+.ddcard.do{border-color:rgba(111,207,124,.3);background:rgba(111,207,124,.04);}
+.ddcard.no{border-color:rgba(255,107,107,.3);background:rgba(255,107,107,.04);}
+.ddcard-hd{padding:9px 15px;font-family:var(--font-display);font-size:12px;letter-spacing:.06em;}
+.ddcard.do .ddcard-hd{color:var(--c-grove);background:rgba(111,207,124,.1);}
+.ddcard.no .ddcard-hd{color:var(--c-danger);background:rgba(255,107,107,.1);}
+.ddcard ul{list-style:none;padding:12px 15px;display:flex;flex-direction:column;gap:9px;}
+.ddcard li{font-size:12.5px;color:var(--c-text);line-height:1.5;padding-left:18px;position:relative;}
+.ddcard.do li::before{content:'○';position:absolute;left:0;color:var(--c-grove);}
+.ddcard.no li::before{content:'✕';position:absolute;left:0;color:var(--c-danger);}
+.ddcard li .mono{font-family:var(--font-mono);font-size:11.5px;color:var(--c-text-muted);}
+
+/* footer */
+.foot{margin-top:54px;border:1px solid var(--c-border);border-radius:12px;padding:22px 24px;display:flex;align-items:center;gap:18px;background:var(--c-bg-surface);}
+.foot-geuru{display:flex;gap:9px;flex-shrink:0;}
+.foot-txt b{font-family:var(--font-display);font-size:15px;color:var(--c-gold-200);letter-spacing:.3px;display:block;margin-bottom:3px;}
+.foot-txt span{font-size:12px;color:var(--c-text-muted);line-height:1.6;}
+
+@media(max-width:720px){.principles,.micro,.dd{grid-template-columns:1fr;}.frow{flex-direction:column;align-items:flex-start;gap:5px;}.frow .fscreen{width:auto;}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- hero -->
+  <div class="hero">
+    <span class="hero-geuru" id="heroGeuru"></span>
+    <div>
+      <div class="eyebrow">GitGrove · Writing &amp; Voice</div>
+      <div class="page-name">GitGrove 라이팅 가이드</div>
+      <div class="page-sub">GitGrove가 사람에게 말하는 방식이에요. 태그라인부터 버튼·빈 상태·에러까지, <b>그대로 가져다 쓰는 카피</b>와 그 카피를 만드는 원칙을 정리했어요. 한국어 먼저 · 가운뎃점으로 잇고 · 상태는 그루가 표정으로 전해요.</div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- 01 the line -->
+  <div class="sec-label"><span class="num">01</span> The line · 한 줄</div>
+  <div class="theline">
+    <div class="lead">브랜드 한 줄</div>
+    <div class="big">커밋 하나, 새싹 하나.</div>
+    <div class="pos">GitGrove는 <b>저장소가 정원의 나무처럼 자라는</b>, macOS용 다크모드 Git GUI예요. 브랜치 그래프부터 스테이징 · Diff · PR 리뷰까지 한 창에서 끝내고, 마스코트 <b>그루</b>가 곁에서 상태를 표정으로 알려줘요.</div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- 02 pitch -->
+  <div class="sec-label"><span class="num">02</span> Pitch · 길이별 피치</div>
+  <div class="sec-title">상황에 맞게 골라 쓰세요</div>
+  <div class="sec-desc">짧은 자리(스토어 한 줄, og:description)부터 긴 소개(README, 랜딩)까지. 셋 다 같은 뜻, 같은 톤이에요.</div>
+  <div class="pitch">
+    <div class="pblock">
+      <div class="pblock-hd"><span class="pblock-tag">한 줄</span><span class="pblock-len">tagline · 스토어 헤드라인</span></div>
+      <div class="pblock-body lg">한 창에서 끝내는 Git GUI, <b style="color:var(--c-gold-200)">GitGrove</b>.</div>
+    </div>
+    <div class="pblock">
+      <div class="pblock-hd"><span class="pblock-tag">한 문장</span><span class="pblock-len">og:description · 부제</span></div>
+      <div class="pblock-body">브랜치 그래프 · 스테이징 · Diff · PR 리뷰를 터미널을 오가지 않고 한 창에서 — 그리고 <b>그루</b>가 곁에서 상태를 알려줘요.</div>
+    </div>
+    <div class="pblock">
+      <div class="pblock-hd"><span class="pblock-tag">한 문단</span><span class="pblock-len">README · 랜딩 인트로</span></div>
+      <div class="pblock-body sm">GitGrove는 macOS를 위한 다크모드 Git GUI예요. 브랜치가 어떻게 자랐는지 그래프로 보고, 변경을 골라 커밋하고, 무엇이 바뀌었는지 좌우로 비교하고, PR과 파이프라인까지 앱 안에서 다뤄요. 저장소는 정원의 나무가 되어 활동에 따라 무럭무럭 자라고, 마스코트 <b>그루</b>가 머지 · 충돌 · 동기화마다 표정으로 곁을 지켜요. <span class="mono">커밋 하나, 새싹 하나.</span></div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- 03 voice -->
+  <div class="sec-label"><span class="num">03</span> Voice · 네 가지 원칙</div>
+  <div class="sec-title">이렇게 쓰면 GitGrove다워요</div>
+  <div class="sec-desc">새 카피를 쓸 때 이 네 가지만 지키면 톤이 흔들리지 않아요.</div>
+  <div class="principles">
+    <div class="principle">
+      <span class="pnum">01</span>
+      <h4>한국어 먼저, 짧게</h4>
+      <p>한글이 기본이에요. 버튼·라벨은 명사형으로 짧게, 주어(당신·제가)는 생략해요. 개발자용 표기(phase, WebSocket)만 영어로 남겨요.</p>
+      <div class="ex"><span class="ok">변경을 골라 심어요</span><span class="no">당신의 변경사항을 선택하세요</span></div>
+    </div>
+    <div class="principle">
+      <span class="pnum">02</span>
+      <h4>따뜻하지만 호들갑 없이</h4>
+      <p>친한 방장이 말하듯 담백하게. 과장 형용사와 느낌표 남발은 피해요. 레트로 아케이드 정서는 표정과 픽셀이 맡고, 글은 차분해요.</p>
+      <div class="ex"><span class="ok">머지 완료 · main 최신화</span><span class="no">머지 성공! 지금 바로 확인하세요!!</span></div>
+    </div>
+    <div class="principle">
+      <span class="pnum">03</span>
+      <h4>상태는 그루가 표정으로</h4>
+      <p>글로 다 설명하지 않아요. 진행·완료·충돌은 그루의 표정(think · merge · conflict · sleepy)이 먼저 전하고, 글은 사실만 짧게 받쳐요.</p>
+      <div class="ex"><span class="ok">충돌 발생 · 3 files</span><span class="no">앗! 충돌이 발생했어요. 당황하지 마세요</span></div>
+    </div>
+    <div class="principle">
+      <span class="pnum">04</span>
+      <h4>가운뎃점으로 잇기</h4>
+      <p>상태 조각은 쉼표·파이프 대신 가운뎃점 <code>·</code>으로 이어요. 숫자는 서양 숫자, 99 넘으면 <code>99+</code>. 에러는 사유 + 코드.</p>
+      <div class="ex"><span class="ok">origin · main · 방금 동기화됨</span><span class="no">origin, main, 방금 동기화됨</span></div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- 04 feature copy -->
+  <div class="sec-label"><span class="num">04</span> Feature copy · 화면별 한 줄</div>
+  <div class="sec-title">각 화면을 소개하는 말</div>
+  <div class="sec-desc">기능표 · 투어 · 툴팁에 그대로 쓰는 한 줄. 무엇을 하는지보다 무엇이 좋아지는지를 말해요.</div>
+  <div class="ftable">
+    <div class="frow"><span class="fscreen">히스토리</span><span class="fcopy">브랜치가 어떻게 자랐는지 <b>한눈에</b>. 레인과 머지를 그래프로 따라가요.</span></div>
+    <div class="frow"><span class="fscreen">스테이지 &amp; 커밋</span><span class="fcopy">변경을 골라 심어요. <b>훅 단위</b>까지 나눠 담아요.</span></div>
+    <div class="frow"><span class="fscreen">Diff 탐색기</span><span class="fcopy">무엇이 바뀌었는지 <b>좌우로 나란히</b>. 구문 강조까지.</span></div>
+    <div class="frow"><span class="fscreen">PR · MR 리뷰</span><span class="fcopy">리뷰 · 파이프라인 · 머지를 <b>앱 안에서</b>. GitHub도 GitLab도.</span></div>
+    <div class="frow"><span class="fscreen">저장소 · 그로브</span><span class="fcopy">저장소가 나무가 되는 <b>나의 정원</b>. 활동만큼 무럭무럭 자라요.</span></div>
+    <div class="frow"><span class="fscreen">동기화 · Clone</span><span class="fcopy">받고 올리는 동안 <b>그루가 함께 기다려요</b>. 단계도 % 로 또렷하게.</span></div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- 05 microcopy -->
+  <div class="sec-label"><span class="num">05</span> Microcopy · 작은 말들</div>
+  <div class="sec-title">버튼 · 빈 상태 · 에러 · 토스트</div>
+  <div class="sec-desc">실제 UI에 들어가는 표준 문구예요. 그루 표정과 짝지어 그대로 쓰세요.</div>
+  <div class="micro">
+    <div class="mcard">
+      <div class="mcard-hd">버튼 · 명사형</div>
+      <div class="mcard-body">
+        <div class="mbtns"><span class="mbtn gold">Clone</span><span class="mbtn ghost">열기</span><span class="mbtn gold">커밋</span><span class="mbtn ghost">머지</span><span class="mbtn gold">승인</span><span class="mbtn ghost">스태시</span></div>
+        <div style="font-size:11.5px;color:var(--c-text-faint);font-family:var(--font-mono)">짧은 명사 · 영어는 Sentence case</div>
+      </div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-hd">빈 상태 · 다음 행동 제안</div>
+      <div class="mcard-body">
+        <div class="mrow"><span class="geu" id="m_sleepy"></span><div class="mtxt"><b>아직 심은 나무가 없어요</b><span>저장소를 Clone 하거나 폴더를 열어 보세요</span></div></div>
+        <div class="mrow"><span class="geu" id="m_idle"></span><div class="mtxt"><b>아직 커밋이 없어요</b><span>첫 커밋을 심으면 그루가 자라요</span></div></div>
+      </div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-hd">에러 · 사유 + 코드</div>
+      <div class="mcard-body">
+        <div class="merr">인증이 필요해요 · 401</div>
+        <div class="merr">저장소를 찾을 수 없어요 · 404</div>
+        <div style="font-size:11.5px;color:var(--c-text-faint);font-family:var(--font-mono)">담백한 명사 문장 · 사유를 먼저, 코드는 뒤에</div>
+      </div>
+    </div>
+    <div class="mcard">
+      <div class="mcard-hd">토스트 · 그루 + 사실</div>
+      <div class="mcard-body">
+        <div class="mrow"><span class="geu" id="m_merge"></span><div class="mtxt"><b>머지 완료</b><span>main 최신화 · 12 files</span></div></div>
+        <div class="mrow"><span class="geu" id="m_conflict"></span><div class="mtxt"><b>충돌 발생</b><span>3 files · 해결이 필요해요</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rule"></div>
+
+  <!-- 06 do/dont -->
+  <div class="sec-label"><span class="num">06</span> Do &amp; Don't</div>
+  <div class="sec-title">지킬 것, 피할 것</div>
+  <div class="dd">
+    <div class="ddcard do">
+      <div class="ddcard-hd">○ 이렇게</div>
+      <ul>
+        <li>해요체로 차분하게 · 명사형 버튼</li>
+        <li>상태 조각은 가운뎃점 <span class="mono">name · room · phase</span></li>
+        <li>감정은 그루 표정에 맡기고 글은 사실만</li>
+        <li>에러는 사유 먼저 <span class="mono">네트워크 오류 · 503</span></li>
+        <li>정원 · 나무 · 새싹 은유는 자연스럽게만</li>
+      </ul>
+    </div>
+    <div class="ddcard no">
+      <div class="ddcard-hd">✕ 이건 피해요</div>
+      <ul>
+        <li>느낌표 남발 · <span class="mono">"최고의" "지금 바로"</span></li>
+        <li>장식용 이모지 (기능 글리프만 허용)</li>
+        <li>한글 대문자 강조 · 당신 · 제가</li>
+        <li>뻔한 버튼 설명 툴팁</li>
+        <li>은유 과용 — 나무 비유를 모든 문장에 욱여넣기</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- footer -->
+  <div class="foot">
+    <div class="foot-geuru" id="footGeuru"></div>
+    <div class="foot-txt"><b>커밋 하나, 새싹 하나.</b><span>이 한 줄이 GitGrove 라이팅의 시작이자 끝이에요. 무엇을 쓸지 망설여지면, 그루라면 어떻게 말할지 떠올려요.</span></div>
+  </div>
+
+</div>
+
+<script>
+const PAL={'.':null,G:'#e6a536',D:'#c98a22',H:'#ffd770',L:'#6fcf7c',l:'#3f9550',E:'#10182b',W:'#f4ecd2',k:'#ff9b6b',b:'#8a5a1e',m:'#7a4412',s:'#5fb8e6',z:'#9fb0d8'};
+const BASE=["................","....LL....LL....","...LlLL..LLlL...","....LLLllLLL....",".......ll.......","....GGGGGGGG....","...HHGGGGGGGG...","..HHGGGGGGGGGG..","..GGGWEGGWEGGG..","..GkGEEGGEEGkG..","..GGGGGmmGGGGD..","..GGGGGGGGGGDD..","...GGGGGGGGDD...","...GGGGGGGDDD...","....DGGGGGGD....","....bb....bb....","................","................"];
+const cells=BASE.map(r=>r.split(''));
+const EXP={idle:{},happy:{"8,5":"G","8,6":"G","8,9":"G","8,10":"G","9,5":"E","9,6":"E","9,9":"E","9,10":"E","9,3":"k","9,12":"k","10,5":"G","10,6":"m","10,7":"m","10,8":"m","10,9":"m","10,12":"G","11,6":"G","11,7":"m","11,8":"m","11,9":"G"},
+sleepy:{"8,5":"G","8,6":"G","8,9":"G","8,10":"G","9,5":"E","9,6":"E","9,9":"E","9,10":"E","10,7":"G","10,8":"m","5,13":"z","4,14":"z","6,12":"z"},
+think:{"8,5":"E","8,6":"E","8,9":"E","8,10":"E","9,5":"G","9,6":"G","9,9":"G","9,10":"G","10,5":"G","10,6":"G","10,7":"m","10,8":"G","8,13":"z","7,13":"z"},
+merge:{"8,5":"H","8,6":"E","8,9":"H","8,10":"E","9,5":"E","9,6":"H","9,9":"E","9,10":"H","9,3":"k","9,12":"k","10,5":"m","10,6":"G","10,7":"m","10,8":"m","10,9":"G","10,10":"m","11,6":"m","11,7":"m","11,8":"m","11,9":"m","7,1":"H","7,14":"H","12,2":"H"},
+conflict:{"8,5":"E","8,6":"E","8,9":"E","8,10":"E","9,5":"E","9,6":"E","9,9":"E","9,10":"E","10,6":"G","10,7":"m","10,8":"m","10,9":"G","11,7":"m","11,8":"m","8,13":"s","9,13":"s"}};
+function geuru(exp,sc){let r='';for(let y=0;y<18;y++)for(let x=0;x<16;x++){let ch=cells[y][x];const p=(EXP[exp]||{})[y+','+x];if(p!==undefined)ch=p;const c=PAL[ch];if(!c)continue;r+=`<rect x="${x}" y="${y}" width="1.04" height="1.04" fill="${c}"/>`;}return `<svg class="sprite" width="${16*sc}" height="${18*sc}" viewBox="0 0 16 18" shape-rendering="crispEdges">${r}</svg>`;}
+document.getElementById('heroGeuru').innerHTML=geuru('happy',3);
+document.getElementById('m_sleepy').innerHTML=geuru('sleepy',1.6);
+document.getElementById('m_idle').innerHTML=geuru('idle',1.6);
+document.getElementById('m_merge').innerHTML=geuru('merge',1.6);
+document.getElementById('m_conflict').innerHTML=geuru('conflict',1.6);
+document.getElementById('footGeuru').innerHTML=['idle','happy','merge','sleepy'].map(e=>geuru(e,1.5)).join('');
+</script>
+</body>
+</html>
