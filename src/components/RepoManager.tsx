@@ -629,6 +629,8 @@ export interface RepoManagerProps {
   gitlabInstances?: GitlabConn[]
   /** 외부 브라우저로 URL 열기 (인박스 항목 클릭) */
   onOpenUrl: (url: string) => void
+  /** GitHub 탭이 있는 Settings 패널 열기 (미연결 유도 / 토큰 등록) */
+  onOpenGithubSettings: () => void
   /** GitLab 탭이 있는 Settings 패널 열기 (GL5 미연결 유도 / 인스턴스 추가) */
   onOpenGitlabSettings: () => void
   notify: (type: 'info' | 'success' | 'warning' | 'error', title: string, body: string) => void
@@ -637,7 +639,7 @@ export interface RepoManagerProps {
 export function RepoManager({
   repos, activeRepo, githubConnected, githubToken, githubLogin, gitlabConnected, gitlabInstances = [], recents, favorites, workspaces,
   onToggleFavorite, onOpenPath, onRemoveRepo, onCreateWorkspace, onRenameWorkspace,
-  onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, onOpenUrl, onOpenGitlabSettings, notify,
+  onDeleteWorkspace, onToggleRepoInWorkspace, onClone, onBrowse, onOpenUrl, onOpenGithubSettings, onOpenGitlabSettings, notify,
 }: RepoManagerProps) {
   const [sel, setSel] = useState<Selection>({ kind: 'view', view: 'all' })
   const [query, setQuery] = useState('')
@@ -1224,7 +1226,12 @@ export function RepoManager({
               <IconInbox />내 작업
             </div>
           ) : (
-            <div className="rm-sidebar-item rm-disabled" title="내 작업 — GitHub 연결 필요 (설정에서 토큰 등록)">
+            <div
+              className="rm-sidebar-item rm-disabled"
+              title="내 작업 — GitHub 연결 필요 (설정에서 토큰 등록)"
+              onClick={onOpenGithubSettings}
+              style={{ cursor: 'pointer' }}
+            >
               <IconInbox />내 작업
             </div>
           )}
@@ -1238,7 +1245,12 @@ export function RepoManager({
               <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--c-success)' }}>●</span>
             </div>
           ) : (
-            <div className="rm-sidebar-item rm-disabled" title="GitHub 연결 필요 (설정에서 토큰 등록)">
+            <div
+              className="rm-sidebar-item rm-disabled"
+              title="GitHub 연결 필요 (설정에서 토큰 등록)"
+              onClick={onOpenGithubSettings}
+              style={{ cursor: 'pointer' }}
+            >
               <IconGitHub />GitHub
             </div>
           )}
