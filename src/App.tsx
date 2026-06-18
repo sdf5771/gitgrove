@@ -45,6 +45,15 @@ import { RepoManager } from './components/RepoManager'
 import { NotificationBell } from './components/NotificationBell'
 import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loadWorkspaces, saveWorkspaces, createWorkspaceId, type RecentRepoEntry, type Workspace } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
+import { SyncHud } from './components/SyncHud'
+import {
+  type ProgressModel,
+  type ResultView,
+  initialModel,
+  applyProgress,
+  overallPercent,
+  mapResult,
+} from './utils/syncProgress'
 
 type View = 'history' | 'commit' | 'diff' | 'blame' | 'pr'
 type BranchTab = 'create' | 'rename' | 'delete'
@@ -343,6 +352,36 @@ export default function App() {
   // ── 원격 연산 로딩 상태 ──
   const [remoteOp, setRemoteOp] = useState<'pull' | 'push' | 'fetch' | null>(null)
 
+  // ── 동기화 진행 HUD (SY2) ──
+  // 진행 모델: onRemoteProgress 이벤트 누적. result 도착 시 결과 푸터/표정 전환.
+  const [syncModel, setSyncModel] = useState<ProgressModel | null>(null)
+  const [syncResultView, setSyncResultView] = useState<ResultView | null>(null)
+  // busy 버튼 하단 미니 진행바(전체 %). 진행 중일 때만 0~100.
+  const [syncPct, setSyncPct] = useState(0)
+  // 최신 op를 effect 안에서 읽기 위한 ref(구독은 한 번만 등록, 누수 방지).
+  const remoteOpRef = useRef<typeof remoteOp>(null)
+  useEffect(() => { remoteOpRef.current = remoteOp }, [remoteOp])
+
+  // onRemoteProgress 구독: 등록 1회 + cleanup 해제(리스너 누수 방지).
+  // 진행 이벤트는 현재 op에 한해 모델/전체% 를 갱신한다(결과 표시 중이면 무시).
+  useEffect(() => {
+    const off = window.gitAPI?.onRemoteProgress?.(p => {
+      const op = remoteOpRef.current
+      if (!op || op !== p.op) return
+      setSyncModel(prev => {
+        const next = applyProgress(prev ?? initialModel(p.op), p)
+        setSyncPct(overallPercent(next))
+        return next
+      })
+    })
+    return () => { off?.() }
+  }, [])
+
+  const closeSyncHud = useCallback(() => {
+    setSyncModel(null)
+    setSyncResultView(null)
+  }, [])
+
   // refs to avoid stale closure — adding repos/repoPath to loadRepo deps would
   // cause a loop: loadRepo → setRepos → repos changes → loadRepo recreated → effect fires again
   const reposRef = useRef(repos)
@@ -521,46 +560,38 @@ export default function App() {
   }, [loadRepo, notify])
 
   // ── 원격 연산 핸들러 ──
-  const handlePull = useCallback(async () => {
-    if (!repoPath || remoteOp) return
-    setRemoteOp('pull')
+  // 진행 HUD를 켜고(setSyncModel) op를 실행한 뒤, 결과를 HUD 푸터·토스트로 매핑한다.
+  // 충돌(conflict===true)은 throw가 아니라 정상 반환 — 별도 분기로 처리한다(SY1 계약).
+  // 기존 notify/loadRepo 흐름·키보드 단축키 동작은 그대로 보존(인터랙션만 얹음).
+  const handleRemoteOp = useCallback(async (op: 'pull' | 'push' | 'fetch') => {
+    if (!repoPath || remoteOpRef.current) return
+    setRemoteOp(op)
+    setSyncModel(initialModel(op))
+    setSyncResultView(null)
+    setSyncPct(0)
     try {
-      const result = await window.gitAPI?.pull(repoPath)
-      notify('success', 'Pull 완료', result?.summary ?? '')
-      await loadRepo(repoPath)
+      const result = await window.gitAPI?.[op](repoPath)
+      if (!result) { closeSyncHud(); return }
+      const view = mapResult(result)
+      setSyncResultView(view)
+      setSyncPct(100)
+      // 토스트(디자인 문구) — 기존 notify 재사용.
+      notify(view.toast.cls, view.toast.title, view.toast.msg, undefined, 4000, view.toast.geuru)
+      // pull/fetch는 그래프/상태 갱신(충돌이어도 작업트리 상태 반영). push는 ahead만 변하므로 가볍게 갱신.
+      await loadRepo(repoPath, { silent: true })
     } catch (err) {
-      notify('error', 'Pull 실패', err instanceof Error ? err.message : String(err))
+      // 진짜 에러(네트워크/인증 등) — HUD를 닫고 기존 에러 토스트.
+      closeSyncHud()
+      const title = op === 'pull' ? 'Pull 실패' : op === 'push' ? 'Push 실패' : 'Fetch 실패'
+      notify('error', title, err instanceof Error ? err.message : String(err))
     } finally {
       setRemoteOp(null)
     }
-  }, [repoPath, remoteOp, loadRepo, notify])
+  }, [repoPath, loadRepo, notify, closeSyncHud])
 
-  const handlePush = useCallback(async () => {
-    if (!repoPath || remoteOp) return
-    setRemoteOp('push')
-    try {
-      const result = await window.gitAPI?.push(repoPath)
-      notify('success', 'Push 완료', result?.summary ?? '', undefined, 4000, 'merge')
-    } catch (err) {
-      notify('error', 'Push 실패', err instanceof Error ? err.message : String(err))
-    } finally {
-      setRemoteOp(null)
-    }
-  }, [repoPath, remoteOp, notify])
-
-  const handleFetch = useCallback(async () => {
-    if (!repoPath || remoteOp) return
-    setRemoteOp('fetch')
-    try {
-      const result = await window.gitAPI?.fetch(repoPath)
-      notify('info', 'Fetch 완료', result?.summary ?? '')
-      await loadRepo(repoPath)
-    } catch (err) {
-      notify('error', 'Fetch 실패', err instanceof Error ? err.message : String(err))
-    } finally {
-      setRemoteOp(null)
-    }
-  }, [repoPath, remoteOp, loadRepo, notify])
+  const handlePull = useCallback(() => handleRemoteOp('pull'), [handleRemoteOp])
+  const handlePush = useCallback(() => handleRemoteOp('push'), [handleRemoteOp])
+  const handleFetch = useCallback(() => handleRemoteOp('fetch'), [handleRemoteOp])
 
   // ── 브랜치 체크아웃 핸들러 ──
   const handleBranchSwitch = useCallback(async (name: string) => {
@@ -1074,13 +1105,22 @@ export default function App() {
   const displayBranch = repo?.branch || activeBranch
 
   // 저장소 상태 → 그루 표정 1:1 매핑 (디자인: clean→sleepy, syncing→think, conflict→conflict)
-  const geuruState: GeuruExpr = showConflict
+  const geuruState: GeuruExpr = (showConflict || syncResultView?.kind === 'conflict')
     ? 'conflict'
     : remoteOp
       ? 'think'
       : repo?.dirty
         ? 'idle'
         : 'sleepy'
+
+  // 상태바 sync dot 상태: 진행 중=골드 펄스 / 충돌=빨강 / 방금 완료=녹색 / 평시=idle.
+  const syncState: 'running' | 'done' | 'err' | 'idle' = remoteOp
+    ? 'running'
+    : syncResultView?.kind === 'conflict'
+      ? 'err'
+      : syncResultView
+        ? 'done'
+        : 'idle'
 
   // ── 빈 화면 (레포 미선택, 로딩 중이 아님) ──
   const renderEmptyState = () => (
@@ -1147,20 +1187,25 @@ export default function App() {
       {/* Action bar — Repository Manager 활성 시 숨김 */}
       {!showRepoManager && (
       <div className="action-bar">
-        <button className="abt" onClick={handlePull} disabled={!repoPath || !!remoteOp} style={remoteOp === 'pull' ? { opacity: .6 } : {}}>
+        <button className={`abt sync-btn${remoteOp === 'pull' ? ' busy' : ''}`} onClick={handlePull} disabled={!repoPath || !!remoteOp}>
           {remoteOp === 'pull'
-            ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+            ? <span className="abt-spin" />
             : <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span>}Pull
+          {!!repo && repo.behind > 0 && remoteOp !== 'pull' && <span className="abt-cnt">{repo.behind}</span>}
+          {remoteOp === 'pull' && <span className="abt-mini" style={{ width: `${syncPct}%` }} />}
         </button>
-        <button className="abt" onClick={handlePush} disabled={!repoPath || !!remoteOp} style={remoteOp === 'push' ? { opacity: .6 } : {}}>
+        <button className={`abt sync-btn push${remoteOp === 'push' ? ' busy' : ''}`} onClick={handlePush} disabled={!repoPath || !!remoteOp}>
           {remoteOp === 'push'
-            ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+            ? <span className="abt-spin" />
             : <span style={{ fontSize: 14, lineHeight: 1 }}>↑</span>}Push
+          {!!repo && repo.ahead > 0 && remoteOp !== 'push' && <span className="abt-cnt info">{repo.ahead}</span>}
+          {remoteOp === 'push' && <span className="abt-mini" style={{ width: `${syncPct}%` }} />}
         </button>
-        <button className="abt" onClick={handleFetch} disabled={!repoPath || !!remoteOp} style={remoteOp === 'fetch' ? { opacity: .6 } : {}}>
+        <button className={`abt sync-btn${remoteOp === 'fetch' ? ' busy' : ''}`} onClick={handleFetch} disabled={!repoPath || !!remoteOp}>
           {remoteOp === 'fetch'
-            ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
+            ? <span className="abt-spin" />
             : <span style={{ fontSize: 14, lineHeight: 1 }}>⟳</span>}Fetch
+          {remoteOp === 'fetch' && <span className="abt-mini" style={{ width: `${syncPct}%` }} />}
         </button>
         <div className="abt-sep" />
         <button className="abt" onClick={() => { setBranchTab('create'); setShowBranch(true) }}>
@@ -1197,6 +1242,17 @@ export default function App() {
 
       {/* App body */}
       <div className="app-body" style={{ position: 'relative' }}>
+
+        {/* 동기화 진행 HUD (SY2) — 진행 중 또는 결과 표시 중에 노출 */}
+        {syncModel && !showRepoManager && (
+          <SyncHud
+            model={syncModel}
+            branch={activeBranch}
+            result={syncResultView}
+            onClose={closeSyncHud}
+            onResolveConflict={() => { setShowConflict(true); closeSyncHud() }}
+          />
+        )}
 
         {showRepoManager ? (
           <RepoManager
@@ -1443,6 +1499,7 @@ export default function App() {
         repoRole={repoRole}
         repoSummary={showRepoManager ? { total: repos.length, dirty: repos.filter(r => r.dirty).length } : null}
         geuruState={showRepoManager ? 'idle' : geuruState}
+        syncState={showRepoManager ? 'idle' : syncState}
       />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}

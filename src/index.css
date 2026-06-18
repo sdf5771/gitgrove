@@ -350,6 +350,11 @@ body { display: flex; align-items: center; justify-content: center; }
 }
 .sbranch { display: flex; align-items: center; gap: 6px; color: var(--c-text-strong); }
 .sdot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-gold-400); box-shadow: 0 0 6px rgba(230,165,54,.5); }
+/* 동기화 신호등(SY2): running=골드 펄스 / err=빨강. done/idle은 기본 dot 유지. */
+.sdot.sync { background: var(--c-gold-400); animation: barPulse 1s ease-in-out infinite; box-shadow: 0 0 6px rgba(230,165,54,.55); }
+.sdot.err { background: var(--c-danger); box-shadow: 0 0 6px rgba(255,107,107,.5); }
+@keyframes barPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+.sstate { display: flex; align-items: center; gap: 7px; }
 .ssep { color: var(--c-border-strong); }
 .sahead { color: var(--c-success); } .sbehind { color: var(--c-warning); }
 .send { margin-left: auto; }
@@ -1267,3 +1272,84 @@ body { display: flex; align-items: center; justify-content: center; }
 
 /* 토스트 좌측 그루 */
 .notif-geuru{flex-shrink:0;display:flex;align-items:center;margin-top:1px;}
+
+/* ════ 동기화 인터랙션 (SY2) ════ */
+/* 디자인 정본: GitGrove 동기화 인터랙션.html. 골드=진행 액센트, 녹색=완료, info=push 카운트, 빨강=충돌. */
+
+@keyframes hudIn { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes hudBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+@keyframes hudStripe { to { background-position: 24px 0; } }
+@keyframes hudIndet { 0% { transform: translateX(-120%); } 100% { transform: translateX(400%); } }
+
+/* ── busy 버튼: 스피너 + 카운트 배지 + 하단 미니 진행바 ── */
+.sync-btn { position: relative; overflow: hidden; }
+.sync-btn.busy { color: var(--c-gold-300); border-color: var(--c-gold-border); background: var(--c-gold-bg-soft); }
+.sync-btn:disabled { opacity: .5; cursor: default; }
+.abt-spin {
+  display: inline-block; box-sizing: border-box; width: 12px; height: 12px;
+  border: 2px solid var(--c-gold-border); border-top-color: var(--c-gold-300);
+  border-radius: 50%; animation: spin .6s linear infinite;
+}
+.abt-cnt {
+  font-family: var(--font-mono); font-size: 9px; line-height: 1; color: var(--c-text-on-gold, #1a1206);
+  background: var(--c-gold-400); border-radius: 999px; padding: 0 5px; min-width: 14px; height: 14px;
+  display: inline-flex; align-items: center; justify-content: center; margin-left: 1px;
+}
+.abt-cnt.info { background: var(--c-info); color: #06222e; }
+.abt-mini { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--c-gold-400); width: 0%; transition: width .2s ease; }
+
+/* ── 진행 HUD 팝오버 ── */
+.hud {
+  position: absolute; top: 12px; left: 12px; width: 412px; z-index: 60;
+  background: var(--c-bg-elevated); border: 1px solid var(--c-border); border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0,0,0,.6), inset 0 1px 0 rgba(244,236,210,.05);
+  overflow: hidden; animation: hudIn .18s cubic-bezier(.2,.8,.2,1);
+}
+.hud-head { display: flex; align-items: center; gap: 11px; padding: 13px 14px 12px; border-bottom: 1px solid var(--c-divider); background: linear-gradient(180deg, rgba(230,165,54,.06), transparent 90%); }
+.hud-geuru { flex-shrink: 0; display: flex; }
+.hud-geuru.bob { animation: hudBob 1.6s ease-in-out infinite; }
+.hud-titles { flex: 1; min-width: 0; }
+.hud-op { font-family: var(--font-display); font-size: 15px; color: var(--c-text-strong); letter-spacing: .3px; }
+.hud-sub { font-family: var(--font-mono); font-size: 11px; color: var(--c-text-muted); margin-top: 3px; }
+.hud-pct { font-family: var(--font-mono); font-size: 18px; color: var(--c-gold-300); font-weight: 500; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; min-width: 42px; }
+.hud-pct svg { width: 21px; height: 21px; display: block; }
+.hud-pct.done { color: var(--c-grove); }
+.hud-pct.err { color: var(--c-danger); }
+
+.hud-bar-wrap { padding: 12px 14px 8px; }
+.hud-bar { height: 7px; border-radius: 4px; background: var(--c-bg-inset); border: 1px solid var(--c-border); overflow: hidden; position: relative; }
+.hud-bar-fill { height: 100%; width: 0%; border-radius: 3px; background: var(--c-gold-400); transition: width .18s ease; position: relative; }
+.hud-bar-fill.indet { width: 35% !important; background: linear-gradient(90deg, transparent, var(--c-gold-400), transparent); animation: hudIndet 1.1s ease-in-out infinite; }
+.hud-bar-fill.striped { background-image: linear-gradient(45deg, rgba(255,255,255,.12) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.12) 50%, rgba(255,255,255,.12) 75%, transparent 75%); background-size: 24px 24px; animation: hudStripe .6s linear infinite; }
+.hud-bar-fill.done { width: 100%; background: var(--c-grove); }
+.hud-bar-fill.err { width: 62%; background: var(--c-danger); animation: none; }
+.hud-rate { display: flex; justify-content: space-between; margin-top: 6px; font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); }
+
+.hud-phases { padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 1px; max-height: 166px; overflow-y: auto; }
+.hud-phase { display: flex; align-items: center; gap: 9px; padding: 5px 2px; font-size: 12px; transition: color .15s; }
+.hud-phase .pico { width: 16px; height: 16px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.hud-phase .pico svg { width: 14px; height: 14px; }
+.hud-phase .ptxt { flex: 1; color: var(--c-text-muted); }
+.hud-phase .pmeta { font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); flex-shrink: 0; }
+.hud-phase.pending .ptxt, .hud-phase.pending .pico { color: var(--c-text-faint); }
+.hud-phase.active .ptxt { color: var(--c-gold-200); }
+.hud-phase.active .pico { color: var(--c-gold-300); }
+.hud-phase.done .ptxt { color: var(--c-text); }
+.hud-phase.done .pico { color: var(--c-grove); }
+.hud-phase.err .ptxt, .hud-phase.err .pico { color: var(--c-danger); }
+.pspin { display: inline-block; box-sizing: border-box; width: 13px; height: 13px; border: 2px solid var(--c-gold-border); border-top-color: var(--c-gold-300); border-radius: 50%; animation: spin .6s linear infinite; }
+.pdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .5; }
+
+.hud-foot { border-top: 1px solid var(--c-divider); background: var(--c-bg-inset); padding: 11px 14px; display: flex; align-items: center; gap: 10px; }
+.hud-result { flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; }
+.hud-result b { color: var(--c-text-strong); font-family: var(--font-display); font-weight: 400; letter-spacing: .2px; }
+.hud-result b.err { color: var(--c-danger); }
+.hud-result-detail { color: var(--c-text-muted); margin-top: 2px; }
+.hud-result .diff { font-family: var(--font-mono); font-size: 11px; }
+.hud-result .ins { color: var(--c-success); }
+.hud-result .del { color: var(--c-danger); }
+.hud-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 13px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid; white-space: nowrap; flex-shrink: 0; font-family: var(--font-display); letter-spacing: .2px; }
+.hud-btn.danger { background: rgba(255,107,107,.12); border-color: rgba(255,107,107,.4); color: var(--c-danger); }
+.hud-btn.danger:hover { background: rgba(255,107,107,.22); }
+.hud-btn.ghost { background: var(--c-bg-elevated); border-color: var(--c-border); color: var(--c-text-muted); }
+.hud-btn.ghost:hover { color: var(--c-text); border-color: var(--c-border-strong); }
