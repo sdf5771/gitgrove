@@ -14,8 +14,12 @@ import {
   parseRevCount,
   computeFetchDelta,
   buildPullSummary,
+  buildCloneArgs,
+  classifyCloneError,
   type RemoteOp,
   type GitRemoteResult,
+  type CloneOptions,
+  type CloneResult,
 } from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
 import { normalizeDailyCounts, type RepoActivity } from '../src/utils/repoActivity'
@@ -301,19 +305,32 @@ function deriveRepoName(url: string): string {
 }
 
 // git:clone — 원격 저장소를 parentDir 아래의 동명 폴더로 클론
-ipcMain.handle('git:clone', async (_event, url: string, parentDir: string, opts?: { shallow?: boolean }): Promise<{ path: string; name: string }> => {
+//   진행률을 'git:remote-progress'(op:'clone') 채널로 스트리밍(pull/push/fetch와 공유).
+//   성공/실패를 구조화 CloneResult로 반환(실패도 throw 대신 errorKind 부착) →
+//   frontend가 auth(토큰칸)/notfound(URL수정)/error로 모달 분기 가능.
+//   단, 입력 검증 실패(URL 파싱 불가/폴더 충돌)는 즉시 throw(클론 시도 전 사용자 입력 문제).
+ipcMain.handle('git:clone', async (event, url: string, parentDir: string, opts?: CloneOptions): Promise<CloneResult> => {
   const name = deriveRepoName(url)
   if (!name) throw new Error('저장소 URL에서 이름을 추출할 수 없습니다.')
   const target = path.join(parentDir, name)
   if (fs.existsSync(target)) throw new Error(`이미 '${name}' 폴더가 존재합니다.`)
   try {
-    const cloneArgs = opts?.shallow ? ['--depth', '1'] : []
-    await simpleGit().clone(url, target, cloneArgs)
-    return { path: target, name }
+    // pull/push/fetch와 동일한 progress 핸들러 패턴(remoteGit). clone은 git이
+    // counting/compressing/receiving/resolving/checkout 단계를 보고하므로 stage가 그대로 흐름.
+    const git = simpleGit({
+      baseDir: parentDir,
+      progress(ev) {
+        if (event.sender.isDestroyed()) return
+        event.sender.send('git:remote-progress', mapProgress('clone', ev))
+      },
+    })
+    await git.clone(url, target, buildCloneArgs(opts))
+    return { success: true, path: target, name }
   } catch (err) {
     // 실패 시 부분 클론 잔여 폴더 정리
     try { if (fs.existsSync(target)) fs.rmSync(target, { recursive: true, force: true }) } catch { /* ignore */ }
-    throw new Error(err instanceof Error ? err.message : String(err))
+    const message = err instanceof Error ? err.message : String(err)
+    return { success: false, errorKind: classifyCloneError(message), message }
   }
 })
 

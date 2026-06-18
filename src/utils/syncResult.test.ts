@@ -7,8 +7,78 @@ import {
   parseRevCount,
   computeFetchDelta,
   buildPullSummary,
+  buildCloneArgs,
+  classifyCloneError,
   type SimpleGitProgressLike,
 } from './syncResult'
+
+describe('mapProgress — clone op (CL1)', () => {
+  it("op:'clone'을 붙이고 checkout 단계 stage도 그대로 패스", () => {
+    const ev: SimpleGitProgressLike = {
+      method: 'clone', stage: 'checkout', progress: 70, processed: 35, total: 50,
+    }
+    expect(mapProgress('clone', ev)).toEqual({
+      op: 'clone', stage: 'checkout', progress: 70, processed: 35, total: 50,
+    })
+  })
+  it("receiving 단계도 그대로 흐름", () => {
+    const ev: SimpleGitProgressLike = { stage: 'receiving', progress: 12 }
+    expect(mapProgress('clone', ev).op).toBe('clone')
+    expect(mapProgress('clone', ev).stage).toBe('receiving')
+  })
+})
+
+describe('buildCloneArgs (CloneOptions → git args)', () => {
+  it('옵션 미지정이면 빈 배열(기존 전체 클론 하위호환)', () => {
+    expect(buildCloneArgs()).toEqual([])
+    expect(buildCloneArgs({})).toEqual([])
+  })
+  it('shallow → --depth 1', () => {
+    expect(buildCloneArgs({ shallow: true })).toEqual(['--depth', '1'])
+  })
+  it('recurseSubmodules → --recurse-submodules', () => {
+    expect(buildCloneArgs({ recurseSubmodules: true })).toEqual(['--recurse-submodules'])
+  })
+  it('둘 다 지정 시 순서 고정(depth → recurse)', () => {
+    expect(buildCloneArgs({ shallow: true, recurseSubmodules: true }))
+      .toEqual(['--depth', '1', '--recurse-submodules'])
+  })
+  it('false는 인자 추가 안 함', () => {
+    expect(buildCloneArgs({ shallow: false, recurseSubmodules: false })).toEqual([])
+  })
+})
+
+describe('classifyCloneError (auth | notfound | error)', () => {
+  it('인증 실패 → auth', () => {
+    expect(classifyCloneError('fatal: Authentication failed for https://github.com/...')).toBe('auth')
+    expect(classifyCloneError("could not read Username for 'https://github.com'")).toBe('auth')
+    expect(classifyCloneError('remote: HTTP Basic: Access denied')).toBe('auth')
+    expect(classifyCloneError('The requested URL returned error: 403')).toBe('auth')
+    expect(classifyCloneError('fatal: unable to access ...: The requested URL returned error: 401')).toBe('auth')
+    expect(classifyCloneError('Permission denied (publickey).')).toBe('auth')
+  })
+  it('저장소 없음 → notfound', () => {
+    expect(classifyCloneError('remote: Repository not found.')).toBe('notfound')
+    expect(classifyCloneError('fatal: repository \'https://x/y.git\' not found')).toBe('notfound')
+    expect(classifyCloneError('The project you were looking for does not exist')).toBe('notfound')
+    expect(classifyCloneError('The requested URL returned error: 404')).toBe('notfound')
+  })
+  it('그 외(네트워크/디스크) → error', () => {
+    expect(classifyCloneError('Could not resolve host: github.com')).toBe('error')
+    expect(classifyCloneError('fatal: destination path already exists')).toBe('error')
+    expect(classifyCloneError('')).toBe('error')
+    expect(classifyCloneError(null)).toBe('error')
+    expect(classifyCloneError(undefined)).toBe('error')
+  })
+  it('대소문자 무관', () => {
+    expect(classifyCloneError('AUTHENTICATION FAILED')).toBe('auth')
+    expect(classifyCloneError('REPOSITORY NOT FOUND')).toBe('notfound')
+  })
+  it('404가 auth 신호보다 우선(notfound)', () => {
+    // 일부 호스트는 private repo를 404로 숨기지만 사용자에겐 URL 확인이 먼저 유용
+    expect(classifyCloneError('returned error: 404 Authentication failed')).toBe('notfound')
+  })
+})
 
 describe('mapProgress (ProgressEvent → RemoteProgress)', () => {
   it('raw stage/progress를 그대로 패스하고 op만 붙인다', () => {

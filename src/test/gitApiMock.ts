@@ -70,7 +70,7 @@ export function installGitApiMock() {
     openDialog: vi.fn(async () => null),
     pickDirectory: vi.fn(async () => null),
     isRepo: vi.fn(async () => true),
-    clone: vi.fn(async (_url: string, parentDir: string) => ({ path: `${parentDir}/cloned`, name: 'cloned' })),
+    clone: vi.fn(async (_url: string, parentDir: string) => ({ success: true, path: `${parentDir}/cloned`, name: 'cloned' })),
     getLog,
     getActivity: vi.fn(async (_path: string, opts?: { days?: number }) => {
       const days = Math.max(1, Math.floor(opts?.days ?? 14))

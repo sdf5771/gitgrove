@@ -45,11 +45,18 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props)
     setCloning(true); setCloneErr(null)
     try {
       const res = await window.gitAPI!.clone(cloneUrl.trim(), cloneDest.trim(), { shallow: cloneShallow })
+      // CL1 계약: 실패도 throw가 아닌 { success:false, errorKind, message }로 반환됨.
+      if (!res.success || !res.path) {
+        setCloning(false)
+        setCloneErr(res.message || '알 수 없는 오류')
+        return
+      }
+      const { path: clonedPath, name: clonedName } = res
       setCloning(false); setIsDone(true)
       // 성공 표시를 잠깐 보여준 뒤 클론한 레포를 새 탭으로 연다.
       setTimeout(() => {
-        if (onOpenPath) onOpenPath(res.path)
-        else { onAdd({ id: String(Date.now()), name: res.name, path: res.path, branch: 'main', dirty: false, ahead: 0, behind: 0 }) }
+        if (onOpenPath) onOpenPath(clonedPath)
+        else { onAdd({ id: String(Date.now()), name: clonedName ?? clonedPath, path: clonedPath, branch: 'main', dirty: false, ahead: 0, behind: 0 }) }
         onClose()
       }, 900)
     } catch (err) {

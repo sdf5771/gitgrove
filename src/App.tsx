@@ -549,6 +549,11 @@ export default function App() {
     notify('info', 'Clone 시작', `${url}`)
     try {
       const res = await window.gitAPI!.clone(url, parent)
+      // CL1 계약: 실패도 throw가 아닌 { success:false, errorKind, message }로 반환됨.
+      if (!res.success || !res.path) {
+        notify('error', 'Clone 실패', res.message || '알 수 없는 오류')
+        return false
+      }
       notify('success', 'Clone 완료', res.name)
       setShowRepoManager(false)
       await loadRepo(res.path, { activate: true })

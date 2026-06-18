@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('gitAPI', {
   openDialog: () => ipcRenderer.invoke('git:open-dialog'),
   pickDirectory: (title?: string) => ipcRenderer.invoke('git:pick-directory', title),
   isRepo: (repoPath: string) => ipcRenderer.invoke('git:is-repo', repoPath),
-  clone: (url: string, parentDir: string, opts?: { shallow?: boolean }) => ipcRenderer.invoke('git:clone', url, parentDir, opts),
+  clone: (url: string, parentDir: string, opts?: { shallow?: boolean; recurseSubmodules?: boolean }) => ipcRenderer.invoke('git:clone', url, parentDir, opts),
   getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => ipcRenderer.invoke('git:log', repoPath, opts),
   getActivity: (repoPath: string, opts?: { days?: number }) => ipcRenderer.invoke('git:activity', repoPath, opts),
   getActivityBatch: (paths: string[], opts?: { days?: number }) => ipcRenderer.invoke('git:activity-batch', paths, opts),

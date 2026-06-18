@@ -290,4 +290,5 @@ export const OP_TITLE: Record<RemoteOp, string> = {
   pull: 'Pull',
   push: 'Push',
   fetch: 'Fetch',
+  clone: 'Clone',
 }
