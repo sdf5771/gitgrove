@@ -132,7 +132,7 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
   onClose: (i: number) => void
 }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+    <div className="repo-tabs-wrap">
       <div className="repo-tabs" role="tablist">
         {repos.map((r, i) => (
           <div
