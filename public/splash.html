@@ -3,352 +3,254 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GitGrove — Splash</title>
+<title>GitGrove — Splash · 그루</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=DotGothic16&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root {
-  --c-bg-deep:     #0d1220;
-  --c-bg-surface:  #161d30;
-  --c-bg-inset:    #0a0f1c;
-  --c-border:      #2d3551;
-  --c-text:        #b8c0d8;
-  --c-text-strong: #f4ecd2;
-  --c-text-muted:  #6d7798;
-  --c-text-faint:  #3f4a65;
-  --c-gold-200:    #ffd770;
-  --c-gold-300:    #f5b94a;
-  --c-gold-400:    #e6a536;
-  --c-gold-500:    #c98a22;
-  --c-success:     #6fcf7c;
-  --c-info:        #5fb8e6;
-  --font-display:  'Pixelify Sans', system-ui, sans-serif;
-  --font-body:     'Noto Sans KR', system-ui, sans-serif;
-  --font-mono:     'IBM Plex Mono', ui-monospace, monospace;
+:root{
+  --c-bg-deep:#0d1220; --c-bg-surface:#161d30; --c-bg-inset:#0a0f1c;
+  --c-border:#2d3551; --c-text:#b8c0d8; --c-text-strong:#f4ecd2; --c-text-muted:#6d7798; --c-text-faint:#3f4a65;
+  --c-gold-200:#ffd770; --c-gold-300:#f5b94a; --c-gold-400:#e6a536; --c-gold-500:#c98a22;
+  --c-success:#6fcf7c; --c-grove:#6fcf7c; --c-info:#5fb8e6;
+  --font-display:'Pixelify Sans','DotGothic16',system-ui,sans-serif;
+  --font-body:'Noto Sans KR',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
 }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-/* 투명 윈도우용: 시안의 #060a12 배경 제거 → 둥근 모서리(splash border-radius) 유지 */
-html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; }
-body { display: flex; align-items: center; justify-content: center; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+/* 투명 윈도우용: 시안의 #060a12 배경 제거 → 둥근 모서리(.splash border-radius) 유지 */
+html,body{width:100%;height:100%;background:transparent;overflow:hidden;}
+body{display:flex;align-items:center;justify-content:center;font-family:var(--font-body);}
+.sprite{image-rendering:pixelated;image-rendering:crisp-edges;display:block;}
 
-.stage {
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-}
+.stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
+.splash{width:560px;height:360px;position:relative;overflow:hidden;border-radius:12px;
+  background:radial-gradient(120% 90% at 50% -10%,rgba(230,165,54,.10),transparent 55%),var(--c-bg-deep);
+  border:1px solid rgba(230,165,54,.18);box-shadow:0 0 0 1px rgba(255,255,255,.04),0 30px 70px rgba(0,0,0,.7);
+  display:flex;flex-direction:column;transform-origin:center center;
+  transition:opacity .18s ease;}
+/* 완료 → 메인 전환 시 페이드아웃 (~180ms, main의 SPLASH_FADE_MS와 일치) */
+.stage.fade-out .splash{opacity:0;}
+.splash::before{content:'';position:absolute;inset:0;
+  background-image:linear-gradient(rgba(45,53,81,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(45,53,81,.18) 1px,transparent 1px);
+  background-size:28px 28px;
+  -webkit-mask-image:radial-gradient(120% 100% at 50% 32%,#000 30%,transparent 80%);mask-image:radial-gradient(120% 100% at 50% 32%,#000 30%,transparent 80%);pointer-events:none;}
+.splash::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--c-gold-400),transparent);opacity:.5;}
 
-/* ── Splash window (560×360 landscape) ── */
-.splash {
-  width: 560px; height: 360px;
-  position: relative; overflow: hidden;
-  background:
-    radial-gradient(120% 90% at 50% -10%, rgba(230,165,54,.10), transparent 55%),
-    var(--c-bg-deep);
-  border-radius: 12px;
-  border: 1px solid rgba(230,165,54,.18);
-  box-shadow: 0 0 0 1px rgba(255,255,255,.04), 0 30px 70px rgba(0,0,0,.7);
-  font-family: var(--font-body);
-  display: flex; flex-direction: column;
-  transform-origin: center center;
-  transition: opacity .18s ease;
-}
+.content{flex:1;position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding-top:10px;}
 
-/* 완료 → 메인 전환 시 페이드아웃 (~180ms, --dur-base) */
-.stage.fade-out .splash { opacity: 0; }
+/* scene */
+.scene{position:relative;width:360px;height:150px;}
+#sceneSvg{position:absolute;inset:0;width:100%;height:100%;}
+.bobwrap{animation:bob 2.6s ease-in-out infinite;transform-origin:center bottom;}
+@keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-5px);}}
 
-/* subtle grid texture */
-.splash::before {
-  content: ''; position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(45,53,81,.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(45,53,81,.18) 1px, transparent 1px);
-  background-size: 28px 28px;
-  -webkit-mask-image: radial-gradient(120% 100% at 50% 30%, #000 30%, transparent 78%);
-          mask-image: radial-gradient(120% 100% at 50% 30%, #000 30%, transparent 78%);
-  pointer-events: none;
-}
+/* wordmark */
+.wordmark{display:flex;flex-direction:column;align-items:center;gap:5px;opacity:0;animation:fadeUp .5s ease .5s forwards;}
+.wm-name{font-family:var(--font-display);font-size:32px;font-weight:700;color:var(--c-text-strong);letter-spacing:.5px;line-height:1;}
+.wm-tag{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;color:var(--c-gold-300);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 
-/* top hairline accent */
-.splash::after {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--c-gold-400), transparent);
-  opacity: .5;
-}
+/* loader */
+.loader{position:relative;z-index:2;padding:0 28px 22px;display:flex;flex-direction:column;gap:9px;}
+.bar-track{height:5px;border-radius:999px;background:var(--c-bg-inset);border:1px solid var(--c-border);overflow:hidden;position:relative;}
+.bar-fill{position:absolute;inset:0;right:auto;width:0%;border-radius:999px;background:linear-gradient(90deg,var(--c-gold-500),var(--c-gold-300));box-shadow:0 0 8px rgba(230,165,54,.5);}
+.bar-fill.done{background:linear-gradient(90deg,#3f9550,var(--c-grove));box-shadow:0 0 8px rgba(111,207,124,.5);}
+.status-row{display:flex;align-items:center;gap:9px;font-family:var(--font-mono);font-size:11.5px;}
+.seed{width:13px;height:13px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.status-text{color:var(--c-text);flex:1;}
+.status-text .done{color:var(--c-success);}
+.status-pct{color:var(--c-gold-300);font-weight:500;}
+.status-pct.done{color:var(--c-success);}
 
-/* ── Main content ── */
-.content {
-  flex: 1; position: relative; z-index: 2;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  gap: 22px; padding-top: 14px;
-}
-
-/* ── Logo + graph cluster ── */
-.mark { position: relative; width: 240px; height: 132px; }
-
-/* SVG branch graph that draws itself */
-.graph { position: absolute; inset: 0; width: 100%; height: 100%; }
-
-.bl { stroke-dasharray: 200; stroke-dashoffset: 200; }
-.bl0 { animation: draw .7s cubic-bezier(.4,0,.2,1) .15s forwards; }
-.bl1 { animation: draw .6s cubic-bezier(.4,0,.2,1) .5s forwards; }
-.bl2 { animation: draw .6s cubic-bezier(.4,0,.2,1) .7s forwards; }
-@keyframes draw { to { stroke-dashoffset: 0; } }
-
-.gnode { opacity: 0; transform-box: fill-box; transform-origin: center; }
-.gn0 { animation: pop .26s var(--ep, cubic-bezier(.2,.8,.2,1)) .55s forwards; }
-.gn1 { animation: pop .26s cubic-bezier(.2,.8,.2,1) .8s forwards; }
-.gn2 { animation: pop .26s cubic-bezier(.2,.8,.2,1) 1.05s forwards; }
-.gn3 { animation: pop .26s cubic-bezier(.2,.8,.2,1) 1.3s forwards; }
-@keyframes pop {
-  0% { opacity: 0; transform: scale(.2); }
-  70% { opacity: 1; transform: scale(1.3); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-/* HEAD node glow pulse */
-.head-glow { animation: glow 2s ease-in-out 1.5s infinite; transform-origin: center; }
-@keyframes glow {
-  0%, 100% { opacity: .35; }
-  50% { opacity: .1; }
-}
-
-/* ── Pixel leaves (grove) — light up step by step ── */
-.leaf { opacity: 0; }
-.lf0 { animation: leafIn .18s steps(1,end) 1.15s forwards; }
-.lf1 { animation: leafIn .18s steps(1,end) 1.28s forwards; }
-.lf2 { animation: leafIn .18s steps(1,end) 1.41s forwards; }
-.lf3 { animation: leafIn .18s steps(1,end) 1.54s forwards; }
-.lf4 { animation: leafIn .18s steps(1,end) 1.67s forwards; }
-.lf5 { animation: leafIn .18s steps(1,end) 1.80s forwards; }
-.lf6 { animation: leafIn .18s steps(1,end) 1.93s forwards; }
-@keyframes leafIn { to { opacity: 1; } }
-
-/* ── Wordmark ── */
-.wordmark {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  opacity: 0; animation: fadeUp .4s ease 1.0s forwards;
-}
-.wm-name {
-  font-family: var(--font-display); font-size: 34px; font-weight: 700;
-  color: var(--c-text-strong); letter-spacing: .5px; line-height: 1;
-}
-.wm-tag {
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em;
-  color: var(--c-text-muted); text-transform: uppercase;
-}
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Bottom loader region ── */
-.loader {
-  position: relative; z-index: 2;
-  padding: 0 28px 22px;
-  display: flex; flex-direction: column; gap: 9px;
-}
-
-/* progress track */
-.bar-track {
-  height: 4px; border-radius: 999px;
-  background: var(--c-bg-inset);
-  border: 1px solid var(--c-border);
-  overflow: hidden; position: relative;
-}
-.bar-fill {
-  position: absolute; inset: 0; right: auto;
-  width: 0%; border-radius: 999px;
-  background: linear-gradient(90deg, var(--c-gold-500), var(--c-gold-300));
-  box-shadow: 0 0 8px rgba(230,165,54,.5);
-  animation: fill 3.4s cubic-bezier(.55,.1,.3,1) .3s forwards;
-}
-@keyframes fill {
-  0%   { width: 0%; }
-  18%  { width: 22%; }
-  42%  { width: 40%; }
-  62%  { width: 68%; }
-  82%  { width: 84%; }
-  100% { width: 100%; }
-}
-
-/* status row */
-.status-row {
-  display: flex; align-items: center; gap: 8px;
-  font-family: var(--font-mono); font-size: 11.5px;
-}
-/* spinner — rotating pixel blocks */
-.spinner {
-  width: 12px; height: 12px; flex-shrink: 0; position: relative;
-  animation: spin 1s steps(8,end) infinite;
-}
-.spinner i {
-  position: absolute; width: 3px; height: 3px; background: var(--c-gold-400);
-  border-radius: 1px;
-}
-.spinner i:nth-child(1){ top:0; left:4.5px; opacity:1; }
-.spinner i:nth-child(2){ top:1.5px; right:1px; opacity:.85; }
-.spinner i:nth-child(3){ top:4.5px; right:0; opacity:.7; }
-.spinner i:nth-child(4){ bottom:1.5px; right:1px; opacity:.55; }
-.spinner i:nth-child(5){ bottom:0; left:4.5px; opacity:.4; }
-.spinner i:nth-child(6){ bottom:1.5px; left:1px; opacity:.3; }
-.spinner i:nth-child(7){ top:4.5px; left:0; opacity:.5; }
-.spinner i:nth-child(8){ top:1.5px; left:1px; opacity:.7; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.status-text { color: var(--c-text); flex: 1; }
-.status-text .done { color: var(--c-success); }
-.status-pct { color: var(--c-gold-300); font-weight: 500; }
-
-/* version pinned bottom-right corner */
-.version {
-  position: absolute; bottom: 12px; right: 16px; z-index: 3;
-  font-family: var(--font-mono); font-size: 10.5px;
-  color: var(--c-text-faint); letter-spacing: .05em;
-}
-/* author credit bottom-left */
-.credit {
-  position: absolute; bottom: 12px; left: 16px; z-index: 3;
-  font-family: var(--font-mono); font-size: 10px;
-  color: var(--c-text-faint); letter-spacing: .04em;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bl, .gnode, .leaf, .wordmark, .bar-fill, .spinner { animation: none !important; }
-  .bl { stroke-dashoffset: 0; }
-  .gnode, .leaf, .wordmark { opacity: 1; }
-  .bar-fill { width: 100%; }
-}
+.credit{position:absolute;bottom:12px;left:16px;z-index:3;font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);letter-spacing:.04em;}
+.version{position:absolute;bottom:12px;right:16px;z-index:3;font-family:var(--font-mono);font-size:10.5px;color:var(--c-text-faint);letter-spacing:.05em;}
 </style>
 </head>
 <body>
 <div class="stage" id="stage">
   <div class="splash" id="splash">
-
     <div class="content">
-      <!-- Logo + branch graph -->
-      <div class="mark">
-        <svg class="graph" viewBox="0 0 240 132" fill="none">
-          <!-- trunk (main, gold) -->
-          <line class="bl bl0" x1="120" y1="120" x2="120" y2="52"
-            stroke="#e6a536" stroke-width="3" stroke-linecap="round"/>
-          <!-- left branch (blue) -->
-          <path class="bl bl1" d="M120 92 C120 76 92 76 92 60"
-            stroke="#5fb8e6" stroke-width="2.5" stroke-linecap="round"/>
-          <!-- right branch (info) -->
-          <path class="bl bl2" d="M120 92 C120 76 148 76 148 60"
-            stroke="#6fcf7c" stroke-width="2.5" stroke-linecap="round"/>
-
-          <!-- HEAD glow -->
-          <circle class="head-glow" cx="120" cy="46" r="13" fill="rgba(255,215,112,.4)"/>
-
-          <!-- nodes -->
-          <g class="gnode gn3"><rect x="113" y="113" width="14" height="14" rx="3" fill="#e6a536"/></g>
-          <g class="gnode gn2"><rect x="85"  y="53"  width="13" height="13" rx="3" fill="#5fb8e6"/></g>
-          <g class="gnode gn1"><rect x="142" y="53"  width="13" height="13" rx="3" fill="#6fcf7c"/></g>
-          <!-- HEAD node (bright) -->
-          <g class="gnode gn0"><rect x="111" y="37" width="18" height="18" rx="4" fill="#ffd770"/><rect x="115" y="41" width="10" height="10" rx="2" fill="#c98a22"/></g>
-
-          <!-- pixel leaves around HEAD (grove) -->
-          <g>
-            <rect class="leaf lf0" x="104" y="22" width="6" height="6" fill="#6fcf7c"/>
-            <rect class="leaf lf1" x="111" y="17" width="6" height="6" fill="#6fcf7c"/>
-            <rect class="leaf lf2" x="118" y="14" width="6" height="6" fill="#6fcf7c"/>
-            <rect class="leaf lf3" x="125" y="14" width="6" height="6" fill="#6fcf7c"/>
-            <rect class="leaf lf4" x="132" y="17" width="6" height="6" fill="#6fcf7c"/>
-            <rect class="leaf lf5" x="108" y="29" width="6" height="6" fill="#6fcf7c" opacity=".7"/>
-            <rect class="leaf lf6" x="128" y="29" width="6" height="6" fill="#6fcf7c" opacity=".7"/>
-          </g>
-        </svg>
-      </div>
-
-      <!-- Wordmark -->
+      <div class="scene"><div class="bobwrap" style="position:absolute;inset:0"><svg id="sceneSvg" viewBox="0 0 360 150" shape-rendering="crispEdges"></svg></div></div>
       <div class="wordmark">
         <div class="wm-name">GitGrove</div>
-        <div class="wm-tag">Git client for macOS</div>
+        <div class="wm-tag">커밋 하나, 새싹 하나</div>
       </div>
     </div>
-
-    <!-- Bottom loader -->
     <div class="loader">
-      <div class="bar-track">
-        <div class="bar-fill" id="barFill"></div>
-      </div>
+      <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
       <div class="status-row">
-        <div class="spinner"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-        <div class="status-text" id="statusText">초기화 중…</div>
-        <div class="status-pct" id="statusPct">0%</div>
+        <span class="seed" id="seedSpin"></span>
+        <span class="status-text" id="statusText">Git 엔진 깨우는 중…</span>
+        <span class="status-pct" id="statusPct">0%</span>
       </div>
     </div>
-
     <div class="credit">© 2026 GitGrove</div>
-    <div class="version" id="version">v1.9.0</div>
-
+    <div class="version" id="version">v1.7.0</div>
   </div>
 </div>
 
 <script>
-// ── Boot-stage status text (시안 stages 배열 — 데모 진행에 매핑) ──
-const stages = [
-  { at: 0,    text: 'Git 엔진 초기화 중…' },
-  { at: 22,   text: '사용자 설정 불러오는 중…' },
-  { at: 45,   text: '저장소 인덱싱 중…' },
-  { at: 70,   text: '원격 연결 확인 중…' },
-  { at: 88,   text: '워크스페이스 복원 중…' },
-  { at: 100,  text: '준비 완료', done: true },
+/* ════ Geuru sprite ════ */
+const PAL={'.':null,G:'#e6a536',D:'#c98a22',H:'#ffd770',L:'#6fcf7c',l:'#3f9550',E:'#10182b',W:'#f4ecd2',k:'#ff9b6b',b:'#8a5a1e',m:'#7a4412',s:'#5fb8e6',z:'#9fb0d8',Y:'#ffd770'};
+const BASE=["................","....LL....LL....","...LlLL..LLlL...","....LLLllLLL....",".......ll.......","....GGGGGGGG....","...HHGGGGGGGG...","..HHGGGGGGGGGG..","..GGGWEGGWEGGG..","..GkGEEGGEEGkG..","..GGGGGmmGGGGD..","..GGGGGGGGGGDD..","...GGGGGGGGDD...","...GGGGGGGDDD...","....DGGGGGGD....","....bb....bb....","................","................"];
+const cellsB=BASE.map(r=>r.split(''));
+const EXP={
+  idle:{},
+  blink:{"8,5":"G","8,6":"G","8,9":"G","8,10":"G"},
+  think:{"8,5":"E","8,6":"E","8,9":"E","8,10":"E","9,5":"G","9,6":"G","9,9":"G","9,10":"G","10,5":"G","10,6":"G","10,7":"m","10,8":"G","8,13":"z","7,13":"z"},
+  happy:{"8,5":"G","8,6":"G","8,9":"G","8,10":"G","9,5":"E","9,6":"E","9,9":"E","9,10":"E","9,3":"k","9,12":"k","10,5":"G","10,6":"m","10,7":"m","10,8":"m","10,9":"m","10,12":"G","11,6":"G","11,7":"m","11,8":"m","11,9":"G"},
+  merge:{"8,5":"H","8,6":"E","8,9":"H","8,10":"E","9,5":"E","9,6":"H","9,9":"E","9,10":"H","9,3":"k","9,12":"k","10,5":"m","10,6":"G","10,7":"m","10,8":"m","10,9":"G","10,10":"m","11,6":"m","11,7":"m","11,8":"m","11,9":"m","7,1":"H","7,14":"H","12,2":"H"}
+};
+function geuru(exp,sc,ox,oy){let r='';for(let y=0;y<18;y++)for(let x=0;x<16;x++){let ch=cellsB[y][x];const p=(EXP[exp]||{})[y+','+x];if(p!==undefined)ch=p;const c=PAL[ch];if(!c)continue;r+=`<rect x="${(ox+x*sc).toFixed(2)}" y="${(oy+y*sc).toFixed(2)}" width="${(sc*1.04).toFixed(2)}" height="${(sc*1.04).toFixed(2)}" fill="${c}"/>`;}return r;}
+
+/* ════ pixel tree (growth stages) ════ */
+const TPAL={'.':null,t:'#8a5a1e',L:'#6fcf7c',l:'#3f9550',H:'#8fe09a',G:'#e6a536'};
+function treeGrid(st){if(st<=0)return["................","................","................","................","................","................","................",".......LL.......","......LllL......",".......Hl.......","........l.......","........l.......","......tttt......",".....tttttt.....","................","................"];if(st===1)return["................","................","................",".......LL.......","......LLLL......",".....LLllLL.....","......LLLL......",".....LHLLLL.....","......LllL......","........l.......","........l.......",".......ttt......","......ttttt.....",".....tttttt.....","................","................"];if(st===2)return["................","......LLLL......",".....LLLLLL.....","....LLLllLLL....","...LLLLLLLLLL...","...LLLHLLLLLL...","....LLLLLLLL....",".....LLllLL.....","......LllL......",".......ll.......","......ttttt.....","......ttttt.....",".....ttttttt....","....ttttttttt...","................","................"];return[".....LLLLLL.....","...LLLLLLLLLL...","..LLLLLLHLLLLL..","..LLLHLLLLLLLL..",".LLLLLLLLLGLLLL.",".LLLLLLLLLLLLLL.","..LLLLLllLLLLL..","...LLLLllLLLL...","....LLLllLL.....","......tll.......","......ttttt.....","......ttttt.....",".....ttttttt....","....ttttttttt...","...ttttttttttt..","................"];}
+function tree(st,sc,ox,oy){const g=treeGrid(st);let r='';for(let y=0;y<16;y++)for(let x=0;x<16;x++){const ch=g[y][x];const c=TPAL[ch];if(!c)continue;r+=`<rect x="${(ox+x*sc).toFixed(2)}" y="${(oy+y*sc).toFixed(2)}" width="${(sc*1.04).toFixed(2)}" height="${(sc*1.04).toFixed(2)}" fill="${c}"/>`;}return r;}
+
+/* ════ scene render ════ */
+const svg=document.getElementById('sceneSvg');
+function renderScene(pct,expr,sparkle){
+  let s='';
+  // soil mound
+  s+=`<ellipse cx="180" cy="138" rx="150" ry="13" fill="#0a0f1c"></ellipse>`;
+  s+=`<path d="M40 138 Q180 120 320 138 L320 150 L40 150 Z" fill="#1a1206" opacity=".0"></path>`;
+  s+=`<rect x="44" y="131" width="272" height="9" rx="4" fill="#8a5a1e" opacity=".30"></rect>`;
+  s+=`<rect x="44" y="129" width="272" height="3" rx="1.5" fill="#3f9550" opacity=".5"></rect>`;
+  // shadows
+  s+=`<ellipse cx="180" cy="136" rx="40" ry="6" fill="#000" opacity=".34"></ellipse>`;
+  s+=`<ellipse cx="78" cy="135" rx="20" ry="4" fill="#000" opacity=".26"></ellipse>`;
+  s+=`<ellipse cx="282" cy="135" rx="20" ry="4" fill="#000" opacity=".26"></ellipse>`;
+  // side trees grow with progress (staggered)
+  const sL = pct<22?0 : pct<50?1 : pct<82?2 : 3;
+  const sR = pct<34?0 : pct<62?1 : pct<92?2 : 3;
+  s+=tree(sL,3.1, 78-8*3.1, 131-16*3.1);
+  s+=tree(sR,3.1, 282-8*3.1, 131-16*3.1);
+  // hero Geuru center (feet at soil ~131)
+  const gsc=5.1;
+  s+=geuru(expr,gsc, 180-8*gsc, 131-18*gsc);
+  // sparkles on done
+  if(sparkle){
+    const sp=[[120,40],[244,46],[180,18],[150,30],[210,28]];
+    sp.forEach((p,i)=>{const o=(sparkle+i*0.7)%1;const a=o<0.5?o*2:(1-o)*2;s+=`<g opacity="${a.toFixed(2)}"><rect x="${p[0]-2}" y="${p[1]}" width="4" height="4" fill="#ffd770"/><rect x="${p[0]}" y="${p[1]-2}" width="0" height="0"/><rect x="${p[0]-5}" y="${p[1]+1.5}" width="3" height="1.5" fill="#ffd770"/><rect x="${p[0]+2}" y="${p[1]+1.5}" width="3" height="1.5" fill="#ffd770"/><rect x="${p[0]-.75}" y="${p[1]-3}" width="1.5" height="3" fill="#ffd770"/><rect x="${p[0]-.75}" y="${p[1]+4}" width="1.5" height="3" fill="#ffd770"/></g>`;});
+  }
+  svg.innerHTML=s;
+}
+
+/* seed spinner (tiny rotating sprout) */
+const seedEl=document.getElementById('seedSpin');
+function renderSeed(t){
+  const rot=(t/1000*360)%360;
+  seedEl.innerHTML=`<svg width="13" height="13" viewBox="0 0 13 13" style="transform:rotate(${rot}deg)"><rect x="5.5" y="6" width="2" height="5" fill="#8a5a1e"/><rect x="5" y="3" width="3" height="3" fill="#6fcf7c"/><rect x="7.5" y="4.5" width="2.5" height="2.5" fill="#3f9550"/></svg>`;
+}
+function seedDone(){seedEl.innerHTML=`<svg width="13" height="13" viewBox="0 0 13 13"><path d="M2.5 6.8l2.6 2.6 5-5.4" fill="none" stroke="#6fcf7c" stroke-width="2"/></svg>`;}
+
+/* ════ boot sequence ════ */
+const STAGES=[
+  {at:0,  text:'Git 엔진 깨우는 중…'},
+  {at:20, text:'설정 불러오는 중…'},
+  {at:42, text:'저장소 둘러보는 중…'},
+  {at:64, text:'원격 연결 확인 중…'},
+  {at:84, text:'워크스페이스 복원 중…'},
 ];
-const barFill    = document.getElementById('barFill');
-const statusText = document.getElementById('statusText');
-const statusPct  = document.getElementById('statusPct');
-const versionEl  = document.getElementById('version');
+const DONE_TEXT='다 자랐어요 · 시작할게요';
+const barFill=document.getElementById('barFill');
+const statusText=document.getElementById('statusText');
+const statusPct=document.getElementById('statusPct');
+const versionEl=document.getElementById('version');
+const stageEl=document.getElementById('stage');
+const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-let start = null;
-let done = false;             // 메인에서 완료 신호를 받으면 true
-const DURATION = 3700;        // ms — bar fill + delay와 일치 (자체 진행 데모)
+const DURATION=4200;
+let start=null;
+let done=false;            // 메인에서 완료 신호를 받으면 true
 
-function paint(pct) {
-  statusPct.textContent = pct + '%';
-  let cur = stages[0];
-  for (const s of stages) { if (pct >= s.at) cur = s; }
-  statusText.innerHTML = (pct >= 100 || cur.done)
-    ? '<span class="done">✓ ' + stages[stages.length - 1].text + '</span>'
-    : cur.text;
+function curStage(pct){let cur=STAGES[0];for(const st of STAGES){if(pct>=st.at)cur=st;}return cur;}
+
+function frame(ts){
+  if(done)return;          // 완료 신호 수신 시 자체 진행 중단
+  if(!start)start=ts;
+  const t=Math.min((ts-start)/DURATION,1);
+  // ease
+  const e=t<1?(1-Math.pow(1-t,2)):1;
+  // 자체 애니메이션은 ~95%까지만 진행하고 실제 완료 신호(finish)를 기다린다.
+  // 절대 자체적으로 100%로 끝내지 않는다.
+  const pct=Math.min(95,Math.round(e*100));
+  barFill.style.width=pct+'%';
+  statusPct.textContent=pct+'%';
+  const cur=curStage(pct);
+  // blink + occasional think
+  let expr='idle';
+  const cyc=(ts-start)%2600;
+  if(cyc<140) expr='blink';
+  else if(pct>40&&pct<70&&((ts-start)%5200)<1400) expr='think';
+  else expr='idle';
+  statusText.textContent=cur.text;
+  renderScene(pct,expr,0);
+  renderSeed(ts-start);
+  // ~95%에서 대기 (자체적으로 100%로 끝내지 않음)
+  if(pct<95) requestAnimationFrame(frame);
 }
 
-function tick(ts) {
-  if (done) return;           // 완료 신호 수신 시 자체 진행 중단
-  if (!start) start = ts;
-  const t = Math.min((ts - start) / DURATION, 1);
-  paint(Math.round(t * 100));
-  // 자체 데모는 ~95%에서 대기 — 실제 완료(ready-to-show) 신호가 100%를 채운다.
-  if (t < 0.95) requestAnimationFrame(tick);
+// 모션 줄이기: 애니메이션 없이 차분한 정적 씬 + 진행바만. done 표정은 보이지 않게(idle).
+if(reduce){
+  renderScene(95,'idle',0);
+  seedEl.innerHTML=`<svg width="13" height="13" viewBox="0 0 13 13"><rect x="5.5" y="6" width="2" height="5" fill="#8a5a1e"/><rect x="5" y="3" width="3" height="3" fill="#6fcf7c"/><rect x="7.5" y="4.5" width="2.5" height="2.5" fill="#3f9550"/></svg>`;
+  barFill.style.width='95%';
+  statusPct.textContent='95%';
+  statusText.textContent=STAGES[STAGES.length-1].text;
+} else {
+  requestAnimationFrame(frame);
 }
-requestAnimationFrame(tick);
+/* synchronous first paint so the scene never shows empty before rAF kicks in */
+renderScene(0,'idle',0);renderSeed(0);barFill.style.width='0%';
 
-// ── Electron IPC: 메인 윈도우 ready-to-show 시 완료 연출 ──
-// preload(contextBridge)의 window.ipcRenderer.on 사용 (앱 기존 패턴).
-function finish() {
-  if (done) return;
-  done = true;
-  // bar-fill 애니메이션을 100% 고정값으로 잠금 후 점프
-  barFill.style.animation = 'none';
-  barFill.style.width = '100%';
-  paint(100);
+/* scale to viewport */
+function scaleSplash(){const W=560,H=360;const s=Math.min(window.innerWidth/W,window.innerHeight/H,1.4);document.getElementById('splash').style.transform=`scale(${s})`;}
+scaleSplash();window.addEventListener('resize',scaleSplash);
+
+/* ════ 완료 연출: main이 boot-progress(done/pct>=100) 또는 splash-done 송신 시 ════ */
+function finish(){
+  if(done)return;
+  done=true;
+  // 진행바 100% 점프 + done(초록)
+  barFill.style.width='100%';
+  barFill.classList.add('done');
+  statusPct.textContent='100%';
+  statusPct.classList.add('done');
+  statusText.innerHTML='<span class="done">✓ '+DONE_TEXT+'</span>';
+  // 그루 merge 표정 + sparkle + seedDone
+  seedDone();
+  if(reduce){
+    renderScene(100,'merge',0);
+  } else {
+    let s0=null;
+    const anim=(ts)=>{
+      if(!s0)s0=ts;
+      renderScene(100,'merge',(ts-s0)/1000);
+      if(ts-s0<1200) requestAnimationFrame(anim);
+    };
+    requestAnimationFrame(anim);
+  }
+  // 페이드아웃 (main이 180ms 뒤 창 destroy)
+  if(stageEl) stageEl.classList.add('fade-out');
 }
 
+/* ── Electron IPC: preload(contextBridge)의 window.ipcRenderer.on 사용 ── */
 try {
   const ipc = window.ipcRenderer;
   if (ipc && typeof ipc.on === 'function') {
-    // 동적 버전 주입 (app.getVersion())
+    // 동적 버전 주입 (app.getVersion()) — 시안의 하드코딩 v1.7.0 대체
     ipc.on('splash-version', (_e, v) => {
       if (v) versionEl.textContent = 'v' + String(v).replace(/^v/, '');
     });
-    // 완료 신호 (pct:100, done:true)
+    // 완료 신호 (pct:100 또는 done:true)
     ipc.on('boot-progress', (_e, payload) => {
       if (payload && (payload.done || payload.pct >= 100)) finish();
     });
     ipc.on('splash-done', () => finish());
   }
-} catch (_) { /* IPC 미가용(브라우저 프리뷰) — 데모 타이머만 동작 */ }
+} catch (_) { /* IPC 미가용(브라우저 프리뷰) — 자체 데모만 동작 */ }
 </script>
 </body>
 </html>
