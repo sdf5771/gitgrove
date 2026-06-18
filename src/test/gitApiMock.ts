@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 import type { RemoteProgress } from '../utils/syncResult'
 
 // Per-repo fixture data. Keyed by absolute repo path.
@@ -143,10 +143,10 @@ export function installGitApiMock() {
   }
 
   const appAPI = {
-    onUpdateAvailable: vi.fn(),
+    onUpdateAvailable: vi.fn() as Mock<(cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => void>,
     openReleaseUrl: vi.fn(),
-    downloadUpdate: vi.fn(async (): Promise<{ path: string }> => ({ path: '/tmp/GitGrove-Update.dmg' })),
-    onUpdateDownloadProgress: vi.fn(() => () => {}),
+    downloadUpdate: vi.fn(async (): Promise<{ path: string }> => ({ path: '/tmp/GitGrove-Update.dmg' })) as Mock<(dmgUrl: string) => Promise<{ path: string }>>,
+    onUpdateDownloadProgress: vi.fn(() => () => {}) as Mock<(cb: (p: { received: number; total?: number; pct?: number }) => void) => (() => void)>,
     githubIsEncryptionAvailable: vi.fn(async () => false),
     githubSetToken: vi.fn(async () => true),
     githubGetToken: vi.fn(async (): Promise<string | null> => null),
