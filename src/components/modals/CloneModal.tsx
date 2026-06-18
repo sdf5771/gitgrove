@@ -89,6 +89,9 @@ export function CloneModal({ onClose, onCloned, pickDirectory, initialUrl }: Pro
   // 결과 나무 sprout 트리거(마운트 후 한 틱 뒤 grow).
   const [sprout, setSprout] = useState(false)
   const urlRef = useRef<HTMLInputElement>(null)
+  // 진행 단계에서만 이벤트를 누적하기 위한 guard(구독은 마운트 1회 — 레이스 방지).
+  const phaseRef = useRef<Phase>(phase)
+  useEffect(() => { phaseRef.current = phase }, [phase])
 
   const target = detectCloneTarget(url)
   const repoName = target.repo || deriveRepoName(url)
@@ -96,15 +99,17 @@ export function CloneModal({ onClose, onCloned, pickDirectory, initialUrl }: Pro
 
   useEffect(() => { urlRef.current?.focus() }, [])
 
-  // 진행 중 onRemoteProgress(op==='clone') 구독 — 등록/해제(누수 방지).
+  // onRemoteProgress(op==='clone') 구독 — 마운트 시 1회 등록 + cleanup 해제(누수 방지).
+  // clone IPC 호출이 'progress' 렌더보다 먼저 일어나도 최초 연결(remote) 이벤트를 놓치지 않도록
+  // 구독을 폼 단계부터 유지하고, 진행 단계(phaseRef)에서만 모델에 누적한다.
   useEffect(() => {
-    if (phase !== 'progress') return
     const off = window.gitAPI?.onRemoteProgress?.(p => {
       if (p.op !== 'clone') return
+      if (phaseRef.current !== 'progress') return
       setModel(prev => applyProgress(prev, p))
     })
     return () => { off?.() }
-  }, [phase])
+  }, [])
 
   // 결과 성공 진입 시 나무 sprout 애니메이션 트리거.
   useEffect(() => {
@@ -134,6 +139,9 @@ export function CloneModal({ onClose, onCloned, pickDirectory, initialUrl }: Pro
     setModel(initialModel('clone'))
     setResult(null)
     setSprout(false)
+    // guard를 clone 호출 전에 즉시 갱신 — phase effect 커밋을 기다리지 않고
+    // 첫 연결(remote) 이벤트부터 모델에 반영되도록(레이스 방지).
+    phaseRef.current = 'progress'
     setPhase('progress')
     try {
       const res = await window.gitAPI!.clone(url.trim(), parent, { shallow, recurseSubmodules })
@@ -349,8 +357,9 @@ function ResultBody({ view, sprout, token, setToken, onPlanted, onRetryToken, on
       <div className="rm-modal-actions">
         {success ? (
           <>
-            <button className="rm-modal-btn" onClick={onClose}>닫기</button>
-            <button className="rm-modal-btn rm-grove" onClick={onPlanted}>그로브로 →</button>
+            {/* "그로브로"=모달만 닫고 그로브(RepoManager) 유지 · "저장소 열기"=클론 repo 활성화(골드 CTA) */}
+            <button className="rm-modal-btn" onClick={onClose}>그로브로</button>
+            <button className="rm-modal-btn rm-primary" onClick={onPlanted}>저장소 열기</button>
           </>
         ) : view.kind === 'auth' ? (
           <>
@@ -359,8 +368,9 @@ function ResultBody({ view, sprout, token, setToken, onPlanted, onRetryToken, on
           </>
         ) : view.kind === 'notfound' ? (
           <>
-            <button className="rm-modal-btn" onClick={onClose}>닫기</button>
-            <button className="rm-modal-btn rm-primary" onClick={onBack}>URL 수정</button>
+            {/* notfound 재시도 경로: URL 수정 + 토큰으로 다시 시도(토큰 입력 시 활성) */}
+            <button className="rm-modal-btn" onClick={onBack}>URL 수정</button>
+            <button className="rm-modal-btn rm-primary" disabled={!token.trim()} onClick={onRetryToken}>토큰으로 다시 시도</button>
           </>
         ) : (
           <>

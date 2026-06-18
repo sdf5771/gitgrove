@@ -65,7 +65,7 @@ describe('클론 인터랙션 — App 통합(진입점 → resolver → loadRepo
     expect(screen.getByText(/받을 위치/)).toBeTruthy()
   })
 
-  it('성공: "그로브로 →" → loadRepo(activate) 로 클론된 레포가 활성 탭이 된다', async () => {
+  it('성공: "저장소 열기" → loadRepo(activate) 로 클론된 레포가 활성 탭이 된다', async () => {
     const mock = installGitApiMock()
     // 부모 폴더 선택 다이얼로그가 경로를 돌려주도록(폼 dest 비어있을 때 runClone이 물어봄).
     mock.gitAPI.pickDirectory.mockResolvedValue('/dev')
@@ -79,9 +79,10 @@ describe('클론 인터랙션 — App 통합(진입점 → resolver → loadRepo
     await user.click(screen.getByRole('button', { name: 'Clone' }))
 
     await waitFor(() => expect(shown('그로브에 심었어요')).toBe(true))
-    await user.click(screen.getByRole('button', { name: /그로브로/ }))
+    // "저장소 열기"(골드 CTA) → handleClonePlanted → loadRepo('/repo/b', activate)
+    await user.click(screen.getByRole('button', { name: '저장소 열기' }))
 
-    // handleClonePlanted → loadRepo('/repo/b', activate) → repoB 커밋이 화면에.
+    // repoB 커밋이 화면에.
     await waitFor(() => expect(shown(FIXTURES['/repo/b'].commitMsg)).toBe(true))
     expect(mock.gitAPI.clone).toHaveBeenCalledWith('https://github.com/acme/b.git', expect.any(String), expect.any(Object))
   })
@@ -183,17 +184,20 @@ describe('클론 인터랙션 — App 통합(진입점 → resolver → loadRepo
     const baseActive = mock.remoteProgressStats().active
 
     await openCloneViaAddRepo(user)
+    // CloneModal은 마운트 시 1회 구독한다(첫 연결 이벤트 유실 방지 — 레이스 가드).
+    await waitFor(() => expect(mock.remoteProgressStats().active).toBeGreaterThan(baseActive))
+
     await user.type(screen.getByPlaceholderText(/github.com\/owner\/repo/), 'https://github.com/acme/b.git')
     await user.click(screen.getByRole('button', { name: 'Clone' }))
 
-    // 진행 진입 시 CloneModal이 추가 구독(누적 > 기준선).
+    // 진행 중에도 구독은 유지(누적 > 기준선).
     await waitFor(() => expect(mock.remoteProgressStats().active).toBeGreaterThan(baseActive))
 
-    // 결과로 전이(progress 구독 해제) → 닫기.
+    // 결과로 전이 후 "그로브로"로 모달을 닫으면 구독이 해제된다(언마운트 cleanup).
     await act(async () => { resolveClone({ success: true, path: '/repo/b', name: 'b' }) })
     await waitFor(() => expect(shown('그로브에 심었어요')).toBe(true))
     const dialog = screen.getByText('그로브에 심었어요').closest('.clone-result') as HTMLElement
-    await user.click(within(dialog.parentElement as HTMLElement).getByRole('button', { name: '닫기' }))
+    await user.click(within(dialog.parentElement as HTMLElement).getByRole('button', { name: '그로브로' }))
 
     // CloneModal 구독은 해제되어 기준선으로 복귀(App 자신의 구독만 남음).
     await waitFor(() => expect(mock.remoteProgressStats().active).toBe(baseActive))

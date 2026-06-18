@@ -92,10 +92,8 @@ export interface CloneResultView {
   path?: string
   // 가용 통계 행(없으면 빈 배열 → stats 행 생략).
   stats: CloneStatsRow[]
-  // auth 실패면 인라인 PAT 토큰칸 노출.
+  // auth/notfound(비공개 가능성) 실패면 인라인 PAT 토큰칸 노출.
   needsToken: boolean
-  // 토스트.
-  toast: { cls: 'success' | 'info' | 'warning' | 'error'; geuru: 'happy' | 'merge' | 'conflict'; title: string; msg: string }
 }
 
 function humanBytes(n: number): string {
@@ -133,7 +131,6 @@ export function mapCloneResult(r: GitCloneResult, displayName?: string): CloneRe
       path: r.path,
       stats: cloneStatsRows(r),
       needsToken: false,
-      toast: { cls: 'success', geuru: 'happy', title: 'Clone 완료', msg: `${name} 을(를) 그로브에 심었어요` },
     }
   }
 
@@ -145,7 +142,6 @@ export function mapCloneResult(r: GitCloneResult, displayName?: string): CloneRe
       detail: '비공개 저장소예요 · 토큰(PAT)으로 다시 시도하세요',
       stats: [],
       needsToken: true,
-      toast: { cls: 'error', geuru: 'conflict', title: '인증 실패', msg: '토큰이 필요한 저장소예요' },
     }
   }
 
@@ -153,11 +149,10 @@ export function mapCloneResult(r: GitCloneResult, displayName?: string): CloneRe
     return {
       kind: 'notfound',
       geuru: 'conflict',
-      title: '저장소를 찾지 못했어요',
-      detail: 'URL을 확인하거나 접근 권한이 있는지 확인하세요',
+      title: '저장소를 찾을 수 없어요',
+      detail: '비공개 저장소일 수 있어요 · URL을 확인하거나 토큰(PAT)으로 다시 시도하세요',
       stats: [],
-      needsToken: false,
-      toast: { cls: 'warning', geuru: 'conflict', title: '찾을 수 없음', msg: 'URL을 다시 확인하세요' },
+      needsToken: true,
     }
   }
 
@@ -169,7 +164,6 @@ export function mapCloneResult(r: GitCloneResult, displayName?: string): CloneRe
     detail: r.message || '알 수 없는 오류가 발생했어요',
     stats: [],
     needsToken: false,
-    toast: { cls: 'error', geuru: 'conflict', title: 'Clone 실패', msg: r.message || '클론 중 오류' },
   }
 }
 

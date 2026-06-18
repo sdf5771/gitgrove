@@ -92,21 +92,19 @@ describe('mapCloneResult — 결과 분기', () => {
     expect(v.name).toBe('repo')
     expect(v.path).toBe('/dev/repo')
     expect(v.needsToken).toBe(false)
-    expect(v.toast.cls).toBe('success')
   })
 
   it('auth 실패 → 토큰칸 노출(needsToken)', () => {
     const v = mapCloneResult({ success: false, errorKind: 'auth', message: '401' })
     expect(v.kind).toBe('auth')
     expect(v.needsToken).toBe(true)
-    expect(v.toast.cls).toBe('error')
   })
 
-  it('notfound 실패 → URL 수정 안내, 토큰칸 없음', () => {
+  it('notfound 실패 → 비공개 안내 + 토큰칸 노출(needsToken)', () => {
     const v = mapCloneResult({ success: false, errorKind: 'notfound', message: '404' })
     expect(v.kind).toBe('notfound')
-    expect(v.needsToken).toBe(false)
-    expect(v.toast.cls).toBe('warning')
+    expect(v.needsToken).toBe(true)
+    expect(v.detail).toContain('비공개')
   })
 
   it('일반 error → 메시지 표시', () => {
