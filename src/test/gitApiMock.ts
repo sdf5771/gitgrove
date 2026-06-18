@@ -145,6 +145,8 @@ export function installGitApiMock() {
   const appAPI = {
     onUpdateAvailable: vi.fn(),
     openReleaseUrl: vi.fn(),
+    downloadUpdate: vi.fn(async (): Promise<{ path: string }> => ({ path: '/tmp/GitGrove-Update.dmg' })),
+    onUpdateDownloadProgress: vi.fn(() => () => {}),
     githubIsEncryptionAvailable: vi.fn(async () => false),
     githubSetToken: vi.fn(async () => true),
     githubGetToken: vi.fn(async (): Promise<string | null> => null),

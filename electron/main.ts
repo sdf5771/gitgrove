@@ -23,6 +23,13 @@ import {
 } from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
 import { normalizeDailyCounts, type RepoActivity } from '../src/utils/repoActivity'
+import {
+  isAllowedUpdateHost,
+  pickDmgAsset,
+  buildReleaseNotes,
+  computeDownloadProgress,
+  safeDownloadFilename,
+} from '../src/utils/appUpdate'
 import { decideMaximizeAction } from './winMaximize'
 
 // macOS GPU 프로세스 크래시 억제
@@ -1305,9 +1312,12 @@ function checkForUpdates() {
         const release = JSON.parse(data)
         const latest = (release.tag_name as string)?.replace(/^v/, '') ?? ''
         if (latest && isNewer(latest, currentVersion)) {
+          const dmgAsset = pickDmgAsset(release.assets)
           win?.webContents.send('app:update-available', {
             version: latest,
             url: release.html_url as string,
+            ...(dmgAsset ? { dmgUrl: dmgAsset.browser_download_url } : {}),
+            ...(buildReleaseNotes(release.body) ? { notes: buildReleaseNotes(release.body) } : {}),
           })
         }
       } catch {
@@ -1330,6 +1340,145 @@ function isNewer(latest: string, current: string): boolean {
 
 ipcMain.on('app:open-release-url', (_e, url: string) => {
   shell.openExternal(url)
+})
+
+// ──────────────────────────────────────────────
+// app:download-update (옵션 1: 무서명 인앱 DMG 다운로드)
+//
+// 1) GitHub 릴리즈 자산(.dmg)을 ~/Downloads로 스트리밍 다운로드(302→S3 리다이렉트 처리)
+// 2) 다운로드 중 'app:update-download-progress' 진행률 전송
+// 3) 완료 후 com.apple.quarantine xattr 제거(붙어있지 않아도 무해 — 방어적)
+// 4) DMG 열기(shell.openPath → 마운트/설치 창)
+//
+// quarantine 실측: Node https+fs 저장 파일에는 com.apple.quarantine 가 붙지 않음
+// (com.apple.provenance 만 부착되며 이는 Gatekeeper 차단 트리거 아님). 그래도
+// 사용자가 LSFileQuarantine 환경 등에서 받았을 경우를 대비해 제거를 시도한다.
+// ──────────────────────────────────────────────
+
+// 단일 https GET(리다이렉트 따라가기). 응답 스트림을 콜백에 넘긴다.
+function httpsGetFollow(
+  url: string,
+  onResponse: (res: import('node:http').IncomingMessage) => void,
+  onError: (err: Error) => void,
+  redirectsLeft = 5,
+): void {
+  if (!isAllowedUpdateHost(url)) {
+    onError(new Error('허용되지 않은 다운로드 호스트입니다.'))
+    return
+  }
+  const req = https.get(url, { headers: { 'User-Agent': 'GitGrove-App' } }, (res) => {
+    const status = res.statusCode ?? 0
+    if (status >= 300 && status < 400 && res.headers.location) {
+      res.resume() // 본문 폐기
+      if (redirectsLeft <= 0) {
+        onError(new Error('리다이렉트가 너무 많습니다.'))
+        return
+      }
+      const next = new URL(res.headers.location, url).toString()
+      httpsGetFollow(next, onResponse, onError, redirectsLeft - 1)
+      return
+    }
+    if (status !== 200) {
+      res.resume()
+      onError(new Error(`다운로드 실패 (HTTP ${status})`))
+      return
+    }
+    onResponse(res)
+  })
+  req.on('error', onError)
+  req.end()
+}
+
+ipcMain.handle('app:download-update', async (event, dmgUrl: string): Promise<{ path: string }> => {
+  if (typeof dmgUrl !== 'string' || !isAllowedUpdateHost(dmgUrl)) {
+    throw new Error('허용되지 않은 업데이트 URL입니다.')
+  }
+
+  // 저장 경로: ~/Downloads (없으면 temp)
+  let downloadsDir: string
+  try {
+    downloadsDir = app.getPath('downloads')
+  } catch {
+    downloadsDir = os.tmpdir()
+  }
+  const filename = safeDownloadFilename(dmgUrl)
+  const destPath = path.join(downloadsDir, filename)
+  const partPath = destPath + '.part'
+
+  const sender = event.sender
+  const sendProgress = (received: number, total?: number) => {
+    if (sender.isDestroyed()) return
+    sender.send('app:update-download-progress', computeDownloadProgress(received, total))
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const fileStream = fs.createWriteStream(partPath)
+    let received = 0
+    let settled = false
+
+    const cleanupAndReject = (err: Error) => {
+      if (settled) return
+      settled = true
+      fileStream.destroy()
+      fs.promises.unlink(partPath).catch(() => {})
+      reject(err)
+    }
+
+    fileStream.on('error', cleanupAndReject)
+
+    httpsGetFollow(
+      dmgUrl,
+      (res) => {
+        const totalHeader = res.headers['content-length']
+        const total = totalHeader ? parseInt(Array.isArray(totalHeader) ? totalHeader[0] : totalHeader, 10) : undefined
+        res.on('data', (chunk: Buffer) => {
+          received += chunk.length
+          sendProgress(received, total && Number.isFinite(total) ? total : undefined)
+        })
+        res.on('error', cleanupAndReject)
+        res.pipe(fileStream)
+        fileStream.on('finish', () => {
+          if (settled) return
+          settled = true
+          fileStream.close((closeErr) => {
+            if (closeErr) {
+              fs.promises.unlink(partPath).catch(() => {})
+              reject(closeErr)
+              return
+            }
+            resolve()
+          })
+        })
+      },
+      cleanupAndReject,
+    )
+  })
+
+  // .part → 최종 파일명으로 원자적 이동(덮어쓰기)
+  await fs.promises.rename(partPath, destPath).catch(async (err) => {
+    await fs.promises.unlink(partPath).catch(() => {})
+    throw err
+  })
+
+  // quarantine 자동 제거 (실패해도 graceful — 로그만)
+  if (process.platform === 'darwin') {
+    const { execFile } = await import('node:child_process')
+    await new Promise<void>((resolve) => {
+      execFile('xattr', ['-dr', 'com.apple.quarantine', destPath], (err) => {
+        if (err) console.warn('[app:download-update] quarantine 제거 실패(무시):', err.message)
+        resolve()
+      })
+    })
+  }
+
+  // DMG 열기(마운트/설치 창). 실패 시 Finder에서 보이기 폴백.
+  const openErr = await shell.openPath(destPath)
+  if (openErr) {
+    console.warn('[app:download-update] openPath 실패, Finder reveal 폴백:', openErr)
+    shell.showItemInFolder(destPath)
+  }
+
+  return { path: destPath }
 })
 
 app.whenReady().then(() => {

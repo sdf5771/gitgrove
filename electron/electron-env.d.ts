@@ -135,8 +135,13 @@ interface RepoActivity {
 
 interface Window {
   appAPI: {
-    onUpdateAvailable: (cb: (info: { version: string; url: string }) => void) => void
+    // 'app:update-available' 페이로드. dmgUrl 없으면 frontend는 openReleaseUrl 브라우저 폴백.
+    onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => void
     openReleaseUrl: (url: string) => void
+    // 옵션 1: 무서명 인앱 DMG 다운로드 → quarantine 제거 → DMG 열기. 성공 시 저장 경로 반환, 실패 시 reject(throw).
+    downloadUpdate: (dmgUrl: string) => Promise<{ path: string }>
+    // 다운로드 진행률 구독. 반환 함수 호출로 구독 해제(effect cleanup). total 모르면 pct 생략(indeterminate).
+    onUpdateDownloadProgress: (cb: (p: { received: number; total?: number; pct?: number }) => void) => () => void
     // GitHub PAT 안전 저장 (Electron safeStorage). 미가용 환경은 localStorage 평문 fallback.
     githubIsEncryptionAvailable: () => Promise<boolean>
     githubSetToken: (token: string) => Promise<boolean>
