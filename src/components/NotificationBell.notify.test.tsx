@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, cleanup, act } from '@testing-library/react'
 import { NotificationBell } from './NotificationBell'
 import { installGitApiMock } from '../test/gitApiMock'
-import type { GithubNotification } from '../utils/githubClient'
+import { GithubApiError, type GithubNotification } from '../utils/githubClient'
+import type { GitlabTodo } from '../utils/gitlabClient'
+import type { GitlabConn } from '../utils/useGitlabConns'
 
 const getNotificationsMock = vi.fn()
 vi.mock('../utils/githubClient', async () => {
@@ -12,6 +14,31 @@ vi.mock('../utils/githubClient', async () => {
     getNotifications: (...args: unknown[]) => getNotificationsMock(...args),
   }
 })
+
+const getTodosMock = vi.fn()
+vi.mock('../utils/gitlabClient', async () => {
+  const actual = await vi.importActual<typeof import('../utils/gitlabClient')>('../utils/gitlabClient')
+  return {
+    ...actual,
+    getTodos: (...args: unknown[]) => getTodosMock(...args),
+  }
+})
+
+function todo(over: Partial<GitlabTodo> & Pick<GitlabTodo, 'id'>): GitlabTodo {
+  return {
+    action_name: 'review_requested',
+    state: 'pending',
+    target_type: 'MergeRequest',
+    target_url: 'https://gitlab.example.com/g/p/-/merge_requests/1',
+    body: 'GitLab todo',
+    created_at: new Date().toISOString(),
+    project: { id: 1, name: 'p', path_with_namespace: 'g/p' },
+    target: { title: 'Review my MR' },
+    ...over,
+  }
+}
+
+const GL_CONN: GitlabConn = { host: 'https://gitlab.example.com', token: 'gltok', username: 'me' }
 
 function notif(over: Partial<GithubNotification> & Pick<GithubNotification, 'id'>): GithubNotification {
   return {
@@ -28,6 +55,7 @@ let appAPI: ReturnType<typeof installGitApiMock>['appAPI']
 
 beforeEach(() => {
   getNotificationsMock.mockReset()
+  getTodosMock.mockReset()
   localStorage.clear()
   vi.useFakeTimers()
   appAPI = installGitApiMock().appAPI
@@ -146,5 +174,52 @@ describe('NotificationBell — 신규 감지 + 네이티브 알림 (기능 B)', 
     await tick()
     await tick()
     expect(getNotificationsMock.mock.calls.length).toBe(afterMount + 2)
+  })
+
+  // Minor #1 회귀: 부모 리렌더로 gitlabInstances 배열 참조가 매번 바뀌어도(load 재생성)
+  // 폴링 interval이 teardown/재등록되지 않아 60초 주기가 정확히 유지되어야 한다.
+  it('부모 리렌더(새 gitlabInstances 참조)에도 60초 주기를 유지한다', async () => {
+    getNotificationsMock.mockResolvedValue([notif({ id: '1' })])
+    getTodosMock.mockResolvedValue([])
+    // 매 렌더 새 배열 참조를 넘기는 부모를 흉내 — 같은 host지만 참조가 달라 load가 재생성됨.
+    const { rerender } = render(
+      <NotificationBell githubToken="tok" gitlabInstances={[{ ...GL_CONN }]} onOpenUrl={vi.fn()} />,
+    )
+    await flush()
+    const afterMount = getNotificationsMock.mock.calls.length
+
+    // interval이 30s만 진행된 시점에 부모가 리렌더(새 배열 참조)를 일으킨다.
+    await act(async () => { vi.advanceTimersByTime(30_000) })
+    rerender(<NotificationBell githubToken="tok" gitlabInstances={[{ ...GL_CONN }]} onOpenUrl={vi.fn()} />)
+    await act(async () => { await Promise.resolve() })
+    // 리렌더로 interval이 재생성됐다면 여기서 카운트다운이 리셋돼 폴링이 안 일어난다.
+    await act(async () => { vi.advanceTimersByTime(30_000); await Promise.resolve(); await Promise.resolve() })
+
+    // 마운트로부터 정확히 60s 경과 → 폴링 1회 발생해야 한다(리셋됐다면 0회).
+    expect(getNotificationsMock.mock.calls.length).toBe(afterMount + 1)
+  })
+
+  // Minor #2 회귀: GitLab 단독 + GitHub 403 — 시드 후 신규 GitLab 알림이 네이티브 알림을 띄운다.
+  it('GitLab 단독 + GitHub 403: 시드 후 신규 GitLab 알림이 showNotification을 트리거한다', async () => {
+    // GitHub는 줄곧 403(notifications scope 없음) — 신뢰 결과 없음.
+    getNotificationsMock.mockRejectedValue(new GithubApiError('GitHub API error: 403', 403, false))
+    // 첫 fetch(시드)에는 todo 1개.
+    getTodosMock.mockResolvedValueOnce([todo({ id: 1 })])
+    render(<NotificationBell githubToken="tok" gitlabInstances={[GL_CONN]} onOpenUrl={vi.fn()} />)
+    await flush()
+    // 시드 시점엔 알림 없음. GitLab 소스가 신뢰 결과이므로 시드는 정상 진행돼야 한다.
+    expect(appAPI.showNotification).not.toHaveBeenCalled()
+
+    // 다음 폴링에 신규 todo 등장 → 신규감지가 동작해 알림을 띄워야 한다.
+    getTodosMock.mockResolvedValueOnce([
+      todo({ id: 1 }),
+      todo({ id: 2, target: { title: 'New MR review' }, project: { id: 1, name: 'p', path_with_namespace: 'g/p' } }),
+    ])
+    await tick()
+
+    expect(appAPI.showNotification).toHaveBeenCalledTimes(1)
+    expect(appAPI.showNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'GitGrove', body: 'New MR review · g/p' }),
+    )
   })
 })

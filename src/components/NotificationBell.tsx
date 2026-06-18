@@ -221,6 +221,9 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
 
     const merged: NotifItem[] = []
     let ghPermDenied = false
+    // 이번 fetch에서 정상 응답한 소스가 하나라도 있었는지 — 신규감지/시드의 신뢰 기준.
+    // (GitHub 403 단독처럼 신뢰할 결과가 전혀 없으면 seen 갱신을 건너뛴다.)
+    let hasTrustedSource = false
     const errors: string[] = []
     let idx = 0
     for (const r of results) {
@@ -228,6 +231,7 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
       idx++
       if (r.status === 'fulfilled') {
         merged.push(...r.value)
+        hasTrustedSource = true
       } else {
         const err = r.reason
         if (isGithubSource && err instanceof GithubApiError && err.status === 403 && !err.rateLimited) {
@@ -246,9 +250,13 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
 
     // ── 신규 감지 + OS 네이티브 알림/Dock ──
     // 첫 fetch(시드)에는 알림을 띄우지 않는다 — 쌓여있던 알림이 쏟아지면 안 됨.
-    // 권한 거부(403)로 GitHub 소스가 통째로 실패한 경우는 신규판정/시드 갱신을 건너뛴다
-    // (잘못 비운 seen 집합 때문에 다음 폴링에서 전부 신규로 오인하는 것을 방지).
-    if (!ghPermDenied) {
+    // 신뢰할 결과가 하나도 없을 때(예: GitHub 단독이고 403)만 신규판정/시드 갱신을 건너뛴다
+    // — 잘못 비운 seen 집합 때문에 다음 폴링에서 전부 신규로 오인하는 것을 방지.
+    // GitLab 소스가 정상 응답했다면 GitHub 403 여부와 무관하게 시드/신규감지를 진행한다
+    // (GitLab 단독 사용자도 신규감지·배지·사운드가 동작해야 함).
+    // merged는 이번에 실제로 조회 성공한 소스의 항목만 담으므로, 403으로 누락된 소스의
+    // 항목을 신규로 오인하지 않는다.
+    if (hasTrustedSource) {
       const currentKeys = new Set(merged.map(n => n.key))
       const newItems = seededRef.current
         ? merged.filter(n => !seenRef.current.has(n.key))
@@ -283,6 +291,12 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
     setLoading(false)
   }, [hasGithub, hasGitlab, githubToken, gitlabInstances])
 
+  // 최신 load를 ref에 보관 — 폴링 effect가 load 재생성(부모 리렌더로 gitlabInstances
+  // 배열 참조가 바뀌면 useCallback이 재생성됨)에 흔들려 interval을 teardown/재등록하면
+  // 60초 카운트다운이 매번 리셋돼 실제 주기가 늘어진다. ref로 끊어 effect를 안정화한다.
+  const loadRef = useRef(load)
+  useEffect(() => { loadRef.current = load }, [load])
+
   // 마운트/토큰/인스턴스 변경 시 1회.
   useEffect(() => {
     if (!hasGithub && !hasGitlab) { setItems(null); return }
@@ -294,19 +308,21 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
   useEffect(() => {
     if (!hasGithub && !hasGitlab) return
     const onFocus = () => {
-      if (Date.now() - lastFetchRef.current >= MIN_REFETCH_MS) void load()
+      if (Date.now() - lastFetchRef.current >= MIN_REFETCH_MS) void loadRef.current()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
-  }, [hasGithub, hasGitlab, load])
+  }, [hasGithub, hasGitlab])
 
   // 백그라운드 60초 주기 폴링 — 불포커스 중에도 신규 알림을 감지.
   // 폴링은 항상 fetch(throttle 미적용); focus 핸들러의 throttle은 그대로 유지.
+  // deps는 [hasGithub, hasGitlab]로 고정 — 부모 리렌더로 load가 재생성돼도
+  // interval은 재등록되지 않아 60초 주기가 정확히 유지된다.
   useEffect(() => {
     if (!hasGithub && !hasGitlab) return
-    const id = setInterval(() => { void load() }, POLL_MS)
+    const id = setInterval(() => { void loadRef.current() }, POLL_MS)
     return () => clearInterval(id)
-  }, [hasGithub, hasGitlab, load])
+  }, [hasGithub, hasGitlab])
 
   // 벨 토글: 패널을 열 때마다 항상 최신을 다시 가져온다.
   const toggle = useCallback(() => {
