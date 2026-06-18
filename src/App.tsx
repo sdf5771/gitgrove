@@ -1404,6 +1404,7 @@ export default function App() {
               })()
             }}
             onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
+            onOpenGithubSettings={() => { setSettingsTab('github'); setShowSettings(true) }}
             onOpenGitlabSettings={() => { setSettingsTab('gitlab'); setShowSettings(true) }}
             notify={notify}
           />

@@ -54,6 +54,7 @@ function baseProps(over?: Partial<RepoManagerProps>): RepoManagerProps {
     onClone: vi.fn(async () => true),
     onBrowse: vi.fn(),
     onOpenUrl: vi.fn(),
+    onOpenGithubSettings: vi.fn(),
     onOpenGitlabSettings: vi.fn(),
     notify: vi.fn(),
     ...over,

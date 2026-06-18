@@ -52,6 +52,7 @@ function baseProps(over?: Partial<RepoManagerProps>): RepoManagerProps {
     onClone: vi.fn(async () => true),
     onBrowse: vi.fn(),
     onOpenUrl: vi.fn(),
+    onOpenGithubSettings: vi.fn(),
     onOpenGitlabSettings: vi.fn(),
     notify: vi.fn(),
     ...over,
@@ -69,10 +70,22 @@ describe('RepoManager — GitHub 레포 브라우저 (B18)', () => {
   })
   afterEach(cleanup)
 
-  it('미연결이면 사이드바 GitHub 항목이 비활성(rm-disabled)', () => {
-    render(<RepoManager {...baseProps({ githubConnected: false })} />)
+  it('미연결이면 사이드바 GitHub 항목이 비활성(rm-disabled), 클릭 시 설정 유도', () => {
+    const onOpenGithubSettings = vi.fn()
+    render(<RepoManager {...baseProps({ githubConnected: false, onOpenGithubSettings })} />)
     const item = screen.getByTitle('GitHub 연결 필요 (설정에서 토큰 등록)')
     expect(item.className).toContain('rm-disabled')
+    fireEvent.click(item)
+    expect(onOpenGithubSettings).toHaveBeenCalled()
+  })
+
+  it('미연결이면 "내 작업" 항목 클릭 시에도 설정 유도', () => {
+    const onOpenGithubSettings = vi.fn()
+    render(<RepoManager {...baseProps({ githubConnected: false, onOpenGithubSettings })} />)
+    const item = screen.getByTitle('내 작업 — GitHub 연결 필요 (설정에서 토큰 등록)')
+    expect(item.className).toContain('rm-disabled')
+    fireEvent.click(item)
+    expect(onOpenGithubSettings).toHaveBeenCalled()
   })
 
   it('연결 시 GitHub 클릭 → 목록을 fetch해 렌더하고 검색이 동작한다', async () => {
