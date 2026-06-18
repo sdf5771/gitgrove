@@ -24,6 +24,12 @@
 
 <br>
 
+<div align="center">
+  <img src="assets/community-intro.png" alt="GitGrove — 혼자 쓰려고 만들지 않았어요. 같이 키우는 오픈소스 macOS Git GUI 🌱" width="100%">
+</div>
+
+<br>
+
 ---
 
 ## 🌱 Meet 그루 (Geuru)
