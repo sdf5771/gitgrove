@@ -64,9 +64,29 @@ interface GitFileEntry {
   deletions: number
 }
 
+// 동기화(pull/push/fetch) 실시간 진행률 이벤트('git:remote-progress' 채널).
+// backend는 simple-git가 주는 raw stage/progress에 op만 붙여 패스(가공은 frontend).
+interface RemoteProgress {
+  op: 'pull' | 'push' | 'fetch'
+  stage: string       // 'remote'|'receiving'|'resolving'|'counting'|'compressing'|'writing' 등 raw
+  progress: number    // 0~100
+  processed?: number
+  total?: number
+}
+
+// 원격 연산 결과(보강). 기존 success/summary는 하위호환 유지.
 interface GitRemoteResult {
   success: boolean
+  op: 'pull' | 'push' | 'fetch'
   summary: string
+  upToDate?: boolean
+  changedFiles?: number       // pull
+  insertions?: number         // pull
+  deletions?: number          // pull
+  newCommits?: number         // pull/fetch 받은 커밋 수 (best-effort)
+  pushedCommits?: number      // push 올린 커밋 수 (best-effort)
+  conflict?: boolean
+  conflictedFiles?: string[]
 }
 
 interface GitRemoteInfo {
@@ -136,6 +156,8 @@ interface Window {
     pull: (repoPath: string) => Promise<GitRemoteResult>
     push: (repoPath: string) => Promise<GitRemoteResult>
     fetch: (repoPath: string) => Promise<GitRemoteResult>
+    // pull/push/fetch 진행률 구독. 반환된 함수를 호출해 구독 해제(effect cleanup).
+    onRemoteProgress: (cb: (p: RemoteProgress) => void) => () => void
     checkout: (repoPath: string, branch: string) => Promise<void>
     blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
     getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>

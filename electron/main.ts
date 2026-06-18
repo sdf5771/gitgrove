@@ -6,6 +6,17 @@ import fs from 'node:fs'
 import https from 'node:https'
 import simpleGit, { CheckRepoActions } from 'simple-git'
 import { categorizeGitStatus } from '../src/utils/gitStatus'
+import {
+  mapProgress,
+  isConflictError,
+  extractConflictedFiles,
+  extractDiffStat,
+  parseRevCount,
+  computeFetchDelta,
+  buildPullSummary,
+  type RemoteOp,
+  type GitRemoteResult,
+} from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
 import { normalizeDailyCounts, type RepoActivity } from '../src/utils/repoActivity'
 import { decideMaximizeAction } from './winMaximize'
@@ -698,45 +709,104 @@ ipcMain.handle('git:apply-hunk', async (_event, repoPath: string, filePath: stri
 // 원격 연산 / 브랜치 체크아웃 IPC 핸들러
 // ──────────────────────────────────────────────
 
-interface GitRemoteResult {
-  success: boolean
-  summary: string
+// GitRemoteResult/RemoteProgress 타입과 가공 로직은 ../src/utils/syncResult 로 분리
+// (vitest 단위테스트 대상). 핸들러는 simpleGit progress 핸들러를 통해 진행률을
+// 'git:remote-progress' 채널로 스트리밍하고, 결과를 best-effort로 보강한다.
+
+// 진행률 핸들러가 달린 simpleGit 인스턴스 생성. ev → RemoteProgress 매핑 후 전송.
+function remoteGit(repoPath: string, op: RemoteOp, event: Electron.IpcMainInvokeEvent) {
+  return simpleGit({
+    baseDir: repoPath,
+    progress(ev) {
+      // 렌더러가 파괴된 경우 send 예외 방지
+      if (event.sender.isDestroyed()) return
+      event.sender.send('git:remote-progress', mapProgress(op, ev))
+    },
+  })
 }
 
-// git:pull — 원격에서 pull
-ipcMain.handle('git:pull', async (_event, repoPath: string): Promise<GitRemoteResult> => {
-  const git = simpleGit(repoPath)
+// upstream(@{u}) 기준 ahead/behind 카운트(best-effort). 실패 시 undefined.
+//   range 'HEAD..@{u}' → behind(받을 커밋 수), '@{u}..HEAD' → ahead(올릴 커밋 수)
+async function revCount(git: ReturnType<typeof simpleGit>, range: string): Promise<number | undefined> {
+  try {
+    const out = await git.raw(['rev-list', '--count', range])
+    return parseRevCount(out)
+  } catch {
+    return undefined  // upstream 없음/에러 → 필드 생략
+  }
+}
+
+// git:pull — 원격에서 pull (진행률 스트리밍 + 결과 보강)
+ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteResult> => {
+  const git = remoteGit(repoPath, 'pull', event)
+  const behindBefore = await revCount(git, 'HEAD..@{u}')  // pull 전 받을 커밋 수
   try {
     const result = await git.pull()
-    const count = result.summary.changes + result.summary.insertions + result.summary.deletions
+    const stat = extractDiffStat(result)
+    // newCommits: pull 전 behind(받을 커밋 수)를 best-effort로 사용
+    const newCommits = behindBefore
     return {
       success: true,
-      summary: count > 0
-        ? `Fast-forward: ${result.summary.changes} file(s) changed`
-        : 'Already up to date',
+      op: 'pull',
+      summary: buildPullSummary(stat),
+      upToDate: stat.upToDate,
+      changedFiles: stat.changedFiles,
+      insertions: stat.insertions,
+      deletions: stat.deletions,
+      ...(newCommits !== undefined ? { newCommits } : {}),
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    // 충돌은 throw하지 않고 conflict 결과로 변환
+    if (isConflictError(message)) {
+      let conflictedFiles: string[] = []
+      try {
+        const status = await git.status()
+        conflictedFiles = extractConflictedFiles(status.conflicted)
+      } catch { /* status 실패해도 conflict 결과는 반환 */ }
+      return {
+        success: false,
+        op: 'pull',
+        summary: 'Merge conflict — resolve and commit',
+        conflict: true,
+        conflictedFiles,
+      }
+    }
+    throw new Error(message)  // 진짜 에러만 throw
+  }
+})
+
+// git:push — 원격으로 push (진행률 스트리밍 + pushedCommits 보강)
+ipcMain.handle('git:push', async (event, repoPath: string): Promise<GitRemoteResult> => {
+  const git = remoteGit(repoPath, 'push', event)
+  const pushedCommits = await revCount(git, '@{u}..HEAD')  // push 전 올릴 커밋 수
+  try {
+    await git.push()
+    return {
+      success: true,
+      op: 'push',
+      summary: 'Pushed to remote',
+      ...(pushedCommits !== undefined ? { pushedCommits } : {}),
     }
   } catch (err) {
     throw new Error(err instanceof Error ? err.message : String(err))
   }
 })
 
-// git:push — 원격으로 push
-ipcMain.handle('git:push', async (_event, repoPath: string): Promise<GitRemoteResult> => {
-  const git = simpleGit(repoPath)
-  try {
-    await git.push()
-    return { success: true, summary: 'Pushed to remote' }
-  } catch (err) {
-    throw new Error(err instanceof Error ? err.message : String(err))
-  }
-})
-
-// git:fetch — 원격에서 fetch
-ipcMain.handle('git:fetch', async (_event, repoPath: string): Promise<GitRemoteResult> => {
-  const git = simpleGit(repoPath)
+// git:fetch — 원격에서 fetch (진행률 스트리밍 + newCommits 보강)
+ipcMain.handle('git:fetch', async (event, repoPath: string): Promise<GitRemoteResult> => {
+  const git = remoteGit(repoPath, 'fetch', event)
+  const behindBefore = await revCount(git, 'HEAD..@{u}')  // fetch 전 behind
   try {
     await git.fetch()
-    return { success: true, summary: 'Fetched from remote' }
+    const behindAfter = await revCount(git, 'HEAD..@{u}')  // fetch 후 behind
+    const newCommits = computeFetchDelta(behindBefore, behindAfter)
+    return {
+      success: true,
+      op: 'fetch',
+      summary: 'Fetched from remote',
+      ...(newCommits !== undefined ? { newCommits, upToDate: newCommits === 0 } : {}),
+    }
   } catch (err) {
     throw new Error(err instanceof Error ? err.message : String(err))
   }

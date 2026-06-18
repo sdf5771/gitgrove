@@ -60,6 +60,12 @@ contextBridge.exposeInMainWorld('gitAPI', {
   pull: (repoPath: string) => ipcRenderer.invoke('git:pull', repoPath),
   push: (repoPath: string) => ipcRenderer.invoke('git:push', repoPath),
   fetch: (repoPath: string) => ipcRenderer.invoke('git:fetch', repoPath),
+  // pull/push/fetch 실시간 진행률 구독. 구독 해제 함수를 반환 → effect cleanup에서 호출(리스너 누수 방지).
+  onRemoteProgress: (cb: (p: RemoteProgress) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: RemoteProgress) => cb(p)
+    ipcRenderer.on('git:remote-progress', listener)
+    return () => ipcRenderer.removeListener('git:remote-progress', listener)
+  },
   checkout: (repoPath: string, branch: string) => ipcRenderer.invoke('git:checkout', repoPath, branch),
   blame: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:blame', repoPath, filePath),
   getRemotes: (repoPath: string) => ipcRenderer.invoke('git:remotes', repoPath),
