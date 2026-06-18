@@ -1507,6 +1507,12 @@ export default function App() {
                           notify('success', 'Committed', '변경사항이 커밋되었습니다')
                         }
                       }}
+                      onTreeChanged={async toast => {
+                        if (repoPath) {
+                          await loadRepo(repoPath)
+                          if (toast) notify(toast.cls, toast.title, toast.msg)
+                        }
+                      }}
                     />
                   )}
                 </div>

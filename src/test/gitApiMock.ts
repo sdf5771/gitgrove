@@ -140,6 +140,11 @@ export function installGitApiMock() {
     revert: vi.fn(async () => {}),
     reset: vi.fn(async () => {}),
     rebaseInteractive: vi.fn(async () => {}),
+    // Stage 탭 파일 컨텍스트 메뉴 (테스트에서 override 가능하도록 vi.fn)
+    revealInFinder: vi.fn(async () => {}),
+    openPath: vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true })),
+    discardChanges: vi.fn(async () => {}),
+    addToGitignore: vi.fn(async () => {}),
   }
 
   const appAPI = {

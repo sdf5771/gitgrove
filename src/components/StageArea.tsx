@@ -1,16 +1,22 @@
 import { useState, useEffect } from 'react'
 import { FileEntry } from '../data/mockData'
 import { FilePath } from './FilePath'
+import { FileContextMenu, type FileMenuAction } from './FileContextMenu'
+import { fileExtension } from '../utils/fileExtension'
+import { ConfirmModal } from './modals/ConfirmModal'
 
 interface Props {
   onSelDiffFile: (f: FileEntry, staged: boolean) => void
   unstaged?: FileEntry[]
   staged?: FileEntry[]
   repoPath?: string | null      // 실제 IPC 호출에 사용
-  onCommitDone?: () => void     // 커밋 완료 후 콜백 (상태 새로고침)
+  onCommitDone?: () => void     // 커밋/amend 완료 후 콜백 ('Committed' 토스트 포함)
+  // 컨텍스트 메뉴의 워킹트리 변경(discard/ignore) 후 git 상태만 갱신하는 콜백.
+  // onCommitDone과 달리 'Committed' 토스트를 띄우지 않는다. 액션별 토스트는 액션 인자로 전달.
+  onTreeChanged?: (toast?: { cls: 'success' | 'error' | 'warning'; title: string; msg: string }) => void | Promise<void>
 }
 
-export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone }: Props) {
+export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone, onTreeChanged }: Props) {
   // controlled: props(unstaged/staged)를 단일 소스로 소비하되, stage/unstage 클릭은
   // 즉시 반영(낙관적)을 위해 로컬 state에 담는다. 이후 props가 바뀌면(=loadRepo 확정
   // 결과 도착) 그 값으로 재동기화 → 낙관 → 서버확정 순서가 자연스럽게 이어진다.
@@ -22,9 +28,75 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
   const [msg, setMsg] = useState('')
   const [committing, setCommitting] = useState(false)
 
+  // 우클릭 컨텍스트 메뉴 (한 번에 하나) + discard 확인 모달
+  const [menu, setMenu] = useState<{ x: number; y: number; file: FileEntry } | null>(null)
+  const [discardTarget, setDiscardTarget] = useState<FileEntry | null>(null)
+
   // prop이 바뀌면(authoritative loadRepo 결과) 로컬 state를 동기화한다.
   useEffect(() => { setUnstaged(unstagedProp ?? []) }, [unstagedProp])
   useEffect(() => { setStaged(stagedProp ?? []) }, [stagedProp])
+
+  const openMenu = (e: React.MouseEvent, f: FileEntry) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenu({ x: e.clientX, y: e.clientY, file: f })
+  }
+
+  const absPath = (f: FileEntry) => `${repoPath ?? ''}/${f.p}`
+
+  const handleMenuAction = async (action: FileMenuAction, f: FileEntry) => {
+    switch (action) {
+      case 'discard':
+        // 파괴적 → ConfirmModal로 확인
+        setDiscardTarget(f)
+        break
+      case 'ignore-file':
+        if (!repoPath) return
+        try {
+          await window.gitAPI?.addToGitignore(repoPath, [f.p])
+          await onTreeChanged?.({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
+        } catch (e) { console.error('addToGitignore failed:', e) }
+        break
+      case 'ignore-ext': {
+        if (!repoPath) return
+        const ext = fileExtension(f.p)
+        if (!ext) return
+        try {
+          await window.gitAPI?.addToGitignore(repoPath, ['*.' + ext])
+          await onTreeChanged?.({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
+        } catch (e) { console.error('addToGitignore failed:', e) }
+        break
+      }
+      case 'copy-abs-path':
+        try { await navigator.clipboard.writeText(absPath(f)) }
+        catch (e) { console.error('clipboard write failed:', e) }
+        break
+      case 'copy-rel-path':
+        try { await navigator.clipboard.writeText(f.p) }
+        catch (e) { console.error('clipboard write failed:', e) }
+        break
+      case 'reveal':
+        try { await window.gitAPI?.revealInFinder(absPath(f)) }
+        catch (e) { console.error('revealInFinder failed:', e) }
+        break
+      case 'open-default':
+        try {
+          const r = await window.gitAPI?.openPath(absPath(f))
+          if (r && !r.ok) console.warn('openPath failed:', r.error)
+        } catch (e) { console.error('openPath failed:', e) }
+        break
+    }
+  }
+
+  const confirmDiscard = async () => {
+    const f = discardTarget
+    setDiscardTarget(null)
+    if (!f || !repoPath) return
+    try {
+      await window.gitAPI?.discardChanges(repoPath, [f.p])
+      await onTreeChanged?.({ cls: 'success', title: 'Discarded', msg: '변경사항을 되돌렸습니다' })
+    } catch (e) { console.error('discardChanges failed:', e) }
+  }
 
   const stageFile = async (f: FileEntry) => {
     if (repoPath) {
@@ -117,6 +189,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
                 key={f.p}
                 className={`sfi${selU === i ? ' on' : ''}`}
                 onClick={() => { setSelU(i); onSelDiffFile(f, false) }}
+                onContextMenu={e => openMenu(e, f)}
               >
                 <button className="sact" onClick={e => { e.stopPropagation(); stageFile(f) }} title="Stage">+</button>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>
@@ -150,6 +223,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
                 key={f.p}
                 className={`sfi${selS === i ? ' on' : ''}`}
                 onClick={() => { setSelS(i); onSelDiffFile(f, true) }}
+                onContextMenu={e => openMenu(e, f)}
               >
                 <button className="sact" onClick={e => { e.stopPropagation(); unstageFile(f) }} title="Unstage">−</button>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>
@@ -200,6 +274,28 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
           </button>
         </div>
       </div>
+
+      {menu && repoPath && (
+        <FileContextMenu
+          x={menu.x}
+          y={menu.y}
+          file={menu.file}
+          repoPath={repoPath}
+          onClose={() => setMenu(null)}
+          onAction={handleMenuAction}
+        />
+      )}
+
+      {discardTarget && (
+        <ConfirmModal
+          title="Discard Changes"
+          message={`"${discardTarget.p}"의 변경사항을 되돌립니다. 이 작업은 되돌릴 수 없습니다.`}
+          confirmLabel="Discard"
+          danger
+          onConfirm={confirmDiscard}
+          onCancel={() => setDiscardTarget(null)}
+        />
+      )}
     </div>
   )
 }

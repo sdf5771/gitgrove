@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 import https from 'node:https'
 import simpleGit, { CheckRepoActions } from 'simple-git'
 import { categorizeGitStatus } from '../src/utils/gitStatus'
@@ -1121,6 +1122,107 @@ ipcMain.handle('git:rebase-interactive', async (_event, repoPath: string, items:
   } finally {
     await Promise.all([fs.unlink(tmpSeq).catch(() => {}), fs.unlink(tmpEditor).catch(() => {})])
   }
+})
+
+// ──────────────────────────────────────────────
+// Stage 탭 파일 컨텍스트 메뉴용 IPC (reveal / open / discard / gitignore)
+// ──────────────────────────────────────────────
+
+// git:reveal-in-finder — OS 파일 탐색기(Finder)에서 해당 파일 위치를 표시.
+ipcMain.handle('git:reveal-in-finder', (_event, absPath: string): void => {
+  shell.showItemInFolder(absPath)
+})
+
+// git:open-path — OS 기본 앱으로 파일/폴더 열기.
+//   shell.openPath는 성공 시 빈 문자열, 실패 시 에러 메시지를 반환한다.
+ipcMain.handle('git:open-path', async (_event, absPath: string): Promise<{ ok: boolean; error?: string }> => {
+  const error = await shell.openPath(absPath)
+  if (error) return { ok: false, error }
+  return { ok: true }
+})
+
+// git:discard — 변경사항 되돌리기 (파괴적).
+//   files: repo 루트 기준 상대경로 배열.
+//   추적 중(modified/deleted) → `git checkout -- <file>`로 원복.
+//   미추적(untracked, '??') → 디스크에서 삭제.
+//   - 경로 트래버설 방어: 각 파일의 resolve 경로가 repoPath 하위가 아니면 skip.
+//   - 한 파일이 실패해도 나머지는 진행하되, (skip 제외) 전부 실패하면 throw.
+ipcMain.handle('git:discard', async (_event, repoPath: string, files: string[]): Promise<void> => {
+  const git = simpleGit(repoPath)
+  const repoRoot = path.resolve(repoPath)
+
+  // repoRoot 하위 경로인지 검증 (.. 트래버설 / 절대경로 탈출 차단).
+  const isInsideRepo = (rel: string): boolean => {
+    const abs = path.resolve(repoRoot, rel)
+    const relFromRoot = path.relative(repoRoot, abs)
+    return relFromRoot !== '' && !relFromRoot.startsWith('..') && !path.isAbsolute(relFromRoot)
+  }
+
+  // 처리 대상(트래버설 검증 통과)만 추림. 전부 skip이면 아무것도 안 하고 종료.
+  const targets = files.filter(isInsideRepo)
+  if (targets.length === 0) return
+
+  let attempted = 0
+  let failed = 0
+
+  for (const file of targets) {
+    attempted++
+    try {
+      // 파일 단위 status로 추적 여부 판별 (경로 인자는 배열로 전달 → 공백/특수문자 안전).
+      const status = await git.status(['--', file])
+      const isUntracked = status.not_added.includes(file)
+
+      if (isUntracked) {
+        // 미추적 → 디스크에서 삭제.
+        await fsp.rm(path.resolve(repoRoot, file), { force: true })
+      } else {
+        // 추적 중(modified/deleted 등) → 워킹트리 변경 원복.
+        await git.raw(['checkout', '--', file])
+      }
+    } catch {
+      failed++
+    }
+  }
+
+  // 시도한 파일이 전부 실패하면 호출부가 알 수 있도록 throw.
+  if (attempted > 0 && failed === attempted) {
+    throw new Error('discard 실패: 모든 대상 파일을 되돌리지 못했습니다.')
+  }
+})
+
+// git:add-to-gitignore — <repoPath>/.gitignore 에 패턴 줄을 append (중복 줄 제외).
+//   - 파일이 없으면 새로 만든다.
+//   - 각 패턴은 trim 비교로 이미 같은 줄이 있으면 추가하지 않는다.
+//   - 파일이 newline으로 끝나도록 보장하고, 마지막에 한 번만 write.
+ipcMain.handle('git:add-to-gitignore', async (_event, repoPath: string, patterns: string[]): Promise<void> => {
+  const gitignorePath = path.join(repoPath, '.gitignore')
+
+  let content = ''
+  try {
+    content = await fsp.readFile(gitignorePath, 'utf8')
+  } catch {
+    content = '' // 파일 없음 → 새로 생성.
+  }
+
+  // 기존 줄(trim 기준) 집합 — 중복 추가 방지.
+  const existing = new Set(content.split('\n').map(l => l.trim()))
+
+  const toAppend: string[] = []
+  for (const raw of patterns) {
+    const line = raw.trim()
+    if (!line || existing.has(line)) continue
+    existing.add(line)
+    toAppend.push(line)
+  }
+
+  if (toAppend.length === 0) return
+
+  // 파일이 내용이 있고 newline으로 끝나지 않으면 개행 보강.
+  let next = content
+  if (next.length > 0 && !next.endsWith('\n')) next += '\n'
+  next += toAppend.join('\n') + '\n'
+
+  await fsp.writeFile(gitignorePath, next, 'utf8')
 })
 
 // ──────────────────────────────────────────────
