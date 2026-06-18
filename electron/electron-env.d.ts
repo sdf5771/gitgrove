@@ -135,8 +135,8 @@ interface RepoActivity {
 
 interface Window {
   appAPI: {
-    // 'app:update-available' 페이로드. dmgUrl 없으면 frontend는 openReleaseUrl 브라우저 폴백.
-    onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => void
+    // 'app:update-available' 구독. 반환 함수 호출로 구독 해제(effect cleanup). dmgUrl 없으면 frontend는 openReleaseUrl 브라우저 폴백.
+    onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => () => void
     openReleaseUrl: (url: string) => void
     // 옵션 1: 무서명 인앱 DMG 다운로드 → quarantine 제거 → DMG 열기. 성공 시 저장 경로 반환, 실패 시 reject(throw).
     downloadUpdate: (dmgUrl: string) => Promise<{ path: string }>

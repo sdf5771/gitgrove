@@ -33,12 +33,24 @@ describe('isAllowedUpdateHost', () => {
     expect(isAllowedUpdateHost('https://notgithub.com/x.dmg')).toBe(false)
   })
 
-  it('호스트 토큰을 도메인이 아닌 경로/서브도메인 우회로 끼워넣어도 — 토큰이 호스트명에 있으면만 허용', () => {
-    // SSRF: 악성 호스트가 경로에 토큰을 넣어도 hostname에는 없으므로 거부.
+  it('S3 자산 호스트는 *.amazonaws.com + 호스트명에 github- 포함일 때만 허용', () => {
+    // 정상 GitHub 릴리즈 자산 S3 리다이렉트 대상.
+    expect(isAllowedUpdateHost('https://github-production-release-asset-2e65be.s3.amazonaws.com/123/file.dmg')).toBe(true)
+    expect(isAllowedUpdateHost('https://github-releases.s3.amazonaws.com/123/file.dmg')).toBe(true)
+    // amazonaws.com 이지만 github- 토큰이 없으면 거부.
+    expect(isAllowedUpdateHost('https://my-bucket.s3.amazonaws.com/x.dmg')).toBe(false)
+    // github- 토큰이 있어도 amazonaws.com 호스트가 아니면 거부.
+    expect(isAllowedUpdateHost('https://github-releases.example.com/x.dmg')).toBe(false)
+  })
+
+  it('[보안 회귀] 호스트 부분일치 우회 차단 — github- 토큰을 호스트에 끼워넣어도 amazonaws 외엔 거부', () => {
+    // 부분일치(host.includes(token)) 복원 시 아래가 통과 → red. 정확/접미사 앵커로 차단되어야 한다.
+    expect(isAllowedUpdateHost('https://github-releases.evil.com/x.dmg')).toBe(false)
+    expect(isAllowedUpdateHost('https://github-production-release-asset.evil.io/x.dmg')).toBe(false)
+    expect(isAllowedUpdateHost('https://evilgithub.com/x.dmg')).toBe(false)
+    // 경로에 토큰을 넣어도 hostname에는 없으므로 거부.
     expect(isAllowedUpdateHost('https://evil.com/github-releases/x.dmg')).toBe(false)
     expect(isAllowedUpdateHost('https://evil.com/github-production-release-asset/x.dmg')).toBe(false)
-    // 단, 토큰이 호스트명에 포함되면 허용(현 정책의 의도된 동작 — 회귀 감지용 고정).
-    expect(isAllowedUpdateHost('https://github-releases.evil.com/x.dmg')).toBe(true)
   })
 
   it('포트가 붙어도 호스트 판정은 hostname 기준(포트 무관)', () => {

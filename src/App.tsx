@@ -676,7 +676,7 @@ export default function App() {
   useEffect(() => { updateStateRef.current = updateState }, [updateState])
 
   useEffect(() => {
-    window.appAPI?.onUpdateAvailable(info => {
+    const off = window.appAPI?.onUpdateAvailable(info => {
       const { version, url } = info
       // 상시 인디케이터에 공급(진행 중/완료면 보존).
       setUpdateState(prev => receiveUpdate(prev, info))
@@ -692,6 +692,8 @@ export default function App() {
         8000,
       )
     })
+    // 누수 방지: 언마운트/재마운트 시 'app:update-available' 리스너 해제.
+    return () => { off?.() }
   }, [notify])
 
   // ── 다운로드 진행률 구독(누수 방지: cleanup에서 해제) ──

@@ -33,7 +33,7 @@ function installWithUpdateCapture() {
   let availCb: ((info: UpdateAvailablePayload) => void) | null = null
   let progressCb: ((p: UpdateDownloadProgress) => void) | null = null
   const unsub = vi.fn()
-  mock.appAPI.onUpdateAvailable.mockImplementation((cb: (info: UpdateAvailablePayload) => void) => { availCb = cb })
+  mock.appAPI.onUpdateAvailable.mockImplementation((cb: (info: UpdateAvailablePayload) => void) => { availCb = cb; return () => {} })
   mock.appAPI.onUpdateDownloadProgress.mockImplementation((cb: (p: UpdateDownloadProgress) => void) => {
     progressCb = cb
     return () => { unsub() }
@@ -155,22 +155,19 @@ describe('업데이트 인디케이터 — App 통합', () => {
     expect(mock.unsub).toHaveBeenCalled()
   })
 
-  // ⚠️ 알려진 버그(QA, Medium): onUpdateAvailable 구독은 cleanup으로 해제되지 않는다.
-  //   - preload.ts onUpdateAvailable 는 unsub 함수를 반환하지 않음(onUpdateDownloadProgress 와 비대칭).
-  //   - App.tsx 의 onUpdateAvailable effect 도 cleanup return 이 없음.
-  //   StrictMode(dev) 이중 마운트/향후 remount 시 'app:update-available' 리스너가
-  //   누적되어 시작 알림 토스트가 중복 발생할 수 있다.
-  //   it.fails: 현재 코드에선 '해제 안 됨'이 기대 → 통과. 프론트가 cleanup을 붙이면
-  //   이 테스트가 red 로 뒤집혀 가드가 작동한다(그 시점에 .fails 제거 + 양성 단언으로 교체).
-  it.fails('[알려진 누수] 언마운트 시 onUpdateAvailable 구독은 (현재) 해제되지 않는다', async () => {
+  // [누수 픽스 회귀] onUpdateAvailable 구독은 언마운트 시 cleanup으로 해제된다.
+  //   - preload.ts onUpdateAvailable 는 unsub 함수를 반환(onUpdateDownloadProgress 와 대칭).
+  //   - App.tsx 의 onUpdateAvailable effect 도 cleanup에서 반환된 unsub 을 호출한다.
+  //   픽스를 무력화(반환 unsub 미호출/preload 반환 제거)하면 availUnsub 미호출로 이 테스트가 red 가 된다.
+  it('언마운트 시 onUpdateAvailable 구독 해제(누수 방지)', async () => {
     const mock = installGitApiMock()
     const availUnsub = vi.fn()
-    // 픽스가 적용된 preload 라면 unsub 함수를 반환할 것이라고 가정한 mock.
+    // 픽스된 preload 처럼 unsub 함수를 반환하는 mock.
     mock.appAPI.onUpdateAvailable.mockImplementation(() => () => { availUnsub() })
     const { unmount } = render(<App />)
     await waitFor(() => expect(shown(FIXTURES['/repo/a'].commitMsg)).toBe(true))
     unmount()
-    // 픽스 전: App이 반환 unsub을 호출하지 않으므로 이 단언은 실패 → it.fails 로 통과.
+    // 픽스 후: App이 cleanup에서 반환 unsub을 호출 → availUnsub 호출됨.
     expect(availUnsub).toHaveBeenCalled()
   })
 })

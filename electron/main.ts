@@ -1313,11 +1313,12 @@ function checkForUpdates() {
         const latest = (release.tag_name as string)?.replace(/^v/, '') ?? ''
         if (latest && isNewer(latest, currentVersion)) {
           const dmgAsset = pickDmgAsset(release.assets)
+          const notes = buildReleaseNotes(release.body)
           win?.webContents.send('app:update-available', {
             version: latest,
             url: release.html_url as string,
             ...(dmgAsset ? { dmgUrl: dmgAsset.browser_download_url } : {}),
-            ...(buildReleaseNotes(release.body) ? { notes: buildReleaseNotes(release.body) } : {}),
+            ...(notes ? { notes } : {}),
           })
         }
       } catch {

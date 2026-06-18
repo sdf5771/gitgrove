@@ -30,21 +30,23 @@ export interface UpdateDownloadProgress {
 
 // GitHub 릴리즈 자산 다운로드가 허용되는 호스트 화이트리스트.
 // 임의 URL 다운로드(SSRF/악성 바이너리 유도)를 막기 위해 다운로드 전 반드시 검증한다.
-// - api.github.com / github.com: 릴리즈/자산 페이지
-// - *.githubusercontent.com: objects.githubusercontent.com(자산 리다이렉트 대상),
-//   raw.githubusercontent.com 등
-// - github-releases / github-production-release-asset 이 들어간 S3 호스트:
-//   자산 다운로드 302 리다이렉트의 실제 대상(예:
-//   github-production-release-asset-2e65be.s3.amazonaws.com)
+// 부분일치(host.includes)는 `github-releases.evil.com` 같은 호스트를 통과시키므로
+// 사용하지 않는다. 정확 일치 또는 `.` 앵커 접미사 일치만 허용한다.
+// - 정확 일치: github.com / api.github.com / objects.githubusercontent.com
+// - 접미사 일치: *.github.com / *.githubusercontent.com (raw.githubusercontent.com 등)
+// - GitHub 릴리즈 자산 S3 리다이렉트(302 실제 대상):
+//   `*.amazonaws.com` 이면서 호스트명에 `github-` 가 포함된 경우만
+//   (예: github-production-release-asset-2e65be.s3.amazonaws.com)
+const ALLOWED_UPDATE_HOSTS_EXACT = [
+  'github.com',
+  'api.github.com',
+  'objects.githubusercontent.com',
+]
+
+// `.` 앵커 접미사 — `host === suffix` 또는 `host.endsWith('.' + suffix)` 만 허용.
 const ALLOWED_UPDATE_HOST_SUFFIXES = [
   'github.com',
   'githubusercontent.com',
-]
-
-// S3 등으로 리다이렉트되는 자산 호스트는 호스트명에 아래 토큰이 포함되면 허용.
-const ALLOWED_UPDATE_HOST_TOKENS = [
-  'github-releases',
-  'github-production-release-asset',
 ]
 
 // 주어진 URL이 신뢰 가능한 GitHub 릴리즈 자산 호스트인지 판정.
@@ -60,12 +62,16 @@ export function isAllowedUpdateHost(rawUrl: string): boolean {
   const host = u.hostname.toLowerCase()
   if (!host) return false
 
+  if (ALLOWED_UPDATE_HOSTS_EXACT.includes(host)) return true
+
   for (const suffix of ALLOWED_UPDATE_HOST_SUFFIXES) {
     if (host === suffix || host.endsWith('.' + suffix)) return true
   }
-  for (const token of ALLOWED_UPDATE_HOST_TOKENS) {
-    if (host.includes(token)) return true
-  }
+
+  // GitHub 릴리즈 자산 S3 리다이렉트 대상: *.amazonaws.com + 호스트에 'github-' 포함.
+  // 'github-' 는 호스트명 안에서만(경로/임의 토큰 우회 차단) 확인한다.
+  if (host.endsWith('.amazonaws.com') && host.includes('github-')) return true
+
   return false
 }
 
