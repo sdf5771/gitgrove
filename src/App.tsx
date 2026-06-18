@@ -356,6 +356,9 @@ export default function App() {
   // 진행 모델: onRemoteProgress 이벤트 누적. result 도착 시 결과 푸터/표정 전환.
   const [syncModel, setSyncModel] = useState<ProgressModel | null>(null)
   const [syncResultView, setSyncResultView] = useState<ResultView | null>(null)
+  // HUD/상태바 신호등이 어느 repo의 op에 속하는지(M1 stale 누출 가드).
+  // 이 값이 현재 repoPath와 다르면 진행/결과 표시를 모두 가린다 — 진행 중 탭 전환에도 안전.
+  const [syncOpPath, setSyncOpPath] = useState<string | null>(null)
   // busy 버튼 하단 미니 진행바(전체 %). 진행 중일 때만 0~100.
   const [syncPct, setSyncPct] = useState(0)
   // 최신 op를 effect 안에서 읽기 위한 ref(구독은 한 번만 등록, 누수 방지).
@@ -380,6 +383,7 @@ export default function App() {
   const closeSyncHud = useCallback(() => {
     setSyncModel(null)
     setSyncResultView(null)
+    setSyncOpPath(null)
   }, [])
 
   // refs to avoid stale closure — adding repos/repoPath to loadRepo deps would
@@ -566,6 +570,7 @@ export default function App() {
   const handleRemoteOp = useCallback(async (op: 'pull' | 'push' | 'fetch') => {
     if (!repoPath || remoteOpRef.current) return
     setRemoteOp(op)
+    setSyncOpPath(repoPath)
     setSyncModel(initialModel(op))
     setSyncResultView(null)
     setSyncPct(0)
@@ -1104,21 +1109,27 @@ export default function App() {
   const repo = repos[activeRepo] || null
   const displayBranch = repo?.branch || activeBranch
 
+  // M1: HUD/상태바 신호등은 op 대상 repo가 현재 표시 중인 repo와 같을 때만 반영한다.
+  // (탭/repo 전환으로 repoPath가 바뀌면 이전 repo의 진행/결과가 새 repo에 남지 않게 가린다.)
+  const syncForCurrentRepo = syncOpPath !== null && syncOpPath === repoPath
+  const activeRemoteOp = syncForCurrentRepo ? remoteOp : null
+  const activeSyncResult = syncForCurrentRepo ? syncResultView : null
+
   // 저장소 상태 → 그루 표정 1:1 매핑 (디자인: clean→sleepy, syncing→think, conflict→conflict)
-  const geuruState: GeuruExpr = (showConflict || syncResultView?.kind === 'conflict')
+  const geuruState: GeuruExpr = (showConflict || activeSyncResult?.kind === 'conflict')
     ? 'conflict'
-    : remoteOp
+    : activeRemoteOp
       ? 'think'
       : repo?.dirty
         ? 'idle'
         : 'sleepy'
 
   // 상태바 sync dot 상태: 진행 중=골드 펄스 / 충돌=빨강 / 방금 완료=녹색 / 평시=idle.
-  const syncState: 'running' | 'done' | 'err' | 'idle' = remoteOp
+  const syncState: 'running' | 'done' | 'err' | 'idle' = activeRemoteOp
     ? 'running'
-    : syncResultView?.kind === 'conflict'
+    : activeSyncResult?.kind === 'conflict'
       ? 'err'
-      : syncResultView
+      : activeSyncResult
         ? 'done'
         : 'idle'
 
@@ -1243,11 +1254,12 @@ export default function App() {
       {/* App body */}
       <div className="app-body" style={{ position: 'relative' }}>
 
-        {/* 동기화 진행 HUD (SY2) — 진행 중 또는 결과 표시 중에 노출 */}
-        {syncModel && !showRepoManager && (
+        {/* 동기화 진행 HUD (SY2) — 진행 중 또는 결과 표시 중에 노출.
+            M1: op 대상 repo가 현재 repo와 같을 때만 노출(전환 시 이전 repo HUD 잔류 방지). */}
+        {syncModel && syncForCurrentRepo && !showRepoManager && (
           <SyncHud
             model={syncModel}
-            branch={activeBranch}
+            branch={displayBranch}
             result={syncResultView}
             onClose={closeSyncHud}
             onResolveConflict={() => { setShowConflict(true); closeSyncHud() }}

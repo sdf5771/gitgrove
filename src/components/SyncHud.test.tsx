@@ -58,7 +58,8 @@ describe('SyncHud — 진행 단계 전이', () => {
 
 describe('SyncHud — 결과 분기', () => {
   it('성공(pull): 결과 푸터 제목 + diff stat + 확인 버튼 + merge 그루', () => {
-    const model = modelFrom('pull', [p('pull', 'receiving', 100, 128, 128)])
+    // 마지막 phase(merging)까지 도달한 모델 → 완료 시 전 단계 done.
+    const model = modelFrom('pull', [p('pull', 'merging', 100)])
     const result = mapResult({ success: true, op: 'pull', summary: '', newCommits: 3, changedFiles: 12, insertions: 340, deletions: 88 })
     const { container } = render(<SyncHud model={model} branch="main" result={result} onClose={() => {}} />)
     expect(screen.getByText('최신으로 맞췄어요')).toBeTruthy()
@@ -68,8 +69,21 @@ describe('SyncHud — 결과 분기', () => {
     expect(screen.getByLabelText('그루 — Pull')).toBeTruthy()
     // 완료 바는 녹색 done
     expect(container.querySelector('.hud-bar-fill.done')).toBeTruthy()
-    // 모든 단계 done
+    // 마지막 단계까지 도달했으므로 모든 단계 done
     expect(container.querySelectorAll('.hud-phase.done').length).toBe(container.querySelectorAll('.hud-phase').length)
+  })
+
+  it('성공(pull, m3): indet만 거쳐 일찍 끝나면 도달 안 한 phase는 done 아님', () => {
+    // remote(0번)까지만 도달 → 완료 시 0번만 done, 압축/받는중 등은 done 표기 안 됨.
+    const model = modelFrom('pull', [p('pull', 'remote', 0)])
+    const result = mapResult({ success: true, op: 'pull', summary: '', newCommits: 1, changedFiles: 1 })
+    const { container } = render(<SyncHud model={model} branch="main" result={result} onClose={() => {}} />)
+    const phases = container.querySelectorAll('.hud-phase')
+    const doneCount = container.querySelectorAll('.hud-phase.done').length
+    // 전부 done(버그)이 아니라 도달한 1칸만 done.
+    expect(doneCount).toBe(1)
+    expect(doneCount).toBeLessThan(phases.length)
+    expect(phases[0].classList.contains('done')).toBe(true)
   })
 
   it('충돌(pull): 빨강 제목 + 나중에/충돌 해결 버튼 + err 바', () => {
