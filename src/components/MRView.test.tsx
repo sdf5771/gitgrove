@@ -124,7 +124,7 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
     await waitFor(() => expect(screen.getByText('최근 파이프라인')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: /^노트 \(/ }))
-    await waitFor(() => expect(screen.getByText('아직 노트가 없어요')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('아직 노트가 없어요 · 첫 코멘트를 남겨 보세요')).toBeInTheDocument())
   })
 
   it('파이프라인 배지: running은 info 블루(pipe-run), 주황 아님', async () => {
@@ -174,7 +174,7 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
     installApi({ hosts: [] })
     getMergeRequestsMock.mockResolvedValue([])
     render(<MRView repoPath="/repo/gl" />)
-    await waitFor(() => expect(screen.getByText('GitLab 인스턴스가 연결되지 않았습니다')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('GitLab 인스턴스가 연결되지 않았어요')).toBeInTheDocument())
     expect(getMergeRequestsMock).not.toHaveBeenCalled()
   })
 

@@ -44,7 +44,7 @@ export function BranchSidebar({ activeBranch, onBranchAction, onBranchContextMen
         <div className="bsec-hd">
           <span>Local</span>
           <div style={{ display: 'flex', gap: 2 }}>
-            <button onClick={() => onBranchAction('create')} title="New branch" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: 14, padding: '0 3px', borderRadius: 3, lineHeight: 1 }}>+</button>
+            <button onClick={() => onBranchAction('create')} title="새 브랜치" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: 14, padding: '0 3px', borderRadius: 3, lineHeight: 1 }}>+</button>
             <button onClick={() => toggle('local')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px', borderRadius: 3, lineHeight: 1 }}>{collapsed.local ? '›' : '⌄'}</button>
           </div>
         </div>

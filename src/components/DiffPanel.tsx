@@ -97,7 +97,7 @@ export function DiffPanel({ file, rawDiff, loading, staged, onApplyHunk, applyin
                         className="hunk-btn"
                         disabled={applyingHunk != null}
                         onClick={e => { e.stopPropagation(); onApplyHunk(hi) }}
-                        title={staged ? 'Unstage this hunk' : 'Stage this hunk'}
+                        title={staged ? '이 헝크 내리기' : '이 헝크 올리기'}
                       >
                         {applyingHunk === hi
                           ? <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>

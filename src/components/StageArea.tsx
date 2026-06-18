@@ -54,7 +54,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         if (!repoPath) return
         try {
           await window.gitAPI?.addToGitignore(repoPath, [f.p])
-          await onTreeChanged?.({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
+          await onTreeChanged?.({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
         } catch (e) { console.error('addToGitignore failed:', e) }
         break
       case 'ignore-ext': {
@@ -63,7 +63,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         if (!ext) return
         try {
           await window.gitAPI?.addToGitignore(repoPath, ['*.' + ext])
-          await onTreeChanged?.({ cls: 'success', title: 'Ignored', msg: '.gitignore에 추가했습니다' })
+          await onTreeChanged?.({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
         } catch (e) { console.error('addToGitignore failed:', e) }
         break
       }
@@ -94,7 +94,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
     if (!f || !repoPath) return
     try {
       await window.gitAPI?.discardChanges(repoPath, [f.p])
-      await onTreeChanged?.({ cls: 'success', title: 'Discarded', msg: '변경사항을 되돌렸습니다' })
+      await onTreeChanged?.({ cls: 'success', title: '되돌림', msg: '변경사항을 되돌렸어요' })
     } catch (e) { console.error('discardChanges failed:', e) }
   }
 
@@ -191,7 +191,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
                 onClick={() => { setSelU(i); onSelDiffFile(f, false) }}
                 onContextMenu={e => openMenu(e, f)}
               >
-                <button className="sact" onClick={e => { e.stopPropagation(); stageFile(f) }} title="Stage">+</button>
+                <button className="sact" onClick={e => { e.stopPropagation(); stageFile(f) }} title="올리기">+</button>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>
                 <FilePath path={f.p} />
                 <span className="fstats">
@@ -225,7 +225,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
                 onClick={() => { setSelS(i); onSelDiffFile(f, true) }}
                 onContextMenu={e => openMenu(e, f)}
               >
-                <button className="sact" onClick={e => { e.stopPropagation(); unstageFile(f) }} title="Unstage">−</button>
+                <button className="sact" onClick={e => { e.stopPropagation(); unstageFile(f) }} title="내리기">−</button>
                 <span className={`fst fst-${f.s}`}>{f.s}</span>
                 <FilePath path={f.p} />
                 <span className="fstats">
@@ -288,9 +288,9 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
 
       {discardTarget && (
         <ConfirmModal
-          title="Discard Changes"
-          message={`"${discardTarget.p}"의 변경사항을 되돌립니다. 이 작업은 되돌릴 수 없습니다.`}
-          confirmLabel="Discard"
+          title="변경 되돌리기"
+          message={`"${discardTarget.p}"의 변경사항을 되돌려요. 이 작업은 되돌릴 수 없어요.`}
+          confirmLabel="되돌리기"
           danger
           onConfirm={confirmDiscard}
           onCancel={() => setDiscardTarget(null)}

@@ -363,7 +363,7 @@ function GithubBrowser({
           <div className="rm-gh-status rm-gh-error">{error}</div>
         ) : repos.length === 0 ? (
           <div className="rm-empty-section">
-            {total === 0 ? '표시할 GitHub 레포가 없습니다.' : '검색 결과가 없습니다.'}
+            {total === 0 ? '표시할 GitHub 레포가 없어요.' : '검색 결과가 없어요.'}
           </div>
         ) : (
           repos.map(repo => {
@@ -1101,7 +1101,7 @@ export function RepoManager({
     setRenamingWs(null)
   }
 
-  const placeholder = (label: string) => () => notify('info', `${label} 준비 중`, '다음 버전에서 제공됩니다.')
+  const placeholder = (label: string) => () => notify('info', `${label} 준비 중`, '다음 버전에서 제공돼요.')
 
   // 메인 렌더 분기
   const isView = sel.kind === 'view'
@@ -1528,7 +1528,7 @@ export function RepoManager({
             </div>
             <div className="rm-menu-sep" />
             <div className="rm-menu-label">워크스페이스</div>
-            {workspaces.length === 0 && <div className="rm-menu-hint">아직 워크스페이스가 없습니다.</div>}
+            {workspaces.length === 0 && <div className="rm-menu-hint">아직 워크스페이스가 없어요 · 아래에서 만들어 보세요</div>}
             {workspaces.map(w => {
               const inWs = w.paths.includes(menu.path)
               return (
@@ -1555,7 +1555,7 @@ export function RepoManager({
       {deleteWsConfirm && (
         <ConfirmModal
           title="워크스페이스 삭제"
-          message={`'${deleteWsConfirm.name}' 워크스페이스를 삭제합니다. 저장소 파일은 삭제되지 않습니다.`}
+          message={`'${deleteWsConfirm.name}' 워크스페이스를 삭제해요. 저장소 파일은 삭제되지 않아요.`}
           confirmLabel="삭제"
           danger={true}
           onConfirm={() => {
@@ -1569,7 +1569,7 @@ export function RepoManager({
       {removeRepoConfirm && (
         <ConfirmModal
           title="GitGrove에서 제거"
-          message={`'${removeRepoConfirm.name}'을(를) 최근/즐겨찾기/워크스페이스에서 제거합니다. 디스크의 파일은 삭제되지 않습니다.`}
+          message={`'${removeRepoConfirm.name}'을(를) 최근/즐겨찾기/워크스페이스에서 제거해요. 디스크의 파일은 삭제되지 않아요.`}
           confirmLabel="제거"
           danger={true}
           onConfirm={() => {

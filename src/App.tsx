@@ -145,14 +145,14 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i) } }}
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .7, flexShrink: 0 }}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
-            {r.dirty && <span className="repo-tab-dirty" title="Uncommitted changes" />}
+            {r.dirty && <span className="repo-tab-dirty" title="커밋 안 된 변경" />}
             <span>{r.name}</span>
             {r.behind > 0 && <span style={{ fontSize: 9, color: 'var(--c-warning)', fontFamily: 'var(--font-mono)' }}>↓{r.behind}</span>}
             <button className="repo-tab-close" aria-label={`${r.name} 탭 닫기`} onClick={e => { e.stopPropagation(); onClose(i) }}>×</button>
           </div>
         ))}
       </div>
-      <button className="repo-tab-add" onClick={onAdd} aria-label="저장소 추가" title="Add repository">+</button>
+      <button className="repo-tab-add" onClick={onAdd} aria-label="저장소 추가" title="저장소 추가">+</button>
     </div>
   )
 }
@@ -429,7 +429,7 @@ export default function App() {
     const valid = await window.gitAPI?.isRepo?.(path)
     if (valid === false) {
       if (mySeq === loadSeqRef.current) {
-        notify('error', 'Git 저장소가 아닙니다', `${path}\n.git 폴더가 없거나 삭제되었습니다.`)
+        notify('error', 'Git 저장소가 아니에요', `${path}\n.git 폴더가 없거나 삭제됐어요.`)
         loadingPathRef.current = null
         if (!silent) setIsLoading(false)
       }
@@ -711,7 +711,7 @@ export default function App() {
       notify(
         'info',
         `GitGrove ${version} 출시`,
-        '새 버전이 있습니다',
+        '새 버전이 있어요',
         () => {
           if (info.dmgUrl) handleUpdateActivateRef.current()
           else window.appAPI?.openReleaseUrl(url)
@@ -965,7 +965,7 @@ export default function App() {
       await loadRepo(repoPath, { silent: true })
       const raw = await window.gitAPI?.getFileDiff(repoPath, diffFile.p, diffFileStaged) ?? ''
       setDiffContent(raw)
-      notify('success', diffFileStaged ? 'Hunk unstaged' : 'Hunk staged', diffFile.p)
+      notify('success', diffFileStaged ? '헝크 내림' : '헝크 올림', diffFile.p)
     } catch (e) {
       notify('error', 'Hunk 적용 실패', e instanceof Error ? e.message : String(e))
     } finally {
@@ -1162,7 +1162,7 @@ export default function App() {
     else if (action === 'branch-here') { setBranchTab('create'); setShowBranch(true) }
     else if (action === 'copy-hash' && ctxMenu) {
       navigator.clipboard?.writeText(ctxMenu.commit.id).catch(() => {})
-      notify('success', 'Hash copied', ctxMenu.commit.id)
+      notify('success', '해시 복사됨', ctxMenu.commit.id)
     }
     else if (action === 'copy-msg' && ctxMenu) {
       navigator.clipboard?.writeText(ctxMenu.commit.msg).catch(() => {})
@@ -1170,20 +1170,20 @@ export default function App() {
     }
     else if (action === 'revert' && ctxMenu && repoPath) {
       window.gitAPI?.revert(repoPath, ctxMenu.commit.id)
-        .then(() => { notify('success', 'Reverted', `Changes from ${ctxMenu.commit.id} staged for revert`); return loadRepo(repoPath, { silent: true }) })
+        .then(() => { notify('success', `되돌림 · ${ctxMenu.commit.id}`, '되돌림 변경을 스테이지에 올렸어요'); return loadRepo(repoPath, { silent: true }) })
         .catch(err => notify('error', 'Revert 실패', err instanceof Error ? err.message : String(err)))
     }
     else if (action?.startsWith('reset-') && ctxMenu && repoPath) {
       const mode = action.split('-')[1] as 'soft' | 'mixed' | 'hard'
       window.gitAPI?.reset(repoPath, mode, ctxMenu.commit.id)
-        .then(() => { notify('warning', `Reset (${mode})`, `HEAD reset to ${ctxMenu.commit.id}`); return loadRepo(repoPath, { silent: true }) })
+        .then(() => { notify('warning', `리셋 · ${mode}`, `HEAD를 ${ctxMenu.commit.id}로 옮겼어요`); return loadRepo(repoPath, { silent: true }) })
         .catch(err => notify('error', 'Reset 실패', err instanceof Error ? err.message : String(err)))
     }
     else if (action === 'tag-here' && ctxMenu && repoPath) {
-      const tagName = prompt('Tag name:')
+      const tagName = prompt('태그 이름:')
       if (tagName?.trim()) {
         window.gitAPI?.createTag(repoPath, tagName.trim(), ctxMenu.commit.id)
-          .then(() => { notify('success', 'Tag created', `'${tagName}' → ${ctxMenu.commit.id}`); return loadRepo(repoPath, { silent: true }) })
+          .then(() => { notify('success', `태그 생성 · '${tagName}'`, `${tagName} → ${ctxMenu.commit.id}`); return loadRepo(repoPath, { silent: true }) })
           .catch(err => notify('error', 'Tag 실패', err instanceof Error ? err.message : String(err)))
       }
     }
@@ -1275,7 +1275,7 @@ export default function App() {
         <div
           className={`tb-repos-tab${showRepoManager ? ' on' : ''}`}
           onClick={() => setShowRepoManager(true)}
-          title="Repository Manager"
+          title="저장소 관리"
         >
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="5.5" height="5.5" rx="1"/><rect x="8.5" y="2" width="5.5" height="5.5" rx="1"/><rect x="2" y="8.5" width="5.5" height="5.5" rx="1"/><rect x="8.5" y="8.5" width="5.5" height="5.5" rx="1"/></svg>
           Repositories
@@ -1582,7 +1582,7 @@ export default function App() {
         {showCherryPick  && selectedCommit && <CherryPickModal
           commit={selectedCommit}
           onClose={() => setShowCherryPick(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', 'Cherry-pick applied', selectedCommit.id) } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', '체리픽 완료', selectedCommit.id) } }}
           repoPath={repoPath}
           currentBranch={activeBranch}
         />}
@@ -1595,7 +1595,7 @@ export default function App() {
         />}
         {showRebase      && <InteractiveRebaseModal
           onClose={() => setShowRebase(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('info', 'Rebase complete', '') } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('info', '리베이스 완료', '') } }}
           repoPath={repoPath}
           commits={realCommits.length > 0 ? realCommits : undefined}
           currentBranch={activeBranch}
@@ -1605,7 +1605,7 @@ export default function App() {
         {showAddRepo     && (
           <AddRepoModal
             onClose={() => setShowAddRepo(false)}
-            onAdd={r => { addRepo(r); notify('success', 'Repository added', r.name) }}
+            onAdd={r => { addRepo(r); notify('success', '저장소 추가됨', r.name) }}
             onOpenPath={async (path) => {
               setShowAddRepo(false)
               await loadRepo(path, { activate: true })
@@ -1622,7 +1622,7 @@ export default function App() {
             onClose={handleCloneModalClose}
           />
         )}
-        {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify('success', 'Conflicts resolved', 'Merge can now be completed')} />}
+        {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify('success', '충돌 해결됨', '이제 머지할 수 있어요')} />}
 
         <NotificationStack notifs={notifs} onDismiss={dismiss} />
       </div>

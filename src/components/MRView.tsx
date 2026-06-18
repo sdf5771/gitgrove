@@ -295,7 +295,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
       <div className="pr-empty">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ color: 'var(--c-text)', marginBottom: 6 }}>GitLab 인스턴스가 연결되지 않았습니다</div>
+          <div style={{ color: 'var(--c-text)', marginBottom: 6 }}>GitLab 인스턴스가 연결되지 않았어요</div>
           <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>Settings → GitLab 탭에서 인스턴스를 연결해주세요</div>
         </div>
       </div>
@@ -408,7 +408,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
                   <div className="sec-lbl">Description</div>
                   {sel.body
                     ? <Markdown source={sel.body} className="pr-desc" />
-                    : <div className="pr-desc" style={{ color: 'var(--c-text-faint)' }}>설명이 없습니다</div>}
+                    : <div className="pr-desc" style={{ color: 'var(--c-text-faint)' }}>설명이 없어요</div>}
                   {detail?.appr && (
                     <>
                       <div className="divl" />
@@ -451,7 +451,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                   {detail?.loading && <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>변경 내용 불러오는 중…</div>}
                   {!detail?.loading && (detail?.files.length ?? 0) === 0 && (
-                    <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '12px 0' }}>변경된 파일이 없습니다</div>
+                    <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '12px 0' }}>변경된 파일이 없어요</div>
                   )}
                   {detail?.files.map(f => (
                     <div key={f.p} className="pr-file-row">
@@ -485,7 +485,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
                 detail?.loading
                   ? <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>노트 불러오는 중…</div>
                   : (detail?.notes.length ?? 0) === 0
-                    ? <div className="pr-empty" style={{ height: 140 }}><Geuru expr="sleepy" scale={2.2} /><span>아직 노트가 없어요</span></div>
+                    ? <div className="pr-empty" style={{ height: 140 }}><Geuru expr="sleepy" scale={2.2} /><span>아직 노트가 없어요 · 첫 코멘트를 남겨 보세요</span></div>
                     : detail?.notes.map(n => (
                       <div key={n.id} className="pr-comment">
                         <div className="pr-comment-hd">
