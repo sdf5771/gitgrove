@@ -1,23 +1,19 @@
 import { useState } from 'react'
 import { RECENT_REPOS, type Repo } from '../../data/mockData'
-import { ModalShell, SuccessState } from './ModalShell'
+import { ModalShell } from './ModalShell'
 
 interface Props {
   onClose: () => void
   onAdd: (r: Repo) => void
   onOpenPath?: (path: string) => void
   recentPaths?: Array<{ name: string; path: string }>
+  // CL2 — 원격 클론은 전용 3상태 CloneModal로 통합. 여기선 진입만 위임한다.
+  onCloneRemote?: () => void
 }
 
-export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props) {
+export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths, onCloneRemote }: Props) {
   const [tab, setTab] = useState<'local' | 'clone'>('local')
   const [localPath, setLocalPath] = useState('')
-  const [cloneUrl, setCloneUrl] = useState('')
-  const [cloneDest, setCloneDest] = useState('')
-  const [cloneShallow, setCloneShallow] = useState(false)
-  const [cloning, setCloning] = useState(false)
-  const [cloneErr, setCloneErr] = useState<string | null>(null)
-  const [isDone, setIsDone] = useState(false)
 
   const openLocal = (path: string) => {
     if (!path) return
@@ -33,36 +29,6 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props)
   const handleBrowse = async () => {
     const picked = await window.gitAPI?.openDialog()
     if (picked) setLocalPath(picked)
-  }
-
-  const handleCloneBrowse = async () => {
-    const picked = await window.gitAPI?.pickDirectory('Clone 대상 폴더 선택')
-    if (picked) setCloneDest(picked)
-  }
-
-  const clone = async () => {
-    if (!cloneUrl.trim() || !cloneDest.trim() || cloning) return
-    setCloning(true); setCloneErr(null)
-    try {
-      const res = await window.gitAPI!.clone(cloneUrl.trim(), cloneDest.trim(), { shallow: cloneShallow })
-      // CL1 계약: 실패도 throw가 아닌 { success:false, errorKind, message }로 반환됨.
-      if (!res.success || !res.path) {
-        setCloning(false)
-        setCloneErr(res.message || '알 수 없는 오류')
-        return
-      }
-      const { path: clonedPath, name: clonedName } = res
-      setCloning(false); setIsDone(true)
-      // 성공 표시를 잠깐 보여준 뒤 클론한 레포를 새 탭으로 연다.
-      setTimeout(() => {
-        if (onOpenPath) onOpenPath(clonedPath)
-        else { onAdd({ id: String(Date.now()), name: clonedName ?? clonedPath, path: clonedPath, branch: 'main', dirty: false, ahead: 0, behind: 0 }) }
-        onClose()
-      }, 900)
-    } catch (err) {
-      setCloning(false)
-      setCloneErr(err instanceof Error ? err.message : String(err))
-    }
   }
 
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
@@ -108,32 +74,15 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths }: Props)
       )}
       {tab === 'clone' && (
         <div className="modal-body">
-          {isDone ? <SuccessState msg="Repository cloned" sub="Opened in a new tab" /> : (
-            <>
-              <div className="mfield">
-                <label>Repository URL</label>
-                <input className="mselect" placeholder="git@github.com:user/repo.git" value={cloneUrl} onChange={e => setCloneUrl(e.target.value)} />
-              </div>
-              <div className="mfield">
-                <label>Destination (parent folder)</label>
-                <div className="repo-browse-row">
-                  <input className="mselect" style={{ flex: 1 }} placeholder="Browse… 로 부모 폴더 선택" value={cloneDest} onChange={e => setCloneDest(e.target.value)} />
-                  <button className="repo-browse-btn" onClick={handleCloneBrowse}>Browse…</button>
-                </div>
-              </div>
-              <div className="repo-clone-opt" onClick={() => setCloneShallow(v => !v)} style={{ cursor: 'pointer' }}>
-                <input type="checkbox" checked={cloneShallow} readOnly style={{ pointerEvents: 'none', accentColor: 'var(--c-gold-400)' }} />
-                <span>Shallow clone (depth 1) — faster for large repos</span>
-              </div>
-              {cloneErr && <div style={{ fontSize: 11.5, color: 'var(--c-danger)', lineHeight: 1.5 }}>{cloneErr}</div>}
-              <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
-                <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
-                <button className={`mbtn-ok${cloning ? ' doing' : ''}`} onClick={() => void clone()} disabled={!cloneUrl.trim() || !cloneDest.trim() || cloning}>
-                  {cloning ? <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Cloning…</span> : 'Clone →'}
-                </button>
-              </div>
-            </>
-          )}
+          {/* CL2: 원격 클론은 전용 3상태 모달(폼→진행→나무)로 통합됨. 여기선 진입만. */}
+          <div className="addrepo-clone-redirect">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="1.6"><path d="M7 2H3a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1v-6"/><path d="M15 2h6v6M21 2l-9 9"/></svg>
+            <div className="addrepo-clone-redirect-txt">원격 저장소를 클론하면 진행 상황과 함께 새 나무가 자라요.</div>
+          </div>
+          <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
+            <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
+            <button className="mbtn-ok" onClick={() => onCloneRemote?.()}>원격 저장소 클론 →</button>
+          </div>
         </div>
       )}
     </ModalShell>

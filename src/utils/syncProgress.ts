@@ -48,9 +48,21 @@ const PUSH_PHASES: PhaseSpec[] = [
   { stages: ['updating', 'resolving'], label: '원격 갱신하는 중', determinate: false },
 ]
 
+// CL2 — clone 단계. 디자인 정본의 진행 로그(연결→세기→받기→델타→파일 펼치는 중).
+// pull과 유사하나 마지막이 'checkout'(작업트리에 파일을 펼치는 단계)로 끝난다.
+const CLONE_PHASES: PhaseSpec[] = [
+  { stages: ['remote'], label: '원격에 연결하는 중', determinate: false },
+  { stages: ['counting', 'enumerating'], label: '객체 세는 중', determinate: false },
+  { stages: ['compressing'], label: '객체 압축하는 중', determinate: true, unit: 'objects' },
+  { stages: ['receiving'], label: '객체 받는 중', determinate: true, unit: 'objects' },
+  { stages: ['resolving'], label: '델타 적용하는 중', determinate: true, unit: 'deltas' },
+  { stages: ['checkout', 'updating'], label: '파일 펼치는 중', determinate: true, unit: 'files' },
+]
+
 export function phasesFor(op: RemoteOp): PhaseSpec[] {
   if (op === 'push') return PUSH_PHASES
   if (op === 'fetch') return FETCH_PHASES
+  if (op === 'clone') return CLONE_PHASES
   return PULL_PHASES
 }
 

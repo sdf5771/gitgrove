@@ -1353,3 +1353,59 @@ body { display: flex; align-items: center; justify-content: center; }
 .hud-btn.danger:hover { background: rgba(255,107,107,.22); }
 .hud-btn.ghost { background: var(--c-bg-elevated); border-color: var(--c-border); color: var(--c-text-muted); }
 .hud-btn.ghost:hover { color: var(--c-text); border-color: var(--c-border-strong); }
+
+/* ── CL2: 클론 모달 (3상태) ── */
+.clone-form { gap: 9px; }
+/* 진행 HUD를 모달 본문 안에 임베드(팝오버 그림자/배경 제거, 모달 box가 담는다). */
+.hud.hud-embed { position: static; width: auto; box-shadow: none; border: none; border-radius: 0; background: transparent; }
+
+/* 폼: 프로바이더 + owner/repo 자동 인식 줄 */
+.clone-detect { display: flex; align-items: center; gap: 7px; padding: 2px 1px; min-height: 18px; }
+.clone-prov { display: inline-flex; align-items: center; flex-shrink: 0; }
+.clone-prov-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-text-faint); display: inline-block; }
+.clone-detect-name { font-family: var(--font-mono); font-size: 12px; color: var(--c-gold-200); }
+.clone-detect-host { font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); margin-left: auto; }
+.clone-prov-title { display: flex; align-items: center; gap: 7px; }
+
+/* 옵션 체크박스 */
+.clone-opts { display: flex; flex-direction: column; gap: 7px; margin-top: 4px; }
+.clone-opt { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--c-text); cursor: pointer; }
+.clone-opt input { accent-color: var(--c-gold-400); width: 14px; height: 14px; flex-shrink: 0; }
+.clone-opt em { font-family: var(--font-mono); font-size: 10.5px; color: var(--c-text-faint); font-style: normal; }
+.repo-browse-btn { display: inline-flex; align-items: center; gap: 5px; }
+
+/* 결과 공통 */
+.clone-result { padding: 18px 16px 16px; display: flex; flex-direction: column; align-items: center; gap: 7px; }
+.clone-result .rm-modal-actions { width: 100%; margin-top: 12px; }
+.clone-result-title { font-family: var(--font-display); font-size: 15px; letter-spacing: .3px; margin-top: 4px; }
+.clone-result-title.ok { color: var(--c-grove); }
+.clone-result-title.err { color: var(--c-danger); }
+.clone-result-detail { font-size: 12px; color: var(--c-text-muted); text-align: center; line-height: 1.5; word-break: break-all; }
+
+/* 성공: 흙에서 나무 sprout */
+.clone-sprout { display: flex; justify-content: center; padding: 6px 0 2px; }
+.clone-soil { position: relative; width: 78px; height: 78px; display: flex; align-items: flex-end; justify-content: center; }
+.clone-soil::after { content: ''; position: absolute; bottom: 4px; width: 56px; height: 10px; border-radius: 50%; background: radial-gradient(ellipse at center, rgba(138,90,30,.55), transparent 70%); }
+.clone-tree-wrap { transform-origin: bottom center; transform: scale(.2) translateY(14px); opacity: 0; transition: transform .55s cubic-bezier(.2,1.3,.4,1), opacity .35s ease; }
+.clone-soil.grown .clone-tree-wrap { transform: scale(1) translateY(0); opacity: 1; }
+
+/* 실패: 그루 표정 */
+.clone-fail-geuru { display: flex; justify-content: center; padding: 4px 0; }
+
+/* 성공 통계 행 */
+.clone-stats { display: flex; gap: 16px; margin-top: 6px; flex-wrap: wrap; justify-content: center; }
+.clone-stat { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.clone-stat span { font-size: 10px; color: var(--c-text-faint); text-transform: uppercase; letter-spacing: .04em; }
+.clone-stat b { font-family: var(--font-mono); font-size: 13px; color: var(--c-text-strong); font-weight: 500; }
+
+/* auth 토큰칸 */
+.clone-token { width: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.clone-token-label { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--c-text-muted); }
+
+/* 결과 "그로브로" 녹색 CTA(완료 동선) */
+.rm-modal-btn.rm-grove { background: var(--c-grove); color: #0d1a10; border-color: var(--c-grove-d); font-weight: 600; }
+.rm-modal-btn.rm-grove:hover { background: #82dc8e; }
+
+/* AddRepoModal Clone 탭 → 전용 모달 진입 안내 */
+.addrepo-clone-redirect { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 18px 8px 10px; }
+.addrepo-clone-redirect-txt { font-size: 12px; color: var(--c-text-muted); line-height: 1.6; max-width: 280px; }

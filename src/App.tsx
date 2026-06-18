@@ -40,6 +40,7 @@ import { BranchModal } from './components/modals/BranchModal'
 import { InteractiveRebaseModal } from './components/modals/InteractiveRebaseModal'
 import { SettingsPanel, type SettingsTab } from './components/modals/SettingsPanel'
 import { AddRepoModal } from './components/modals/AddRepoModal'
+import { CloneModal } from './components/modals/CloneModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
 import { RepoManager } from './components/RepoManager'
 import { NotificationBell } from './components/NotificationBell'
@@ -291,6 +292,8 @@ export default function App() {
   const [showSettings,   setShowSettings]   = useState(false)
   const [settingsTab,    setSettingsTab]    = useState<SettingsTab | undefined>(undefined)
   const [showAddRepo,    setShowAddRepo]    = useState(false)
+  // CL2 — 클론 인터랙션 모달. null=닫힘. url 프리필(브라우저 Clone 진입 시).
+  const [cloneModal,     setCloneModal]     = useState<{ url: string } | null>(null)
   const [showConflict,   setShowConflict]   = useState(false)
   const [showCmd,        setShowCmd]        = useState(false)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; commit: Commit; idx: number } | null>(null)
@@ -542,27 +545,32 @@ export default function App() {
     persistWorkspaces(prev => prev.map(w => ({ ...w, paths: w.paths.filter(p => p !== path) })))
   }, [repos, handleCloseRepoTab, persistWorkspaces])
 
-  // ── 원격 저장소 Clone (부모 폴더 선택 → git clone → 활성화) ──
-  const handleClone = useCallback(async (url: string): Promise<boolean> => {
-    const parent = await window.gitAPI?.pickDirectory('Clone 대상 폴더 선택')
-    if (!parent) return false // 사용자가 폴더 선택을 취소 → 모달 유지
-    notify('info', 'Clone 시작', `${url}`)
-    try {
-      const res = await window.gitAPI!.clone(url, parent)
-      // CL1 계약: 실패도 throw가 아닌 { success:false, errorKind, message }로 반환됨.
-      if (!res.success || !res.path) {
-        notify('error', 'Clone 실패', res.message || '알 수 없는 오류')
-        return false
-      }
-      notify('success', 'Clone 완료', res.name)
-      setShowRepoManager(false)
-      await loadRepo(res.path, { activate: true })
-      return true
-    } catch (err) {
-      notify('error', 'Clone 실패', err instanceof Error ? err.message : String(err))
-      return false
-    }
-  }, [loadRepo, notify])
+  // ── 원격 저장소 Clone (CL2: 3상태 모달) ──
+  // 진입점(RepoManager Clone 버튼 · GH/GL 브라우저 Clone · AddRepoModal)에서 호출.
+  // 새 CloneModal을 열고, 모달 결과(심음=true / 취소=false)로 Promise를 resolve해
+  // 호출부 스피너 동선(GH/GL 행 cloning 표시)을 보존한다.
+  const cloneResolveRef = useRef<((ok: boolean) => void) | null>(null)
+  const handleClone = useCallback((url: string): Promise<boolean> => {
+    // 이전에 열려 있던 클론 흐름이 미해결이면 false로 정리(중복 진입 방지).
+    cloneResolveRef.current?.(false)
+    setCloneModal({ url })
+    return new Promise<boolean>(resolve => { cloneResolveRef.current = resolve })
+  }, [])
+
+  // 클론 성공 → 그로브에 반영(loadRepo로 적재/활성화) + recents 갱신은 loadRepo 동선 재사용.
+  const handleClonePlanted = useCallback((path: string) => {
+    cloneResolveRef.current?.(true)
+    cloneResolveRef.current = null
+    setCloneModal(null)
+    setShowRepoManager(false)
+    void loadRepo(path, { activate: true })
+  }, [loadRepo])
+
+  const handleCloneModalClose = useCallback(() => {
+    cloneResolveRef.current?.(false)
+    cloneResolveRef.current = null
+    setCloneModal(null)
+  }, [])
 
   // ── 원격 연산 핸들러 ──
   // 진행 HUD를 켜고(setSyncModel) op를 실행한 뒤, 결과를 HUD 푸터·토스트로 매핑한다.
@@ -1487,6 +1495,14 @@ export default function App() {
               await loadRepo(path, { activate: true })
             }}
             recentPaths={repos.map(r => ({ name: r.name, path: r.path }))}
+            onCloneRemote={() => { setShowAddRepo(false); void handleClone('') }}
+          />
+        )}
+        {cloneModal && (
+          <CloneModal
+            initialUrl={cloneModal.url}
+            onCloned={handleClonePlanted}
+            onClose={handleCloneModalClose}
           />
         )}
         {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify('success', 'Conflicts resolved', 'Merge can now be completed')} />}

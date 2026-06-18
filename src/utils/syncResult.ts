@@ -4,7 +4,12 @@
 // 순수 함수로 분리해 vitest 단위테스트로 검증한다. electron/main.ts 핸들러는
 // 여기 헬퍼를 그대로 사용해, 가공 규칙을 한 곳에서 관리한다.
 
+// 진행률(progress)을 스트리밍하는 모든 원격 연산. clone은 진행 단계만 공유하고
+// 결과는 GitRemoteResult가 아닌 CloneResult로 반환한다(아래 CL1 섹션).
 export type RemoteOp = 'pull' | 'push' | 'fetch' | 'clone'
+
+// 결과를 GitRemoteResult(diff/conflict 보강)로 반환하는 동기화 연산(clone 제외).
+export type SyncOp = 'pull' | 'push' | 'fetch'
 
 // 프론트가 소비하는 진행률 이벤트(가공 없이 raw stage에 op만 붙인다).
 export interface RemoteProgress {
@@ -18,7 +23,7 @@ export interface RemoteProgress {
 // 보강된 원격 연산 결과. 기존 success/summary는 하위호환 유지.
 export interface GitRemoteResult {
   success: boolean
-  op: RemoteOp
+  op: SyncOp
   summary: string
   upToDate?: boolean
   changedFiles?: number
