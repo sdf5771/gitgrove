@@ -19,7 +19,7 @@ export function ConfirmModal({ title, message, confirmLabel = '확인', danger =
       justifyContent: 'center',
     }}>
       <div style={{
-        background: 'var(--c-bg-panel)',
+        background: 'var(--c-bg-surface)',
         border: '1px solid var(--c-border)',
         borderRadius: 'var(--r3)',
         padding: 24,
