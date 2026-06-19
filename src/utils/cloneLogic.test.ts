@@ -8,6 +8,8 @@ import {
   mapCloneResult,
   cloneStatsRows,
   cloneThrowToView,
+  cloneAuthGuidance,
+  urlWithToken,
 } from './cloneLogic'
 
 describe('detectCloneTarget — 프로바이더/owner/repo 인식', () => {
@@ -140,5 +142,50 @@ describe('cloneThrowToView — 입력검증 throw → error 뷰', () => {
     const v = cloneThrowToView(new Error("이미 'repo' 폴더가 존재합니다."))
     expect(v.kind).toBe('error')
     expect(v.detail).toContain('이미')
+  })
+})
+
+describe('cloneAuthGuidance — 프로바이더별 인증 안내(설정 연결 / PAT / 터미널 로그인)', () => {
+  it('GitLab → GitLab 제목 + 터미널 로그인 확인 문구', () => {
+    const g = cloneAuthGuidance('gl')
+    expect(g.title).toBe('GitLab 인증이 필요해요')
+    expect(g.detail).toContain('설정')
+    expect(g.detail).toContain('PAT')
+    expect(g.detail).toContain('터미널')
+    expect(g.detail).toContain('GitLab 로그인')
+    // 라이팅 가이드: 느낌표 남발 금지
+    expect(g.detail).not.toContain('!')
+  })
+
+  it('GitHub → GitHub 제목 + 터미널 로그인 확인 문구', () => {
+    const g = cloneAuthGuidance('gh')
+    expect(g.title).toBe('GitHub 인증이 필요해요')
+    expect(g.detail).toContain('터미널')
+    expect(g.detail).toContain('GitHub 로그인')
+  })
+
+  it('미인식 프로바이더(null) → 일반 인증 안내(터미널 문구 포함)', () => {
+    const g = cloneAuthGuidance(null)
+    expect(g.title).toBe('인증이 필요해요')
+    expect(g.detail).toContain('터미널')
+  })
+})
+
+describe('urlWithToken — 토큰을 URL에 끼워 재시도용 URL 생성', () => {
+  it('https URL에 토큰 주입(encodeURIComponent)', () => {
+    expect(urlWithToken('https://gitlab.com/g/p.git', 'glpat-abc')).toBe('https://glpat-abc@gitlab.com/g/p.git')
+  })
+  it('기존 토큰/유저가 있으면 교체', () => {
+    expect(urlWithToken('https://old@github.com/a/b.git', 'ghp_new')).toBe('https://ghp_new@github.com/a/b.git')
+  })
+  it('특수문자 토큰은 인코딩', () => {
+    expect(urlWithToken('https://github.com/a/b.git', 'a/b+c')).toBe('https://a%2Fb%2Bc@github.com/a/b.git')
+  })
+  it('ssh/미인식 URL은 null(주입 불가)', () => {
+    expect(urlWithToken('git@github.com:a/b.git', 'tok')).toBeNull()
+    expect(urlWithToken('ssh://git@gl.internal/g/p.git', 'tok')).toBeNull()
+  })
+  it('빈 토큰은 null', () => {
+    expect(urlWithToken('https://github.com/a/b.git', '  ')).toBeNull()
   })
 })

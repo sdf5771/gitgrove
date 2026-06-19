@@ -193,7 +193,7 @@ describe('클론 인터랙션 — App 통합(진입점 → resolver → loadRepo
     await user.type(screen.getByPlaceholderText(/github.com\/owner\/repo/), 'https://github.com/acme/private.git')
     await user.click(screen.getByRole('button', { name: 'Clone' }))
 
-    await waitFor(() => expect(shown('인증이 필요해요')).toBe(true))
+    await waitFor(() => expect(shown('GitHub 인증이 필요해요')).toBe(true))
     expect(screen.getByPlaceholderText(/ghp_/)).toBeTruthy()
     const retry = screen.getByRole('button', { name: /토큰으로 다시 시도/ })
     expect(retry).toBeDisabled()
