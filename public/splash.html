@@ -4,9 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GitGrove — Splash · 그루</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&family=DotGothic16&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+KR:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* 폰트 self-host (Google Fonts CDN 제거 — 오프라인 로드 + 프라이버시). 모두 SIL OFL 1.1. */
+/* splash는 라틴 텍스트 위주(GitGrove 워드마크·상태·버전)라 latin subset만 번들.
+   한국어 본문(--font-body)은 system-ui(Apple SD Gothic Neo 등)로 폴백 — Noto Sans KR 미번들로 용량 절약.
+   DotGothic16(--font-display 폴백)은 라틴을 Pixelify가 모두 커버해 미번들. */
+@font-face{font-family:'Pixelify Sans';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/pixelify-sans-latin-400-normal.woff2') format('woff2');}
+@font-face{font-family:'Pixelify Sans';font-style:normal;font-weight:700;font-display:swap;src:url('./fonts/pixelify-sans-latin-700-normal.woff2') format('woff2');}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('./fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');}
+@font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('./fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2');}
 :root{
   --c-bg-deep:#0d1220; --c-bg-surface:#161d30; --c-bg-inset:#0a0f1c;
   --c-border:#2d3551; --c-text:#b8c0d8; --c-text-strong:#f4ecd2; --c-text-muted:#6d7798; --c-text-faint:#3f4a65;

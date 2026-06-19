@@ -187,7 +187,7 @@ Styling       CSS custom properties (no framework)
 Bundler       Vite 5 + vite-plugin-electron
 Build         electron-builder
 Markdown      react-markdown + remark-gfm (GFM, raw-HTML off → XSS-safe)
-Fonts         Pixelify Sans · Noto Sans KR · IBM Plex Mono (Google Fonts)
+Fonts         Pixelify Sans · DotGothic16 · Noto Sans KR · IBM Plex Mono — self-hosted via @fontsource (SIL OFL 1.1)
 ```
 
 ---
