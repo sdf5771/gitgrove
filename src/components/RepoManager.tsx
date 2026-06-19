@@ -12,6 +12,7 @@ import type { GitlabConn } from '../utils/useGitlabConns'
 import { Geuru, type GeuruExpr } from './Geuru'
 import { Tree } from './Tree'
 import { stageOf, bucketOf, type RepoActivity, type ActivityBucket } from '../utils/repoActivity'
+import { TOASTS, spread } from '../toasts'
 
 // ── 아이콘 (디자인 핸드오프 SVG 재현) ──
 const IconAllRepos = () => (
@@ -633,7 +634,14 @@ export interface RepoManagerProps {
   onOpenGithubSettings: () => void
   /** GitLab 탭이 있는 Settings 패널 열기 (GL5 미연결 유도 / 인스턴스 추가) */
   onOpenGitlabSettings: () => void
-  notify: (type: 'info' | 'success' | 'warning' | 'error', title: string, body: string) => void
+  notify: (
+    type: 'info' | 'success' | 'warning' | 'error',
+    title: string,
+    msg?: string,
+    onClick?: (() => void) | number,
+    dur?: number,
+    geuru?: GeuruExpr,
+  ) => void
 }
 
 export function RepoManager({
@@ -1091,7 +1099,7 @@ export function RepoManager({
     if (wsModal?.pendingPath) onToggleRepoInWorkspace(id, wsModal.pendingPath)
     setSel({ kind: 'workspace', id })
     setWsModal(null)
-    notify('success', '워크스페이스 생성', name)
+    notify(...spread(TOASTS.workspaceCreated(name)))
   }
 
   const startRename = (w: Workspace) => { setRenamingWs(w.id); setRenameVal(w.name) }
@@ -1103,7 +1111,7 @@ export function RepoManager({
     setRenamingWs(null)
   }
 
-  const placeholder = (label: string) => () => notify('info', `${label} 준비 중`, '다음 버전에서 제공돼요.')
+  const placeholder = (label: string) => () => notify(...spread(TOASTS.comingSoon(label)))
 
   // 메인 렌더 분기
   const isView = sel.kind === 'view'
@@ -1572,7 +1580,7 @@ export function RepoManager({
           danger={true}
           onConfirm={() => {
             onDeleteWorkspace(deleteWsConfirm.id)
-            notify('info', '워크스페이스 삭제', `'${deleteWsConfirm.name}' 삭제됨 (저장소는 보존)`)
+            notify(...spread(TOASTS.workspaceDeleted(deleteWsConfirm.name)))
             setDeleteWsConfirm(null)
           }}
           onCancel={() => setDeleteWsConfirm(null)}

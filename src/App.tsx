@@ -46,6 +46,7 @@ import { RepoManager } from './components/RepoManager'
 import { NotificationBell } from './components/NotificationBell'
 import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loadWorkspaces, saveWorkspaces, createWorkspaceId, type RecentRepoEntry, type Workspace } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
+import { TOASTS, spread } from './toasts'
 import { SyncHud } from './components/SyncHud'
 import { UpdateIndicator } from './components/UpdateIndicator'
 import {
@@ -429,7 +430,7 @@ export default function App() {
     const valid = await window.gitAPI?.isRepo?.(path)
     if (valid === false) {
       if (mySeq === loadSeqRef.current) {
-        notify('error', 'Git 저장소가 아니에요', `${path}\n.git 폴더가 없거나 삭제됐어요.`)
+        notify(...spread(TOASTS.notARepo()))
         loadingPathRef.current = null
         if (!silent) setIsLoading(false)
       }
@@ -639,8 +640,10 @@ export default function App() {
     } catch (err) {
       // 진짜 에러(네트워크/인증 등) — HUD를 닫고 기존 에러 토스트.
       closeSyncHud()
-      const title = op === 'pull' ? 'Pull 실패' : op === 'push' ? 'Push 실패' : 'Fetch 실패'
-      notify('error', title, err instanceof Error ? err.message : String(err))
+      const msg = err instanceof Error ? err.message : String(err)
+      if (op === 'pull') notify(...spread(TOASTS.branchPullFailed(msg)))
+      else if (op === 'push') notify(...spread(TOASTS.branchPushFailed(msg)))
+      else notify(...spread(TOASTS.fetchFailed(msg)))
     } finally {
       setRemoteOp(null)
     }
@@ -657,9 +660,9 @@ export default function App() {
       await window.gitAPI?.checkout(repoPath, name)
       setActiveBranch(name)
       await loadRepo(repoPath)
-      notify('success', `브랜치 전환 · ${name}`, '')
+      notify(...spread(TOASTS.branchSwitched(name)))
     } catch (err) {
-      notify('error', 'Checkout 실패', err instanceof Error ? err.message : String(err))
+      notify(...spread(TOASTS.branchSwitchFailed(err instanceof Error ? err.message : String(err))))
     }
   }, [repoPath, activeBranch, loadRepo, notify])
 
@@ -708,16 +711,10 @@ export default function App() {
       // 상시 인디케이터에 공급(진행 중/완료면 보존).
       setUpdateState(prev => receiveUpdate(prev, info))
       // 기존 시작 알림 토스트(회귀 보존) — dmgUrl 있으면 인앱 다운로드, 없으면 브라우저 폴백.
-      notify(
-        'info',
-        `GitGrove ${version} 출시`,
-        '새 버전이 있어요',
-        () => {
-          if (info.dmgUrl) handleUpdateActivateRef.current()
-          else window.appAPI?.openReleaseUrl(url)
-        },
-        8000,
-      )
+      notify(...spread(TOASTS.updateAvailable(version, () => {
+        if (info.dmgUrl) handleUpdateActivateRef.current()
+        else window.appAPI?.openReleaseUrl(url)
+      })))
     })
     // 누수 방지: 언마운트/재마운트 시 'app:update-available' 리스너 해제.
     return () => { off?.() }
@@ -746,12 +743,12 @@ export default function App() {
     window.appAPI?.downloadUpdate(payload.dmgUrl!)
       .then(() => {
         setUpdateState(prev => finishDownload(prev))
-        notify('success', '다운로드 완료', '설치 창이 열렸어요. 안내에 따라 GitGrove를 교체해 주세요.', undefined, 6000)
+        notify(...spread(TOASTS.downloadDone()))
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
         setUpdateState(prev => failDownload(prev, msg))
-        notify('error', '업데이트 다운로드 실패', `${msg}\n인디케이터를 다시 클릭하면 재시도합니다.`, undefined, 8000)
+        notify(...spread(TOASTS.updateFailed()))
       })
   }, [notify])
   // 토스트 콜백이 항상 최신 핸들러를 부르도록 ref로 고정.
@@ -965,9 +962,9 @@ export default function App() {
       await loadRepo(repoPath, { silent: true })
       const raw = await window.gitAPI?.getFileDiff(repoPath, diffFile.p, diffFileStaged) ?? ''
       setDiffContent(raw)
-      notify('success', diffFileStaged ? '헝크 내림' : '헝크 올림', diffFile.p)
+      notify(...spread(diffFileStaged ? TOASTS.hunkUnstaged(diffFile.p) : TOASTS.hunkStaged(diffFile.p)))
     } catch (e) {
-      notify('error', 'Hunk 적용 실패', e instanceof Error ? e.message : String(e))
+      notify(...spread(TOASTS.hunkFailed(e instanceof Error ? e.message : String(e))))
     } finally {
       setApplyingHunk(null)
     }
@@ -986,7 +983,7 @@ export default function App() {
       setLogLimit(nextLimit)
       setHasMoreCommits(gitCommits.length >= nextLimit)
     } catch (e) {
-      notify('error', '커밋 로드 실패', e instanceof Error ? e.message : String(e))
+      notify(...spread(TOASTS.commitLoadFailed(e instanceof Error ? e.message : String(e))))
     } finally {
       setLoadingMore(false)
     }
@@ -1162,29 +1159,30 @@ export default function App() {
     else if (action === 'branch-here') { setBranchTab('create'); setShowBranch(true) }
     else if (action === 'copy-hash' && ctxMenu) {
       navigator.clipboard?.writeText(ctxMenu.commit.id).catch(() => {})
-      notify('success', '해시 복사됨', ctxMenu.commit.id)
+      notify(...spread(TOASTS.copied('해시', ctxMenu.commit.id)))
     }
     else if (action === 'copy-msg' && ctxMenu) {
       navigator.clipboard?.writeText(ctxMenu.commit.msg).catch(() => {})
-      notify('success', '메시지 복사됨', ctxMenu.commit.msg.slice(0, 60))
+      notify(...spread(TOASTS.copied('메시지', ctxMenu.commit.msg.slice(0, 60))))
     }
     else if (action === 'revert' && ctxMenu && repoPath) {
       window.gitAPI?.revert(repoPath, ctxMenu.commit.id)
-        .then(() => { notify('success', `되돌림 · ${ctxMenu.commit.id}`, '되돌림 변경을 스테이지에 올렸어요'); return loadRepo(repoPath, { silent: true }) })
-        .catch(err => notify('error', 'Revert 실패', err instanceof Error ? err.message : String(err)))
+        .then(() => { notify(...spread(TOASTS.reverted(ctxMenu.commit.id))); return loadRepo(repoPath, { silent: true }) })
+        .catch(err => notify(...spread(TOASTS.revertFailed(err instanceof Error ? err.message : String(err)))))
     }
     else if (action?.startsWith('reset-') && ctxMenu && repoPath) {
       const mode = action.split('-')[1] as 'soft' | 'mixed' | 'hard'
       window.gitAPI?.reset(repoPath, mode, ctxMenu.commit.id)
-        .then(() => { notify('warning', `리셋 · ${mode}`, `HEAD를 ${ctxMenu.commit.id}로 옮겼어요`); return loadRepo(repoPath, { silent: true }) })
-        .catch(err => notify('error', 'Reset 실패', err instanceof Error ? err.message : String(err)))
+        .then(() => { notify(...spread(TOASTS.resetDone(mode, ctxMenu.commit.id))); return loadRepo(repoPath, { silent: true }) })
+        .catch(err => notify(...spread(TOASTS.resetFailed(err instanceof Error ? err.message : String(err)))))
     }
     else if (action === 'tag-here' && ctxMenu && repoPath) {
       const tagName = prompt('태그 이름:')
       if (tagName?.trim()) {
-        window.gitAPI?.createTag(repoPath, tagName.trim(), ctxMenu.commit.id)
-          .then(() => { notify('success', `태그 생성 · '${tagName}'`, `${tagName} → ${ctxMenu.commit.id}`); return loadRepo(repoPath, { silent: true }) })
-          .catch(err => notify('error', 'Tag 실패', err instanceof Error ? err.message : String(err)))
+        const tag = tagName.trim()
+        window.gitAPI?.createTag(repoPath, tag, ctxMenu.commit.id)
+          .then(() => { notify(...spread(TOASTS.tagCreated(tag, ctxMenu.commit.id))); return loadRepo(repoPath, { silent: true }) })
+          .catch(err => notify(...spread(TOASTS.tagFailed(err instanceof Error ? err.message : String(err)))))
       }
     }
   }, [ctxMenu, notify, repoPath, loadRepo])
@@ -1200,17 +1198,17 @@ export default function App() {
     else if (action === 'delete') { setBranchTab('delete'); setShowBranch(true) }
     else if (action === 'copy-name') {
       navigator.clipboard?.writeText(name).catch(() => {})
-      notify('success', '복사됨', name)
+      notify(...spread(TOASTS.branchNameCopied(name)))
     }
     else if (action === 'push' && repoPath) {
       window.gitAPI?.push(repoPath)
-        .then(() => notify('success', 'Push 완료', name, undefined, 4000, 'merge'))
-        .catch(e => notify('error', 'Push 실패', e instanceof Error ? e.message : String(e)))
+        .then(() => notify(...spread(TOASTS.branchPushed(name))))
+        .catch(e => notify(...spread(TOASTS.branchPushFailed(e instanceof Error ? e.message : String(e)))))
     }
     else if (action === 'pull' && repoPath) {
       window.gitAPI?.pull(repoPath)
-        .then(() => { notify('success', 'Pull 완료', name); loadRepo(repoPath) })
-        .catch(e => notify('error', 'Pull 실패', e instanceof Error ? e.message : String(e)))
+        .then(() => { notify(...spread(TOASTS.branchPulled(name))); loadRepo(repoPath) })
+        .catch(e => notify(...spread(TOASTS.branchPullFailed(e instanceof Error ? e.message : String(e)))))
     }
   }, [handleBranchSwitch, repoPath, notify, loadRepo])
 
@@ -1510,7 +1508,7 @@ export default function App() {
                       onCommitDone={async () => {
                         if (repoPath) {
                           await loadRepo(repoPath)
-                          notify('success', '커밋 완료', '변경을 심었어요')
+                          notify(...spread(TOASTS.committed()))
                         }
                       }}
                       onTreeChanged={async toast => {
@@ -1580,7 +1578,7 @@ export default function App() {
         {/* Modals */}
         {showMerge       && <MergeModal
           onClose={() => setShowMerge(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', '머지 완료', '', undefined, 4000, 'merge') } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify(...spread(TOASTS.merged())) } }}
           branches={realBranches.length > 0 ? realBranches : undefined}
           repoPath={repoPath}
           currentBranch={activeBranch}
@@ -1588,7 +1586,7 @@ export default function App() {
         {showCherryPick  && selectedCommit && <CherryPickModal
           commit={selectedCommit}
           onClose={() => setShowCherryPick(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('success', '체리픽 완료', selectedCommit.id) } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify(...spread(TOASTS.cherryPicked(selectedCommit.id))) } }}
           repoPath={repoPath}
           currentBranch={activeBranch}
         />}
@@ -1601,7 +1599,7 @@ export default function App() {
         />}
         {showRebase      && <InteractiveRebaseModal
           onClose={() => setShowRebase(false)}
-          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify('info', '리베이스 완료', '') } }}
+          onSuccess={() => { if (repoPath) { loadRepo(repoPath, { silent: true }); notify(...spread(TOASTS.rebased())) } }}
           repoPath={repoPath}
           commits={realCommits.length > 0 ? realCommits : undefined}
           currentBranch={activeBranch}
@@ -1611,7 +1609,7 @@ export default function App() {
         {showAddRepo     && (
           <AddRepoModal
             onClose={() => setShowAddRepo(false)}
-            onAdd={r => { addRepo(r); notify('success', '저장소 추가됨', r.name) }}
+            onAdd={r => { addRepo(r); notify(...spread(TOASTS.repoAdded(r.name))) }}
             onOpenPath={async (path) => {
               setShowAddRepo(false)
               await loadRepo(path, { activate: true })
@@ -1628,7 +1626,7 @@ export default function App() {
             onClose={handleCloneModalClose}
           />
         )}
-        {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify('success', '충돌 해결됨', '이제 머지할 수 있어요')} />}
+        {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify(...spread(TOASTS.conflictResolved()))} />}
 
         <NotificationStack notifs={notifs} onDismiss={dismiss} />
       </div>
