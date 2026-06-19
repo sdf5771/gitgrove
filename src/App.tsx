@@ -1346,9 +1346,14 @@ export default function App() {
           <span style={{ fontSize: 12 }}>⚡</span>Conflicts
         </button>
         <div className="view-toggle">
-          {([['history', 'History'], ['commit', 'Stage'], ['diff', 'Diff'], ['blame', 'Blame'], ['pr', 'PR']] as const).map(([id, label]) => (
-            <button key={id} className={`vbtn${view === id ? ' on' : ''}`} onClick={() => setView(id)}>{label}</button>
-          ))}
+          {([['history', 'History'], ['commit', 'Stage'], ['diff', 'Diff'], ['blame', 'Blame'], ['pr', 'PR']] as const).map(([id, label]) => {
+            // 'pr' 탭은 provider에 따라 표시 라벨만 동적으로(내부 id는 'pr' 유지).
+            const tabLabel = id === 'pr' ? (repoProvider === 'gitlab' ? 'MR' : 'PR') : label
+            const tabTitle = id === 'pr' ? (repoProvider === 'gitlab' ? 'Merge Requests' : 'Pull Requests') : undefined
+            return (
+              <button key={id} className={`vbtn${view === id ? ' on' : ''}`} onClick={() => setView(id)} title={tabTitle}>{tabLabel}</button>
+            )
+          })}
         </div>
         <div className="srch-wrap">
           <input ref={srchRef} className="srch" placeholder="Search commits…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />

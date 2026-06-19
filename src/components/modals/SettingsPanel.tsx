@@ -488,13 +488,16 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                       value={githubToken}
                       onChange={e => onTokenChange(e.target.value)}
                       placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                      style={{ fontFamily: 'var(--font-mono)', paddingRight: 36 }}
+                      style={{ fontFamily: 'var(--font-mono)', paddingRight: 42 }}
                     />
                     <button
+                      type="button"
+                      className="tok-eye"
+                      title={showToken ? '토큰 숨기기' : '토큰 보기'}
+                      aria-label={showToken ? '토큰 숨기기' : '토큰 보기'}
                       onClick={() => setShowToken(v => !v)}
-                      style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: 13, padding: 0 }}
                     >
-                      {showToken ? '🙈' : '👁'}
+                      <Geuru expr={showToken ? 'idle' : 'blink'} scale={1.15} />
                     </button>
                   </div>
                   <button

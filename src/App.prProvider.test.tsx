@@ -29,9 +29,14 @@ function setupRepo(opts: { originUrl: string; gitlabHosts: string[]; gitlabToken
   return { gitAPI, appAPI }
 }
 
+/** provider 감지 결과와 무관하게 'pr' 탭(라벨 PR 또는 MR)을 찾아 클릭 */
 async function openPRTab() {
-  await waitFor(() => expect(screen.getByRole('button', { name: 'PR' })).toBeInTheDocument())
-  fireEvent.click(screen.getByRole('button', { name: 'PR' }))
+  const tab = await waitFor(() => {
+    const el = screen.queryByRole('button', { name: 'PR' }) ?? screen.queryByRole('button', { name: 'MR' })
+    if (!el) throw new Error('PR/MR 탭을 찾지 못함')
+    return el
+  })
+  fireEvent.click(tab)
 }
 
 describe('PR 탭 provider 분기 (GitHub PRView ↔ GitLab MRView)', () => {
@@ -96,5 +101,58 @@ describe('PR 탭 provider 분기 (GitHub PRView ↔ GitLab MRView)', () => {
     await openPRTab()
     await waitFor(() => expect(shown('GitHub 토큰이 설정되지 않았어요')).toBe(true))
     expect(getMergeRequestsMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("'pr' 탭 라벨 provider 적응 (GitHub=PR / GitLab=MR)", () => {
+  beforeEach(() => {
+    localStorage.clear()
+    getMergeRequestsMock.mockClear()
+  })
+  afterEach(() => {
+    cleanup()
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
+  it('origin이 GitLab + host 연결됨이면 탭 라벨이 MR로 보인다', async () => {
+    setupRepo({
+      originUrl: 'git@gitlab.com:platform/web-client.git',
+      gitlabHosts: ['https://gitlab.com'],
+      gitlabToken: 'gl-tok',
+    })
+    render(<App />)
+    // provider 감지는 비동기 → 'MR' 라벨이 나타날 때까지 대기
+    await waitFor(() => expect(screen.getByRole('button', { name: 'MR' })).toBeInTheDocument())
+    // 내부 id는 'pr' 유지지만 'PR' 라벨은 더 이상 노출되지 않음
+    expect(screen.queryByRole('button', { name: 'PR' })).not.toBeInTheDocument()
+    // 다른 view-toggle 탭 라벨은 불변(view-toggle 컨테이너 안의 History로 회귀 확인)
+    expect(screen.getByRole('button', { name: 'History' })).toBeInTheDocument()
+    // 접근성 title
+    expect(screen.getByRole('button', { name: 'MR' })).toHaveAttribute('title', 'Merge Requests')
+  })
+
+  it('origin이 GitHub이면 탭 라벨이 PR로 보인다', async () => {
+    setupRepo({
+      originUrl: 'git@github.com:sdf5771/gitgrove.git',
+      gitlabHosts: ['https://gitlab.com'], // GitLab 연결돼 있어도 origin이 GitHub면 PR
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'PR' })).toBeInTheDocument())
+    // 충분히 안정화될 때까지 기다린 뒤 MR이 끝내 노출되지 않음을 확인
+    await new Promise(r => setTimeout(r, 0))
+    expect(screen.queryByRole('button', { name: 'MR' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'PR' })).toHaveAttribute('title', 'Pull Requests')
+  })
+
+  it('origin이 GitLab이지만 host 미연결이면 라벨은 PR(기존 동작 유지)', async () => {
+    setupRepo({
+      originUrl: 'git@gitlab.com:platform/web-client.git',
+      gitlabHosts: [], // 연결된 GitLab 인스턴스 없음 → github로 폴백
+    })
+    render(<App />)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'PR' })).toBeInTheDocument())
+    await new Promise(r => setTimeout(r, 0))
+    expect(screen.queryByRole('button', { name: 'MR' })).not.toBeInTheDocument()
   })
 })
