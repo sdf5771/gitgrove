@@ -10,6 +10,19 @@ import { ProviderBadge, ProviderFilterChips, type ProviderFilter } from './Provi
 const MIN_REFETCH_MS = 60_000
 // 백그라운드 주기 폴링 간격(불포커스 중 신규 알림 감지).
 const POLL_MS = 60_000
+// GitLab(특히 self-host) fetch 타임아웃 — 망 밖이라 도달 불가하면 오래 매달리지
+// 않게 짧게 끊는다. AbortError로 떨어지고 '도달 실패'로 소프트 처리된다.
+const GITLAB_FETCH_TIMEOUT_MS = 7_000
+
+// 네트워크 도달 실패(인스턴스가 망 밖/다운) 판별. fetch TypeError('Failed to
+// fetch')와 타임아웃 AbortError는 401/403 같은 API 응답 에러와 구분해 그 인스턴스만
+// '연결 안 됨'으로 소프트 처리한다(패널 전체 에러로 올리지 않음).
+function isUnreachableError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === 'AbortError') return true
+  if (err instanceof TypeError) return true
+  if (err instanceof Error && err.name === 'AbortError') return true
+  return false
+}
 
 // ── 프로바이더 통합 알림 항목 ──
 type ReasonKind = 'review' | 'mention' | 'ci_fail' | 'ci_pass' | 'merge' | 'comment' | 'assign'
@@ -187,6 +200,9 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
   const [items, setItems] = useState<NotifItem[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 일부 인스턴스에 도달하지 못했을 때(망 밖 self-host 등) 패널 하단 소프트 힌트용.
+  // 다른 소스가 정상이면 전면 에러로 막지 않고 이 비차단 힌트만 보여준다.
+  const [unreachable, setUnreachable] = useState(false)
   const [provFilter, setProvFilter] = useState<ProviderFilter>('all')
   // GitHub notifications 권한이 없어 403이 난 경우 — 에러가 아니라 '유도' 상태.
   const [permDenied, setPermDenied] = useState(false)
@@ -207,16 +223,26 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
     setLoading(true)
     setError(null)
     setPermDenied(false)
+    setUnreachable(false)
 
     const sources: Array<Promise<NotifItem[]>> = []
     if (hasGithub) {
       sources.push(getNotifications(githubToken, { cache: false }).then(list => list.map(githubToItem)))
     }
+    // GitLab fetch마다 타임아웃 signal — 망 밖 self-host에 오래 매달리지 않게 끊는다.
+    // 타임아웃 시 AbortError로 떨어져 '도달 실패'로 소프트 처리된다.
+    const timeouts: ReturnType<typeof setTimeout>[] = []
     for (const inst of gitlabInstances) {
-      sources.push(getTodos(inst.host, inst.token, { state: 'pending', cache: false }).then(list => list.map(t => gitlabTodoToItem(inst.host, t))))
+      const ctrl = new AbortController()
+      timeouts.push(setTimeout(() => ctrl.abort(), GITLAB_FETCH_TIMEOUT_MS))
+      sources.push(
+        getTodos(inst.host, inst.token, { state: 'pending', cache: false, signal: ctrl.signal })
+          .then(list => list.map(t => gitlabTodoToItem(inst.host, t))),
+      )
     }
 
     const results = await Promise.allSettled(sources)
+    for (const id of timeouts) clearTimeout(id)
     if (seqRef.current !== mySeq) return
 
     const merged: NotifItem[] = []
@@ -224,6 +250,8 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
     // 이번 fetch에서 정상 응답한 소스가 하나라도 있었는지 — 신규감지/시드의 신뢰 기준.
     // (GitHub 403 단독처럼 신뢰할 결과가 전혀 없으면 seen 갱신을 건너뛴다.)
     let hasTrustedSource = false
+    // 도달조차 못 한 소스 수(망 밖 self-host 등). 일반 API 에러와 구분해 소프트 처리.
+    let unreachableCount = 0
     const errors: string[] = []
     let idx = 0
     for (const r of results) {
@@ -237,6 +265,10 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
         if (isGithubSource && err instanceof GithubApiError && err.status === 403 && !err.rateLimited) {
           // /notifications는 notifications(또는 repo) scope가 필요 — 권한 없으면 403.
           ghPermDenied = true
+        } else if (isUnreachableError(err)) {
+          // fetch TypeError('Failed to fetch')/타임아웃 AbortError — 도달 실패.
+          // 그 인스턴스만 '연결 안 됨'으로 소프트 처리하고 전면 에러로 올리지 않는다.
+          unreachableCount++
         } else {
           const msg = err instanceof GithubApiError || err instanceof GitlabApiError
             ? err.message
@@ -282,11 +314,21 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
     }
 
     setItems(merged)
-    // 전부 실패(권한 거부 제외)면 에러. 일부라도 결과 있으면 표시 우선.
-    if (merged.length === 0 && ghPermDenied && errors.length === 0) {
-      setPermDenied(true)
-    } else if (merged.length === 0 && errors.length > 0) {
+    // 전면 에러는 '신뢰할 소스가 하나도 없고(정상 응답 0) 일반 API 에러가 있을 때'만.
+    // - 하나라도 정상 응답(0건 포함)했으면 결과/빈 상태를 보여주고 막지 않는다.
+    // - 도달 실패(망 밖 self-host)만 있을 땐 전면 에러 대신 하단 소프트 힌트로 안내.
+    if (hasTrustedSource) {
+      // 정상 소스가 있으면 결과 우선. 도달 실패 인스턴스가 있으면 소프트 힌트만.
+      setUnreachable(unreachableCount > 0)
+    } else if (errors.length > 0) {
+      // 신뢰 소스가 없고 일반 API 에러가 있으면 전면 에러(기존 동작).
       setError(errors[0])
+    } else if (ghPermDenied) {
+      // GitHub 단독 403 권한 거부(신뢰 소스 없음) → 권한 유도.
+      setPermDenied(true)
+    } else if (unreachableCount > 0) {
+      // 모든 소스가 '도달 실패'만 — API 에러는 없음. 전면 에러로 막지 않고 힌트.
+      setUnreachable(true)
     }
     setLoading(false)
   }, [hasGithub, hasGitlab, githubToken, gitlabInstances])
@@ -466,6 +508,10 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
                 ))
               )}
             </div>
+
+            {unreachable && !error && !permDenied && (
+              <div className="nb-soft-hint">일부 인스턴스에 연결하지 못했어요</div>
+            )}
 
             <div className="nb-foot">
               <button
