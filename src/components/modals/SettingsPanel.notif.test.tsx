@@ -56,3 +56,36 @@ describe('SettingsPanel — 알림 사운드 설정 (기능 B)', () => {
     expect(sel.disabled).toBe(true)
   })
 })
+
+describe('SettingsPanel — 사운드 들어보기 버튼', () => {
+  function openAppearanceWithMock() {
+    const mock = installGitApiMock()
+    render(<SettingsPanel onClose={vi.fn()} repoPath={null} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Appearance' }))
+    return mock
+  }
+
+  it('토글 on + 들어보기 클릭 → 현재 선택된 사운드 이름으로 previewSound 호출', () => {
+    const { appAPI } = openAppearanceWithMock()
+    fireEvent.click(screen.getByRole('button', { name: '▶ 들어보기' }))
+    expect(appAPI.previewSound).toHaveBeenCalledTimes(1)
+    expect(appAPI.previewSound).toHaveBeenCalledWith('Glass')
+  })
+
+  it('드롭다운에서 다른 사운드 선택 후 클릭 → 바뀐 값으로 호출', () => {
+    const { appAPI } = openAppearanceWithMock()
+    fireEvent.change(screen.getByLabelText('알림 사운드'), { target: { value: 'Ping' } })
+    fireEvent.click(screen.getByRole('button', { name: '▶ 들어보기' }))
+    expect(appAPI.previewSound).toHaveBeenCalledTimes(1)
+    expect(appAPI.previewSound).toHaveBeenCalledWith('Ping')
+  })
+
+  it('토글 off → 버튼 disabled · 클릭해도 호출되지 않음', () => {
+    const { appAPI } = openAppearanceWithMock()
+    fireEvent.click(screen.getByText('알림 소리'))
+    const btn = screen.getByRole('button', { name: '▶ 들어보기' }) as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    fireEvent.click(btn)
+    expect(appAPI.previewSound).not.toHaveBeenCalled()
+  })
+})
