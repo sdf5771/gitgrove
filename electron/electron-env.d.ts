@@ -160,6 +160,9 @@ interface Window {
     setBadgeCount: (count: number) => Promise<void>
     // macOS Dock 아이콘 1회 바운스(informational). 비-macOS no-op.
     bounceDock: () => Promise<void>
+    // 알림 사운드 미리듣기(Settings). 화이트리스트(14종)에 있는 macOS 시스템 사운드 이름을
+    // 그 소리만 즉시 재생(배너 없이). 성공 { ok:true } / 미허용·파일없음·비-macOS { ok:false, error }.
+    previewSound: (name: string) => Promise<{ ok: boolean; error?: string }>
   }
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {

@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld('appAPI', {
     ipcRenderer.invoke('app:show-notification', opts) as Promise<void>,
   setBadgeCount: (count: number) => ipcRenderer.invoke('app:set-badge-count', count) as Promise<void>,
   bounceDock: () => ipcRenderer.invoke('app:bounce-dock') as Promise<void>,
+  // 알림 사운드 미리듣기(Settings). 화이트리스트 사운드 이름만 그 소리로 즉시 재생(배너 없이).
+  // 미허용/파일없음/비-macOS는 { ok:false, error } 반환(throw 안 함).
+  previewSound: (name: string) =>
+    ipcRenderer.invoke('app:preview-sound', name) as Promise<{ ok: boolean; error?: string }>,
 })
 
 // --------- Expose ipcRenderer to the Renderer process ---------
