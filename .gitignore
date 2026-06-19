@@ -17,6 +17,7 @@ release
 # Project-local agent files
 agent-log.md
 CLAUDE.md
+.claude/
 
 # Editor directories and files
 .vscode/*
