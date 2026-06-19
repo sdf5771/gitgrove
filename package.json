@@ -20,6 +20,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource/dotgothic16": "^5.2.8",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/noto-sans-kr": "^5.2.9",
+    "@fontsource/pixelify-sans": "^5.2.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
