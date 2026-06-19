@@ -113,7 +113,7 @@ describe('CloneModal — 3상태', () => {
     render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} onRegistered={onRegistered} pickDirectory={pickOk('/dev')} initialUrl="https://github.com/acme/private.git" />)
     await user.click(screen.getByRole('button', { name: 'Clone' }))
 
-    await waitFor(() => expect(screen.getByText('인증이 필요해요')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('GitHub 인증이 필요해요')).toBeTruthy())
     expect(onRegistered).not.toHaveBeenCalled()
   })
 
@@ -137,7 +137,7 @@ describe('CloneModal — 3상태', () => {
     render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} pickDirectory={pickOk('/dev')} initialUrl="https://github.com/acme/private.git" />)
     await user.click(screen.getByRole('button', { name: 'Clone' }))
 
-    await waitFor(() => expect(screen.getByText('인증이 필요해요')).toBeTruthy())
+    await waitFor(() => expect(screen.getByText('GitHub 인증이 필요해요')).toBeTruthy())
     expect(screen.getByPlaceholderText(/ghp_/)).toBeTruthy()
     // 토큰 입력 전엔 재시도 비활성
     const retry = screen.getByRole('button', { name: /토큰으로 다시 시도/ })
@@ -206,6 +206,73 @@ describe('CloneModal — 3상태', () => {
     await waitFor(() => expect(screen.getByText('64/128')).toBeTruthy())
     act(() => resolveClone({ success: true, path: '/dev/widget', name: 'widget' }))
     await waitFor(() => expect(screen.getByText('그로브에 심었어요')).toBeTruthy())
+  })
+
+  it('auth 실패 + 연결된 GitLab 토큰 → 자동 1회 재시도(토큰 끼운 URL로 clone 재호출)', async () => {
+    const user = userEvent.setup()
+    // 연결된 GitLab 인스턴스 + 토큰.
+    mock.appAPI.gitlabListHosts.mockResolvedValue(['https://gitlab.com'])
+    mock.appAPI.gitlabGetToken.mockResolvedValue('glpat-conn')
+    // 1번째: auth 실패 → 2번째(자동 재시도): 성공.
+    mock.gitAPI.clone
+      .mockResolvedValueOnce({ success: false, errorKind: 'auth', message: '401' })
+      .mockResolvedValueOnce({ success: true, path: '/dev/proj', name: 'proj' })
+    render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} pickDirectory={pickOk('/dev')} initialUrl="https://gitlab.com/group/proj.git" />)
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+
+    // 자동 재시도가 성공으로 끝남(사용자 입력 없이).
+    await waitFor(() => expect(screen.getByText('그로브에 심었어요')).toBeTruthy())
+    // clone은 정확히 2회: 원래 + 자동 재시도. 2번째 URL에 토큰이 끼워짐.
+    await waitFor(() => expect(mock.gitAPI.clone).toHaveBeenCalledTimes(2))
+    expect(mock.gitAPI.clone.mock.calls[0][0]).toBe('https://gitlab.com/group/proj.git')
+    expect(mock.gitAPI.clone.mock.calls[1][0]).toBe('https://glpat-conn@gitlab.com/group/proj.git')
+  })
+
+  it('자동 재시도도 실패 → 프로바이더별 안내(터미널 문구 포함) + 무한루프 없음(clone 2회)', async () => {
+    const user = userEvent.setup()
+    mock.appAPI.gitlabListHosts.mockResolvedValue(['https://gitlab.com'])
+    mock.appAPI.gitlabGetToken.mockResolvedValue('glpat-conn')
+    // 두 번 모두 auth 실패.
+    mock.gitAPI.clone.mockResolvedValue({ success: false, errorKind: 'auth', message: '401' })
+    render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} pickDirectory={pickOk('/dev')} initialUrl="https://gitlab.com/group/proj.git" />)
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+
+    // GitLab 프로바이더별 안내 + 터미널 로그인 확인 문구.
+    await waitFor(() => expect(screen.getByText('GitLab 인증이 필요해요')).toBeTruthy())
+    expect(screen.getByText(/터미널에서 GitLab 로그인/)).toBeTruthy()
+    // 자동 재시도는 딱 1회 — clone 총 2회(원래 + 자동 재시도)에서 멈춤.
+    await waitFor(() => expect(mock.gitAPI.clone).toHaveBeenCalledTimes(2))
+    // PAT 칸은 그대로 노출(수동 입력 폴백).
+    expect(screen.getByPlaceholderText(/ghp_/)).toBeTruthy()
+  })
+
+  it('연결 토큰 없음 → 자동 재시도 없이 기존 PAT 안내(clone 1회)', async () => {
+    const user = userEvent.setup()
+    // 연결된 GitLab 인스턴스 없음(기본 mock: 빈 목록 / null 토큰).
+    mock.gitAPI.clone.mockResolvedValue({ success: false, errorKind: 'auth', message: '401' })
+    render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} pickDirectory={pickOk('/dev')} initialUrl="https://gitlab.com/group/proj.git" />)
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+
+    await waitFor(() => expect(screen.getByText('GitLab 인증이 필요해요')).toBeTruthy())
+    expect(screen.getByPlaceholderText(/ghp_/)).toBeTruthy()
+    // 토큰이 없으니 자동 재시도 없음 — clone은 1회뿐.
+    await waitFor(() => expect(mock.gitAPI.clone).toHaveBeenCalledTimes(1))
+  })
+
+  it('GitHub auth 실패 + 연결된 GitHub 토큰(localStorage) → 자동 1회 재시도', async () => {
+    const user = userEvent.setup()
+    // githubIsEncryptionAvailable=false(기본) → getGithubToken은 localStorage 평문 사용.
+    localStorage.setItem('gitgrove:githubToken', 'ghp_conn')
+    mock.gitAPI.clone
+      .mockResolvedValueOnce({ success: false, errorKind: 'auth', message: '401' })
+      .mockResolvedValueOnce({ success: true, path: '/dev/widget', name: 'widget' })
+    render(<CloneModal onClose={vi.fn()} onCloned={vi.fn()} pickDirectory={pickOk('/dev')} initialUrl="https://github.com/acme/widget.git" />)
+    await user.click(screen.getByRole('button', { name: 'Clone' }))
+
+    await waitFor(() => expect(screen.getByText('그로브에 심었어요')).toBeTruthy())
+    await waitFor(() => expect(mock.gitAPI.clone).toHaveBeenCalledTimes(2))
+    expect(mock.gitAPI.clone.mock.calls[1][0]).toBe('https://ghp_conn@github.com/acme/widget.git')
+    localStorage.removeItem('gitgrove:githubToken')
   })
 
   it('진행 구독 누수 방지: 모달 언마운트 시 onRemoteProgress 해제', async () => {

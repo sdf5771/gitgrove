@@ -173,3 +173,48 @@ export function cloneThrowToView(err: unknown): CloneResultView {
   const message = err instanceof Error ? err.message : String(err)
   return mapCloneResult({ success: false, errorKind: 'error', message })
 }
+
+// ── 인증 실패 안내(프로바이더별) ──
+//
+// 자동 토큰 재시도가 없거나 실패한 뒤, 인라인 PAT 패널 위에 띄울 안내.
+// 세 갈래(설정 연결 / PAT 입력 / 터미널 로그인 확인)를 사유 먼저·해요체로 전한다.
+// 라이팅 가이드(docs/WRITING_GUIDE.md): 느낌표·과장 금지, 명령 강요 대신 "확인해 보세요" 톤.
+export interface CloneAuthGuidance {
+  title: string
+  // 한 문단 안내(설정 연결 → PAT → 터미널 로그인 순).
+  detail: string
+}
+
+export function cloneAuthGuidance(provider: CloneProvider): CloneAuthGuidance {
+  if (provider === 'gl') {
+    return {
+      title: 'GitLab 인증이 필요해요',
+      detail:
+        '비공개 저장소예요 · 설정에서 GitLab을 연결하면 그 토큰으로 자동 시도해요 · 아래에 PAT를 입력하거나, 터미널에서 GitLab 로그인(git credential)이 돼 있는지 확인해 보세요.',
+    }
+  }
+  if (provider === 'gh') {
+    return {
+      title: 'GitHub 인증이 필요해요',
+      detail:
+        '비공개 저장소예요 · 설정에서 GitHub을 연결하면 그 토큰으로 자동 시도해요 · 아래에 PAT를 입력하거나, 터미널에서 GitHub 로그인(git credential)이 돼 있는지 확인해 보세요.',
+    }
+  }
+  // 프로바이더 미인식 — 일반 안내.
+  return {
+    title: '인증이 필요해요',
+    detail:
+      '비공개 저장소예요 · 설정에서 서비스를 연결하면 그 토큰으로 자동 시도해요 · 아래에 PAT를 입력하거나, 터미널에서 git 로그인(git credential)이 돼 있는지 확인해 보세요.',
+  }
+}
+
+// 클론 URL에 토큰을 끼운 형태(https://<token>@host/...)로 변환.
+// ssh/미인식 URL이면 null(토큰 주입 불가 — 호출부가 폴백).
+// 토큰은 encodeURIComponent로 안전하게 끼운다(기존 retryWithToken 규칙과 동일).
+export function urlWithToken(url: string, token: string): string | null {
+  const t = (token ?? '').trim()
+  if (!t) return null
+  const m = (url ?? '').trim().match(/^(https?:\/\/)(?:[^@/]+@)?(.+)$/)
+  if (!m) return null
+  return `${m[1]}${encodeURIComponent(t)}@${m[2]}`
+}

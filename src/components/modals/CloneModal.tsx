@@ -30,8 +30,13 @@ import {
   deriveRepoName,
   mapCloneResult,
   cloneThrowToView,
+  cloneAuthGuidance,
+  urlWithToken,
   type CloneResultView,
+  type CloneTarget,
 } from '../../utils/cloneLogic'
+import { parseGitLabRepo, matchGitlabHost } from '../../utils/gitlab'
+import { getGithubToken } from '../../utils/githubToken'
 
 interface Props {
   onClose: () => void
@@ -73,6 +78,31 @@ const IconFolder = () => (
   <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 4.5A1 1 0 0 1 3 3.5h3l1.2 1.4H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>
 )
 
+// 클론 대상의 프로바이더/host로 설정에 연결된 토큰을 조회한다.
+// - GitHub: getGithubToken()(safeStorage/localStorage 일원화 헬퍼).
+// - GitLab: 클론 URL의 host를 연결된 인스턴스 목록과 매칭(matchGitlabHost) 후 그 host의 토큰.
+// 없거나 조회 실패면 null(호출부가 안내로 폴백).
+async function resolveConnectedToken(url: string, target: CloneTarget): Promise<string | null> {
+  try {
+    if (target.provider === 'gh') {
+      const t = await getGithubToken()
+      return t ? t : null
+    }
+    if (target.provider === 'gl') {
+      const repo = parseGitLabRepo(url.trim())
+      if (!repo) return null
+      const hosts = (await window.appAPI?.gitlabListHosts()) ?? []
+      const matched = matchGitlabHost(hosts, repo.host)
+      if (!matched) return null
+      const t = await window.appAPI?.gitlabGetToken(matched)
+      return t ? t : null
+    }
+  } catch {
+    /* 조회 실패 시 안내로 폴백 */
+  }
+  return null
+}
+
 const PhaseIcon = ({ status }: { status: PhaseStatus }) => {
   if (status === 'active') return <span className="pspin" />
   if (status === 'done') return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 8.5l3.2 3.2L13 5" /></svg>
@@ -97,6 +127,12 @@ export function CloneModal({ onClose, onCloned, onRegistered, pickDirectory, ini
   useEffect(() => { phaseRef.current = phase }, [phase])
   // 성공 시 그로브 등록을 정확히 1회만 호출하기 위한 guard(effect 재실행/중복 방지).
   const registeredPathRef = useRef<string | null>(null)
+  // 연결된 토큰 자동 재시도는 클론 1회당 딱 1번(무한루프 방지). runClone마다 리셋.
+  const autoRetriedRef = useRef(false)
+  // 자동 재시도 조회/실행 진입을 한 번만 트리거하기 위한 guard(effect 중복 방지).
+  const autoTryingRef = useRef(false)
+  // 자동 재시도 상태 문구("연결된 토큰으로 다시 시도하고 있어요…") 노출용.
+  const [autoTrying, setAutoTrying] = useState(false)
 
   const target = detectCloneTarget(url)
   const repoName = target.repo || deriveRepoName(url)
@@ -137,7 +173,9 @@ export function CloneModal({ onClose, onCloned, onRegistered, pickDirectory, ini
   }
 
   // 실제 클론 실행. dest 없으면 폴더 선택 먼저. 성공/실패를 result 뷰로 매핑.
-  const runClone = async () => {
+  // cloneUrl: 자동 재시도 시 토큰을 끼운 URL을 넘겨 받는다(없으면 폼의 url 사용).
+  // 토큰이 끼워진 URL은 화면/상태에는 노출하지 않고 clone IPC에만 전달한다(마스킹 유지).
+  const runClone = async (cloneUrl?: string) => {
     if (!urlValid) return
     let parent = dest.trim()
     if (!parent) {
@@ -154,7 +192,7 @@ export function CloneModal({ onClose, onCloned, onRegistered, pickDirectory, ini
     phaseRef.current = 'progress'
     setPhase('progress')
     try {
-      const res = await window.gitAPI!.clone(url.trim(), parent, { shallow, recurseSubmodules })
+      const res = await window.gitAPI!.clone((cloneUrl ?? url).trim(), parent, { shallow, recurseSubmodules })
       setResult(mapCloneResult(res, repoName))
       setPhase('result')
     } catch (err) {
@@ -163,6 +201,41 @@ export function CloneModal({ onClose, onCloned, onRegistered, pickDirectory, ini
       setPhase('result')
     }
   }
+
+  // 사용자가 폼에서 새로 Clone — 자동 재시도 guard를 리셋(이번 클론은 1회 자동 재시도 허용).
+  const startClone = () => {
+    autoRetriedRef.current = false
+    autoTryingRef.current = false
+    setAutoTrying(false)
+    void runClone()
+  }
+
+  // auth/notfound 결과 진입 시: 연결된 토큰이 있으면 자동으로 1회만 재시도.
+  // - autoRetriedRef로 무한루프 방지(자동 재시도는 클론당 딱 1번).
+  // - 토큰이 없거나 URL에 토큰 주입 불가(ssh 등)면 그대로 안내(needsToken 패널)로 폴백.
+  useEffect(() => {
+    if (phase !== 'result' || !result) return
+    if (result.kind !== 'auth' && result.kind !== 'notfound') return
+    if (autoRetriedRef.current || autoTryingRef.current) return
+    autoTryingRef.current = true
+    let cancelled = false
+    void (async () => {
+      const token = await resolveConnectedToken(url, target)
+      const withToken = token ? urlWithToken(url, token) : null
+      if (cancelled) return
+      if (!withToken) {
+        // 연결 토큰 없음/주입 불가 — 자동 재시도 소진 처리 후 안내 패널 노출.
+        autoRetriedRef.current = true
+        return
+      }
+      autoRetriedRef.current = true
+      setAutoTrying(true)
+      await runClone(withToken)
+      if (!cancelled) setAutoTrying(false)
+    })()
+    return () => { cancelled = true }
+    // result 객체 동일성 변화로 1회만 트리거(autoTryingRef가 중복 진입 차단).
+  }, [phase, result, url]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // auth 실패 후 토큰을 URL에 끼워 재시도(https://<token>@host/...). ssh/미인식은 그대로.
   const retryWithToken = () => {
@@ -194,17 +267,18 @@ export function CloneModal({ onClose, onCloned, onRegistered, pickDirectory, ini
           dest={dest} setDest={setDest} onBrowse={handleBrowse}
           shallow={shallow} setShallow={setShallow}
           recurse={recurseSubmodules} setRecurse={setRecurseSubmodules}
-          onClose={onClose} onClone={() => void runClone()}
+          onClose={onClose} onClone={startClone}
         />
       )}
 
       {phase === 'progress' && (
-        <ProgressBody model={model} provider={target.provider} ownerRepo={targetLabel(target)} dest={dest} />
+        <ProgressBody model={model} provider={target.provider} ownerRepo={targetLabel(target)} dest={dest} autoTrying={autoTrying} />
       )}
 
       {phase === 'result' && result && (
         <ResultBody
-          view={result} sprout={sprout} token={token} setToken={setToken}
+          view={result} provider={target.provider} autoTrying={autoTrying}
+          sprout={sprout} token={token} setToken={setToken}
           onPlanted={() => { if (result.path) onCloned(result.path); onClose() }}
           onRetryToken={retryWithToken} onBack={backToForm} onClose={onClose}
         />
@@ -270,8 +344,8 @@ function FormBody(props: {
 }
 
 // ── 2) 진행 HUD (SyncHud 본문 패턴 재사용: 같은 .hud-* 클래스/유틸) ──
-function ProgressBody({ model, provider, ownerRepo, dest }: {
-  model: ProgressModel; provider: 'gh' | 'gl' | null; ownerRepo: string; dest: string
+function ProgressBody({ model, provider, ownerRepo, dest, autoTrying }: {
+  model: ProgressModel; provider: 'gh' | 'gl' | null; ownerRepo: string; dest: string; autoTrying: boolean
 }) {
   const phases = phasesFor('clone')
   const statuses = computePhaseStatuses('clone', model.maxPhase)
@@ -294,7 +368,7 @@ function ProgressBody({ model, provider, ownerRepo, dest }: {
             {provider === 'gl' ? <GlMark /> : provider === 'gh' ? <GhMark /> : null}
             <span>{ownerRepo || '저장소'}</span>
           </div>
-          <div className="hud-sub">{dest ? `${dest} 에 받는 중` : '받는 중'}</div>
+          <div className="hud-sub">{autoTrying ? '연결된 토큰으로 다시 시도하는 중' : dest ? `${dest} 에 받는 중` : '받는 중'}</div>
         </div>
         <div className="hud-pct">{pct}%</div>
       </div>
@@ -321,12 +395,20 @@ function ProgressBody({ model, provider, ownerRepo, dest }: {
 }
 
 // ── 3) 결과 (성공=나무 sprout / 실패=auth 토큰칸·notfound·error) ──
-function ResultBody({ view, sprout, token, setToken, onPlanted, onRetryToken, onBack, onClose }: {
-  view: CloneResultView; sprout: boolean
+function ResultBody({ view, provider, autoTrying, sprout, token, setToken, onPlanted, onRetryToken, onBack, onClose }: {
+  view: CloneResultView; provider: 'gh' | 'gl' | null; autoTrying: boolean; sprout: boolean
   token: string; setToken: (v: string) => void
   onPlanted: () => void; onRetryToken: () => void; onBack: () => void; onClose: () => void
 }) {
   const success = view.kind === 'success'
+  // auth면 프로바이더별 안내 문구(설정 연결 / PAT / 터미널 로그인 확인)로 대체한다.
+  // notfound는 "진짜 잘못된 URL"일 수도 있어 기존 안내(URL 확인 + 토큰 재시도)를 유지하고,
+  // 터미널 로그인 힌트만 아래에 덧붙인다.
+  const guidance = view.kind === 'auth' ? cloneAuthGuidance(provider) : null
+  const titleText = guidance ? guidance.title : view.title
+  const detailText = guidance ? guidance.detail : view.detail
+  // notfound에도 터미널 로그인 힌트 한 줄을 덧붙인다(프로바이더 톤 유지).
+  const notfoundHint = view.kind === 'notfound' ? cloneAuthGuidance(provider).detail : null
   return (
     <div className={`clone-result ${view.kind}`}>
       {success ? (
@@ -339,14 +421,21 @@ function ResultBody({ view, sprout, token, setToken, onPlanted, onRetryToken, on
         <div className="clone-fail-geuru"><Geuru expr={view.geuru} scale={2} title="그루" /></div>
       )}
 
-      <div className={`clone-result-title${success ? ' ok' : ' err'}`}>{view.title}</div>
-      <div className="clone-result-detail">{view.detail}</div>
+      <div className={`clone-result-title${success ? ' ok' : ' err'}`}>{titleText}</div>
+      <div className="clone-result-detail">{detailText}</div>
+      {notfoundHint && <div className="clone-result-detail clone-result-hint">{notfoundHint}</div>}
 
       {success && view.stats.length > 0 && (
         <div className="clone-stats">
           {view.stats.map(s => (
             <div key={s.label} className="clone-stat"><span>{s.label}</span><b>{s.value}</b></div>
           ))}
+        </div>
+      )}
+
+      {autoTrying && (
+        <div className="clone-token-hint" role="status" aria-live="polite">
+          연결된 토큰으로 다시 시도하고 있어요…
         </div>
       )}
 
