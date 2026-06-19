@@ -1547,6 +1547,57 @@ ipcMain.handle('app:bounce-dock', async (): Promise<void> => {
   }
 })
 
+// app:preview-sound — Settings에서 고른 macOS 시스템 사운드를 그 소리만 즉시 재생(알림 배너 없이).
+//   - 화이트리스트(PREVIEW_SOUNDS) 검증: 목록에 없으면 재생 안 하고 { ok:false, error:'unknown sound' }.
+//     (이름이 알파벳뿐이라 경로 조작 불가지만, 화이트리스트가 1차 방어 — 임의 파일/인젝션 차단.)
+//   - 파일 경로 /System/Library/Sounds/<name>.aiff. fs.existsSync로 존재 확인, 없으면 'not found'.
+//   - 재생: child_process.spawn('afplay', [filePath]) — 셸 미경유(인자 배열)로 afplay 직접 호출.
+//   - 연타 대응: 직전 미리듣기 프로세스(previewSoundProc)를 kill해 겹쳐 재생 방지.
+//   - 비-macOS(darwin 아님)는 재생 안 하고 { ok:false, error:'unsupported platform' }.
+//   - 렌더러 모듈 import 대신 자체 상수로 검증(메인/렌더러 결합 회피). 목록은
+//     src/utils/notifSettings.ts의 NOTIFICATION_SOUNDS(14종)와 동일하게 유지할 것.
+const PREVIEW_SOUNDS = [
+  'Glass', 'Ping', 'Hero', 'Submarine', 'Basso', 'Blow', 'Bottle',
+  'Frog', 'Funk', 'Morse', 'Pop', 'Purr', 'Sosumi', 'Tink',
+] as const
+
+// 직전 미리듣기 afplay 프로세스. 새 미리듣기 시작 전에 kill해 겹침 방지.
+let previewSoundProc: import('node:child_process').ChildProcess | null = null
+
+ipcMain.handle('app:preview-sound', async (_event, name: string): Promise<{ ok: boolean; error?: string }> => {
+  // 비-macOS 방어 (앱은 macOS 타깃이지만 afplay/시스템 사운드는 macOS 전용).
+  if (process.platform !== 'darwin') return { ok: false, error: 'unsupported platform' }
+
+  // 화이트리스트 검증 (1차 방어). 목록 밖이면 재생 안 함.
+  if (!(PREVIEW_SOUNDS as readonly string[]).includes(name)) {
+    return { ok: false, error: 'unknown sound' }
+  }
+
+  const filePath = `/System/Library/Sounds/${name}.aiff`
+  if (!fs.existsSync(filePath)) return { ok: false, error: 'not found' }
+
+  // 연타 대응: 이전 미리듣기가 살아있으면 종료(겹쳐 재생 방지).
+  if (previewSoundProc) {
+    try { previewSoundProc.kill() } catch { /* 이미 종료됨 — 무시 */ }
+    previewSoundProc = null
+  }
+
+  try {
+    const { spawn } = await import('node:child_process')
+    // 셸 미경유: 인자 배열로 afplay에 파일 경로만 전달.
+    const proc = spawn('afplay', [filePath])
+    previewSoundProc = proc
+    // spawn 에러/종료는 graceful 처리(throw 안 함). 현재 보관 핸들이면 정리.
+    proc.on('error', () => { if (previewSoundProc === proc) previewSoundProc = null })
+    proc.on('exit', () => { if (previewSoundProc === proc) previewSoundProc = null })
+  } catch {
+    // spawn 자체 실패(예: 바이너리 없음) → graceful.
+    return { ok: false, error: 'not found' }
+  }
+
+  return { ok: true }
+})
+
 // ──────────────────────────────────────────────
 // app:download-update (옵션 1: 무서명 인앱 DMG 다운로드)
 //

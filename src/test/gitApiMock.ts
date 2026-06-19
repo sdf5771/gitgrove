@@ -164,6 +164,8 @@ export function installGitApiMock() {
     showNotification: vi.fn(async () => {}) as Mock<(opts: { title: string; body: string; silent?: boolean; sound?: string }) => Promise<void>>,
     setBadgeCount: vi.fn(async () => {}) as Mock<(count: number) => Promise<void>>,
     bounceDock: vi.fn(async () => {}) as Mock<() => Promise<void>>,
+    // 알림 사운드 미리듣기(Settings) — 테스트에서 호출 검증 가능하도록 vi.fn. 기본 성공.
+    previewSound: vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true })) as Mock<(name: string) => Promise<{ ok: boolean; error?: string }>>,
   }
 
   window.gitAPI = gitAPI

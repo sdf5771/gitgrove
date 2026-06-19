@@ -160,6 +160,13 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     typeof _saved.notificationSound === 'string' && _saved.notificationSound ? _saved.notificationSound : 'Glass'
   )
 
+  // 사운드 미리듣기 — 현재 선택된 사운드를 그 소리만 재생(배너 없음).
+  const previewNotificationSound = () => {
+    window.appAPI?.previewSound(notificationSound).then(res => {
+      if (!res?.ok) console.warn('사운드 미리듣기 실패 ·', res?.error)
+    }).catch(() => {})
+  }
+
   useEffect(() => {
     if (!repoPath) return
     setCfgLoading(true)
@@ -436,15 +443,25 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                   <button className={`sett-sw ${notificationSoundEnabled ? 'on' : 'off'}`} />
                 </div>
                 <div className="sett-field"><div className="sett-lbl">사운드</div>
-                  <select
-                    className="sett-sel"
-                    aria-label="알림 사운드"
-                    value={notificationSound}
-                    disabled={!notificationSoundEnabled}
-                    onChange={e => setNotificationSound(e.target.value)}
-                  >
-                    {NOTIFICATION_SOUNDS.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
+                  <div className="sett-sound-row">
+                    <select
+                      className="sett-sel"
+                      aria-label="알림 사운드"
+                      value={notificationSound}
+                      disabled={!notificationSoundEnabled}
+                      onChange={e => setNotificationSound(e.target.value)}
+                    >
+                      {NOTIFICATION_SOUNDS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      className="sett-preview-btn"
+                      disabled={!notificationSoundEnabled}
+                      onClick={previewNotificationSound}
+                    >
+                      ▶ 들어보기
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
