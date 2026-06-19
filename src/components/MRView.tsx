@@ -208,7 +208,9 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
     setLoading(true)
     try {
       const raw = await getMergeRequests(resolved.host, resolved.token, {
-        projectId: encodeURIComponent(resolved.projectPath),
+        // raw 경로(group/repo)를 그대로 전달한다. 인코딩은 getMergeRequests가 1회만 수행
+        // (여기서 encodeURIComponent하면 gitlabClient에서 다시 인코딩돼 group%252Frepo → 404).
+        projectId: resolved.projectPath,
         state: 'all',
         cache: false,
       })

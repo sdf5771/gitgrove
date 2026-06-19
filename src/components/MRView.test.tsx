@@ -87,6 +87,22 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
     expect(screen.queryByText('한국어 로케일')).not.toBeInTheDocument()
   })
 
+  it('회귀: getMergeRequests를 raw projectPath로 호출한다 (이중 인코딩 → 404 방지)', async () => {
+    // origin git@gitlab.com:platform/web-client.git → projectPath = 'platform/web-client'
+    // 호출부(MRView)에서 encodeURIComponent하면 gitlabClient가 다시 인코딩해
+    // platform%252Fweb-client → GitLab 404. 따라서 raw 경로를 그대로 넘겨야 한다.
+    installApi()
+    getMergeRequestsMock.mockResolvedValue([mr({ iid: 128, title: '토큰 회전', state: 'opened' })])
+    render(<MRView repoPath="/repo/gl" />)
+    await waitFor(() => expect(getMergeRequestsMock).toHaveBeenCalled())
+
+    const [, , opts] = getMergeRequestsMock.mock.calls[0] as [string, string, { projectId: string }]
+    expect(opts.projectId).toBe('platform/web-client')
+    // 인코딩된 흔적(%2F 단일/%252F 이중)이 없어야 한다
+    expect(opts.projectId).not.toContain('%2F')
+    expect(opts.projectId).not.toContain('%252F')
+  })
+
   it('필터(open/merged/all)가 목록을 거른다', async () => {
     installApi()
     getMergeRequestsMock.mockResolvedValue([

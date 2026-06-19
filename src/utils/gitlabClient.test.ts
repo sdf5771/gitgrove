@@ -186,6 +186,16 @@ describe('헬퍼 — 경로/파라미터 구성', () => {
     expect(url).toContain('state=opened')
   })
 
+  it('getMergeRequests raw 경로 projectId는 단일 인코딩(group/repo → group%2Frepo)', async () => {
+    // 호출부는 raw 경로를 넘기고, 인코딩은 여기서 1회만 해야 한다.
+    // (호출부에서 미리 인코딩하면 group%252Frepo가 되어 GitLab 404)
+    fetchMock.mockResolvedValueOnce(mockFetchOnce([]))
+    await getMergeRequests('gitlab.com', 't', { projectId: 'platform/web-client', state: 'all' })
+    const url = fetchMock.mock.calls[0][0] as string
+    expect(url).toContain('/api/v4/projects/platform%2Fweb-client/merge_requests?')
+    expect(url).not.toContain('platform%252Fweb-client')
+  })
+
   it('getMergeRequests projectId 없으면 계정 전역 /merge_requests + scope', async () => {
     fetchMock.mockResolvedValueOnce(mockFetchOnce([]))
     await getMergeRequests('gitlab.com', 't', { scope: 'created_by_me' })
