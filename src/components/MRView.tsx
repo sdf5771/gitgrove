@@ -220,13 +220,13 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
       setDetails({})
       setMrs(mapped)
       setError(null)
-      if (selId == null && mapped.length) setSelId(mapped[0].id)
+      // 자동 선택 없음 — 탭 진입 시 미선택이 기본. 목록에서 클릭해야 상세가 뜬다.
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setLoading(false)
     }
-  }, [repoPath, resolveCtx, selId])
+  }, [repoPath, resolveCtx])
 
   useEffect(() => { void loadMRs() }, [loadMRs])
 
@@ -315,7 +315,8 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
   const mrData = mrs ?? []
   const openCount = mrData.filter(m => m.status === 'open').length
   const filtered = mrData.filter(m => filter === 'all' || m.status === filter)
-  const sel = mrData.find(m => m.id === selId) ?? filtered[0] ?? mrData[0]
+  // selId가 null이면 미선택 — 폴백 없이 sel은 undefined로 두고 빈 상태를 렌더한다.
+  const sel = selId == null ? undefined : mrData.find(m => m.id === selId)
   const detail = sel ? details[sel.id] : undefined
   const selPipe = detail?.pipe ?? sel?.pipe ?? 'pend'
   const apprMet = detail?.appr ? detail.appr[0] >= detail.appr[1] : true
@@ -516,7 +517,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
               </div>
             )}
           </>
-        ) : <div className="pr-empty"><Geuru expr="idle" scale={2.8} /><span>Select a merge request</span></div>}
+        ) : <div className="pr-empty"><Geuru expr="idle" scale={2.8} /><span>왼쪽에서 MR을 고르면 여기에 보여요</span></div>}
       </div>
     </div>
   )

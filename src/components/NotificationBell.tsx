@@ -5,6 +5,7 @@ import type { GitlabConn } from '../utils/useGitlabConns'
 import { readNotifSoundSettings } from '../utils/notifSettings'
 import { Geuru } from './Geuru'
 import { ProviderBadge, ProviderFilterChips, type ProviderFilter } from './ProviderMark'
+import { isUnreachableError } from '../utils/netError'
 
 // 포커스 복귀 시 refetch 최소 간격(rate-limit 보호).
 const MIN_REFETCH_MS = 60_000
@@ -14,15 +15,8 @@ const POLL_MS = 60_000
 // 않게 짧게 끊는다. AbortError로 떨어지고 '도달 실패'로 소프트 처리된다.
 const GITLAB_FETCH_TIMEOUT_MS = 7_000
 
-// 네트워크 도달 실패(인스턴스가 망 밖/다운) 판별. fetch TypeError('Failed to
-// fetch')와 타임아웃 AbortError는 401/403 같은 API 응답 에러와 구분해 그 인스턴스만
-// '연결 안 됨'으로 소프트 처리한다(패널 전체 에러로 올리지 않음).
-function isUnreachableError(err: unknown): boolean {
-  if (err instanceof DOMException && err.name === 'AbortError') return true
-  if (err instanceof TypeError) return true
-  if (err instanceof Error && err.name === 'AbortError') return true
-  return false
-}
+// 도달 실패 판별은 공용 유틸 isUnreachableError(../utils/netError)로 추출했다.
+// 그 인스턴스만 '연결 안 됨'으로 소프트 처리한다(패널 전체 에러로 올리지 않음).
 
 // ── 프로바이더 통합 알림 항목 ──
 type ReasonKind = 'review' | 'mention' | 'ci_fail' | 'ci_pass' | 'merge' | 'comment' | 'assign'

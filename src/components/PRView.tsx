@@ -36,7 +36,8 @@ interface Props {
 
 export function PRView({ onOpenConflict, repoPath }: Props) {
   const [filter, setFilter] = useState<'open' | 'merged' | 'all'>('open')
-  const [selId, setSelId] = useState(42)
+  // 탭 진입 시 아무것도 선택하지 않은 상태가 기본. 목록에서 클릭해야 상세가 뜬다.
+  const [selId, setSelId] = useState<number | null>(null)
   const [dtab, setDtab] = useState<'overview' | 'files' | 'comments' | 'checks'>('overview')
   const [approved, setApproved] = useState(false)
   const [requested, setRequested] = useState(false)
@@ -143,7 +144,8 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
   const openCount = prData.filter(p => p.status === 'open').length
 
   const filtered = prData.filter(p => filter === 'all' || p.status === filter || (filter === 'open' && p.status === 'open'))
-  const sel = prData.find(p => p.id === selId) || prData[0]
+  // selId가 null이면 미선택 — 폴백 없이 sel은 undefined로 두고 빈 상태를 렌더한다.
+  const sel = selId == null ? undefined : prData.find(p => p.id === selId)
 
   const statusIcon = { pass: '✓', fail: '✗', pend: '…' } as const
   const statusCls = { pass: 'pass', fail: 'fail', pend: 'pend' } as const
@@ -302,7 +304,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
               </div>
             )}
           </>
-        ) : <div className="pr-empty"><Geuru expr="idle" scale={2.8} /><span>Select a pull request</span></div>}
+        ) : <div className="pr-empty"><Geuru expr="idle" scale={2.8} /><span>왼쪽에서 PR을 고르면 여기에 보여요</span></div>}
       </div>
     </div>
   )

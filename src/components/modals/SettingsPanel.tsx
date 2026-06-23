@@ -5,6 +5,7 @@ import { normalizeGitlabHost } from '../../utils/gitlab'
 import { NOTIFICATION_SOUNDS } from '../../utils/notifSettings'
 import { Geuru } from '../Geuru'
 import { GhMark, GlMark } from '../ProviderMark'
+import { isUnreachableError } from '../../utils/netError'
 
 // ── 외부 계약 (불변) ────────────────────────────────────────────────
 // SettingsTab은 App.tsx / 온보딩 / RepoManager의 호출(setSettingsTab('github') 등)이
@@ -52,7 +53,10 @@ const RELEASES_URL = 'https://github.com/sdf5771/gitgrove/releases'
 const GITHUB_SCOPES = ['repo', 'read:user', 'notifications']
 const GITLAB_SCOPES = ['api', 'read_user', 'read_repository']
 
-type VerifyState = 'idle' | 'verifying' | 'success' | 'error'
+// 'unreachable' = 토큰 있으나 verify가 도달 실패(네트워크/오프라인) — 저장 토큰을
+//   신뢰해 "연결됨"으로 두되 "지금 닿지 않아요" 보조 표기(미연결로 강등 금지).
+// 'expired' = 토큰 있으나 verify가 인증 오류(401/403) — 끊김 상태, 재인증 유도.
+type VerifyState = 'idle' | 'verifying' | 'success' | 'error' | 'unreachable' | 'expired'
 
 interface VerifyResult {
   login: string
@@ -288,8 +292,17 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
         if (cancelled) return
         setVerifyResult({ login: user.login, avatarUrl: user.avatar_url, scopes, rate })
         setVerifyState('success')
-      } catch {
-        // 저장 토큰이 더 이상 유효하지 않거나 네트워크 오류 — idle 유지, 토큰 보존.
+      } catch (err) {
+        if (cancelled) return
+        // 토큰은 항상 보존(자동 해제 금지). 실패 사유로 상태만 구분한다.
+        if (isUnreachableError(err)) {
+          // 네트워크/오프라인으로 지금 닿지 않음 — 저장 토큰을 신뢰해 연결 유지.
+          setVerifyState('unreachable')
+        } else if (err instanceof GithubApiError && (err.status === 401 || err.status === 403)) {
+          // 인증 오류 — 연결이 끊긴 상태로 재인증 유도.
+          setVerifyState('expired')
+        }
+        // 그 외(알 수 없는 오류)는 idle 유지.
       }
     })()
     return () => { cancelled = true }
@@ -315,8 +328,16 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
           if (cancelled) return
           setGlVerifyResult(glResultFromUser(user, normalized))
           setGlVerifyState('success')
-        } catch {
-          // 저장 토큰이 더 이상 유효하지 않을 수 있음 — idle 유지.
+        } catch (err) {
+          if (cancelled) return
+          // 토큰은 보존(자동 해제 금지). self-host를 사내망 밖에서 쓰는 케이스가
+          // 여기 — 도달 실패면 연결을 유지하고 "지금 닿지 않아요"로 표기한다.
+          if (isUnreachableError(err)) {
+            setGlVerifyState('unreachable')
+          } else if (err instanceof GitlabApiError && (err.status === 401 || err.status === 403)) {
+            setGlVerifyState('expired')
+          }
+          // 그 외는 idle 유지.
         }
       } catch { /* ignore */ }
     })()
@@ -512,11 +533,20 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
   // ── 렌더 ──
   const ghConnected = verifyState === 'success' && verifyResult
   const glConnected = glVerifyState === 'success' && glVerifyResult
+  // 토큰은 있으나 마운트 검증이 도달 실패/인증오류 — 미연결과 구분해 표기.
+  const ghUnreachable = verifyState === 'unreachable'
+  const ghExpired = verifyState === 'expired'
+  const glUnreachable = glVerifyState === 'unreachable'
+  const glExpired = glVerifyState === 'expired'
 
   const [headTitle, headDesc] = HEADS[nav]
 
   function navBadge(id: NavId): 'ok' | 'warn' | null {
-    if (id === 'conn') return (ghConnected || glConnected) ? 'ok' : 'warn'
+    if (id === 'conn') {
+      // 도달 실패(unreachable)도 연결로 간주해 ok. 끊김(expired)만 warn으로 본다.
+      if (ghConnected || glConnected || ghUnreachable || glUnreachable) return 'ok'
+      return 'warn'
+    }
     if (id === 'remote') return remotes.length === 0 && !cfgLoading ? 'warn' : null
     if (id === 'git') return !cfg.name && !cfgLoading ? 'warn' : null
     return null
@@ -739,6 +769,27 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                         </div>
                         <button className="set2-conn-btn ghost" onClick={disconnect}>연결 해제</button>
                       </div>
+                    ) : ghUnreachable ? (
+                      <div className="set2-conn connected">
+                        <div className="set2-conn-mark"><GhMark size={20} /></div>
+                        <div className="set2-conn-info">
+                          <b>GitHub <span className="set2-conn-status cs-warn">연결됨 · 지금 닿지 않아요</span></b>
+                          <span>저장된 토큰은 그대로예요 · 망에 연결되면 다시 확인해요</span>
+                        </div>
+                        <button className="set2-conn-btn ghost" onClick={disconnect}>연결 해제</button>
+                      </div>
+                    ) : ghExpired ? (
+                      <div className="set2-conn">
+                        <div className="set2-conn-mark"><GhMark size={20} /></div>
+                        <div className="set2-conn-info">
+                          <b>GitHub <span className="set2-conn-status cs-err">연결이 끊겼어요 · 다시 연결해 주세요</span></b>
+                          <span>토큰이 만료됐거나 권한이 바뀌었어요</span>
+                        </div>
+                        <button
+                          className={`set2-conn-btn ${connFlow === 'github' ? 'ghost' : 'gold'}`}
+                          onClick={() => setConnFlow(connFlow === 'github' ? null : 'github')}
+                        >{connFlow === 'github' ? '닫기' : '다시 연결'}</button>
+                      </div>
                     ) : (
                       <div className="set2-conn">
                         <div className="set2-conn-mark"><GhMark size={20} /></div>
@@ -768,6 +819,27 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                           </span>
                         </div>
                         <button className="set2-conn-btn ghost" onClick={disconnectGitlab}>연결 해제</button>
+                      </div>
+                    ) : glUnreachable ? (
+                      <div className="set2-conn connected">
+                        <div className="set2-conn-mark"><GlMark size={20} /></div>
+                        <div className="set2-conn-info">
+                          <b>GitLab <span className="set2-conn-status cs-warn">연결됨 · 지금 닿지 않아요</span></b>
+                          <span>저장된 토큰은 그대로예요 · 사내망에 연결되면 다시 확인해요</span>
+                        </div>
+                        <button className="set2-conn-btn ghost" onClick={disconnectGitlab}>연결 해제</button>
+                      </div>
+                    ) : glExpired ? (
+                      <div className="set2-conn">
+                        <div className="set2-conn-mark"><GlMark size={20} /></div>
+                        <div className="set2-conn-info">
+                          <b>GitLab <span className="set2-conn-status cs-err">연결이 끊겼어요 · 다시 연결해 주세요</span></b>
+                          <span>토큰이 만료됐거나 권한이 바뀌었어요</span>
+                        </div>
+                        <button
+                          className={`set2-conn-btn ${connFlow === 'gitlab' ? 'ghost' : 'gold'}`}
+                          onClick={() => setConnFlow(connFlow === 'gitlab' ? null : 'gitlab')}
+                        >{connFlow === 'gitlab' ? '닫기' : '다시 연결'}</button>
                       </div>
                     ) : (
                       <div className="set2-conn">
