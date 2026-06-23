@@ -1549,6 +1549,10 @@ body { display: flex; align-items: center; justify-content: center; }
   transition: border-color 120ms, color 120ms, background 120ms;
 }
 .ob-card-btn:hover { border-color: var(--c-gold-border); color: var(--c-gold-300); background: var(--c-gold-bg-soft); }
+.ob-card-state {
+  margin-top: 4px; padding: 6px 18px;
+  color: var(--c-gold-300); font-family: var(--font-display); font-size: 12px;
+}
 
 /* 사용법 팁 카드 */
 .ob-tips { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; margin-top: 4px; }
@@ -1610,7 +1614,10 @@ body { display: flex; align-items: center; justify-content: center; }
    Settings 재설계 (.set2-*) — 중앙 920×620 창 + 좌측 nav.
    디자인 「GitGrove 설정.html」 포팅. 기존 .sett-*/.ob-* 와 분리된 네임스페이스.
    ════════════════════════════════════════════════════════════════════ */
-.set2-overlay { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
+/* .app-body(position: relative; overflow: hidden) 안에 렌더되므로 fixed가 아닌
+   absolute로 inset:0 채워 중앙 정렬한다(온보딩 .ob-bd와 동일 방식). z-index는
+   모달·온보딩보다 위로 유지. */
+.set2-overlay { position: absolute; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; }
 .set2-scrim { position: absolute; inset: 0; background: rgba(6,10,18,.66); backdrop-filter: blur(2px); }
 .set2-win {
   position: relative; width: 920px; height: 620px; max-width: calc(100vw - 40px); max-height: calc(100vh - 60px);

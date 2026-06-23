@@ -264,10 +264,34 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     }).catch(() => {}).finally(() => setCfgLoading(false))
   }, [repoPath])
 
-  // 마운트 시 safeStorage 우선 로드 + 1회 마이그레이션
+  // 마운트 시 safeStorage 우선 로드 + 1회 마이그레이션 + 기존 연결 복원.
+  // 저장된 토큰이 있으면 자동 검증해 "연결됨" 상태를 복원한다(마운트당 1회).
+  // 검증 실패(401 등)·네트워크 오류는 graceful — idle 유지, 토큰은 보존(자동 해제 금지).
   useEffect(() => {
     let cancelled = false
-    loadInitialToken().then(t => { if (!cancelled) setGithubToken(t) }).catch(() => {})
+    ;(async () => {
+      let token = ''
+      try { token = await loadInitialToken() } catch { token = '' }
+      if (cancelled) return
+      setGithubToken(token)
+      if (!token.trim()) return
+      try {
+        const { data: user, headers } = await getUser<{ login: string; avatar_url: string }>(token, { cache: true })
+        if (cancelled) return
+        const scopesHeader = headers.get('X-OAuth-Scopes') ?? ''
+        const scopes = scopesHeader.split(',').map(s => s.trim()).filter(Boolean)
+        let rate: VerifyResult['rate'] = null
+        try {
+          const { data } = await getRateLimit<{ rate?: { remaining: number; limit: number } }>(token, { cache: true })
+          if (data.rate) rate = { remaining: data.rate.remaining, limit: data.rate.limit }
+        } catch { /* rate 조회 실패 무시 */ }
+        if (cancelled) return
+        setVerifyResult({ login: user.login, avatarUrl: user.avatar_url, scopes, rate })
+        setVerifyState('success')
+      } catch {
+        // 저장 토큰이 더 이상 유효하지 않거나 네트워크 오류 — idle 유지, 토큰 보존.
+      }
+    })()
     return () => { cancelled = true }
   }, [])
 

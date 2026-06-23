@@ -18,6 +18,30 @@ const STEPS = ['환영', '서비스 연결', '사용법', '완료'] as const
 export function Onboarding({ onClose, onConnectGithub, onConnectGitlab }: Props) {
   const [step, setStep] = useState(0)
 
+  // 서비스 연결 카드에 기존/방금 연결한 상태를 "연결됨"으로 반영한다.
+  // 온보딩 중 설정에서 연결하고 돌아온 케이스를 위해 settings-changed에서 재확인.
+  const [ghConnected, setGhConnected] = useState(false)
+  const [glConnected, setGlConnected] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const token = await window.appAPI?.githubGetToken()
+        const plain = (() => { try { return localStorage.getItem('gitgrove:githubToken') ?? '' } catch { return '' } })()
+        if (!cancelled) setGhConnected(Boolean(token) || Boolean(plain))
+      } catch { /* ignore */ }
+      try {
+        const hosts = await window.appAPI?.gitlabListHosts()
+        if (!cancelled) setGlConnected(Boolean(hosts && hosts.length > 0))
+      } catch { /* ignore */ }
+    }
+    refresh()
+    const onChanged = () => { refresh() }
+    window.addEventListener('gitgrove:settings-changed', onChanged)
+    return () => { cancelled = true; window.removeEventListener('gitgrove:settings-changed', onChanged) }
+  }, [])
+
   // Esc로 닫기(종료 경로).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -69,12 +93,16 @@ export function Onboarding({ onClose, onConnectGithub, onConnectGitlab }: Props)
                 <div className="ob-card">
                   <div className="ob-card-name">GitHub</div>
                   <div className="ob-card-desc">PR·이슈·알림을 한곳에서</div>
-                  <button type="button" className="ob-card-btn" onClick={onConnectGithub}>연결</button>
+                  {ghConnected
+                    ? <span className="ob-card-state">연결됨</span>
+                    : <button type="button" className="ob-card-btn" onClick={onConnectGithub}>연결</button>}
                 </div>
                 <div className="ob-card">
                   <div className="ob-card-name">GitLab</div>
                   <div className="ob-card-desc">MR·파이프라인을 한곳에서</div>
-                  <button type="button" className="ob-card-btn" onClick={onConnectGitlab}>연결</button>
+                  {glConnected
+                    ? <span className="ob-card-state">연결됨</span>
+                    : <button type="button" className="ob-card-btn" onClick={onConnectGitlab}>연결</button>}
                 </div>
               </div>
             </div>
