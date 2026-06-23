@@ -63,6 +63,9 @@ body { display: flex; align-items: center; justify-content: center; }
   user-select: none; -webkit-user-select: none;
   -webkit-app-region: drag;
 }
+/* macOS: 네이티브 신호등(좌상단 약 x=16~68)과 겹치지 않게 좌측 공간 확보.
+   이 영역엔 별도 no-drag 요소가 없어 -webkit-app-region: drag로 창 드래그 가능하게 남는다. */
+.title-bar.mac { padding-left: 78px; }
 .title-bar button,
 .title-bar .repo-pill,
 .title-bar .repo-tabs,
