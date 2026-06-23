@@ -44,7 +44,7 @@ import { CloneModal } from './components/modals/CloneModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
 import { RepoManager } from './components/RepoManager'
 import { Onboarding } from './components/Onboarding'
-import { hasSeenOnboarding, markOnboardingSeen } from './utils/onboarding'
+import { markOnboardingSeen, shouldShowOnboarding, hasExistingUserDataAsync } from './utils/onboarding'
 import { NotificationBell } from './components/NotificationBell'
 import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loadWorkspaces, saveWorkspaces, createWorkspaceId, type RecentRepoEntry, type Workspace } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
@@ -306,8 +306,9 @@ export default function App() {
   const [showRebase,     setShowRebase]     = useState(false)
   const [showSettings,   setShowSettings]   = useState(false)
   const [settingsTab,    setSettingsTab]    = useState<SettingsTab | undefined>(undefined)
-  // 첫 실행 온보딩("첫 경험") — 키가 없으면 최초 1회만 노출.
-  const [showOnboarding, setShowOnboarding] = useState(() => !hasSeenOnboarding())
+  // 첫 실행 온보딩("첫 경험") — 진짜 신규(미시청 + 기존 사용 흔적 없음)만 노출.
+  // 기존(업데이트) 사용자에겐 onboarding-seen 키가 없어도 사용 흔적으로 가린다.
+  const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding())
   const closeOnboarding = useCallback(() => { markOnboardingSeen(); setShowOnboarding(false) }, [])
   const [showAddRepo,    setShowAddRepo]    = useState(false)
   // CL2 — 클론 인터랙션 모달. null=닫힘. url 프리필(브라우저 Clone 진입 시).
@@ -1080,10 +1081,24 @@ export default function App() {
   useEffect(() => { if (selIdx >= filteredCommits.length) setSelIdx(Math.max(0, filteredCommits.length - 1)) }, [filteredCommits, selIdx])
   const selectedCommit = filteredCommits[selIdx] ?? null
 
+  // 온보딩이 떠 있어도, 비동기 신호(safeStorage GitHub 토큰·GitLab 호스트)로
+  // 기존 사용자임이 확인되면 닫고 영구 표시한다(동기 흔적이 없던 케이스 보완).
+  useEffect(() => {
+    if (!showOnboarding) return
+    let cancelled = false
+    hasExistingUserDataAsync().then(isExisting => {
+      if (!cancelled && isExisting) { markOnboardingSeen(); setShowOnboarding(false) }
+    }).catch(() => {})
+    return () => { cancelled = true }
+    // 마운트 시 1회만 확인.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── 키보드 단축키 ──
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowCmd(v => !v) }
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setShowSettings(true) }
       if (e.key === 'Escape') {
         if (showCmd) setShowCmd(false)
         else if (ctxMenu) setCtxMenu(null)

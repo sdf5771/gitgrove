@@ -59,6 +59,44 @@ describe('첫 실행 온보딩', () => {
     expect(localStorage.getItem(SEEN_KEY)).toBe('1')
   })
 
+  it('기존 사용자(gitgrove:repos 있음)는 온보딩 미노출', async () => {
+    localStorage.setItem('gitgrove:repos', JSON.stringify([{ path: '/x' }]))
+    render(<App />)
+    // 동기 흔적으로 초기 state부터 미노출 — 환영 문구가 한 번도 뜨지 않는다.
+    expect(shownWelcome()).toBe(false)
+  })
+
+  it('기존 사용자(레거시 githubToken)는 온보딩 미노출', async () => {
+    localStorage.setItem('gitgrove:githubToken', 'ghp_legacy')
+    render(<App />)
+    expect(shownWelcome()).toBe(false)
+  })
+
+  it('기존 사용자(gitgrove:settings)는 온보딩 미노출', async () => {
+    localStorage.setItem('gitgrove:settings', JSON.stringify({ density: 'compact' }))
+    render(<App />)
+    expect(shownWelcome()).toBe(false)
+  })
+
+  it('safeStorage GitHub 토큰만 있는 기존 사용자는 비동기 확인 후 온보딩이 닫힌다', async () => {
+    const { appAPI } = installGitApiMock()
+    appAPI.githubGetToken.mockResolvedValue('ghp_safe')
+    render(<App />)
+    // 비동기 신호로 닫힘 + 영구 표시.
+    await waitFor(() => expect(shownWelcome()).toBe(false))
+    await waitFor(() => expect(localStorage.getItem(SEEN_KEY)).toBe('1'))
+  })
+
+  it('⌘, 입력 시 설정창이 열린다', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(SEEN_KEY, '1')
+    render(<App />)
+    await waitFor(() => expect(screen.queryAllByText('내 그로브').length).toBeGreaterThan(0))
+
+    await user.keyboard('{Meta>},{/Meta}')
+    await waitFor(() => expect(screen.queryAllByText(/Settings|설정/i).length).toBeGreaterThan(0))
+  })
+
   it('GitHub "연결" 클릭 시 설정창(GitHub 탭)이 열린다', async () => {
     const user = userEvent.setup()
     render(<App />)
