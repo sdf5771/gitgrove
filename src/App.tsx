@@ -165,6 +165,9 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
 // ──────────────────────────────────────────────
 
 export default function App() {
+  // macOS는 네이티브 신호등(traffic lights)을 사용하므로 커스텀 신호등을 렌더하지 않는다.
+  // window.appAPI.platform은 preload에서 동기 노출돼 첫 페인트 전 사용 가능(깜빡임 없음).
+  const isMac = window.appAPI?.platform === 'darwin'
   // ── 레포 목록 (탭) — localStorage에서 초기값 로드 ──
   const [repos, setRepos] = useState<Repo[]>(() => {
     try {
@@ -1282,12 +1285,16 @@ export default function App() {
   return (
     <div className="git-window">
       {/* Title bar */}
-      <div className="title-bar">
-        <div className="tl">
-          <div className="td td-r" onClick={() => window.ipcRenderer?.send('win-close')} />
-          <div className="td td-y" onClick={() => window.ipcRenderer?.send('win-minimize')} />
-          <div className="td td-g" onClick={() => window.ipcRenderer?.send('win-maximize')} />
-        </div>
+      <div className={`title-bar${isMac ? ' mac' : ''}`}>
+        {/* macOS는 네이티브 신호등을 쓰므로 커스텀 신호등 미렌더(.title-bar.mac 좌측 패딩으로 공간 확보).
+            비-mac(Windows/Linux)은 기존 커스텀 신호등 + win-* IPC 유지. */}
+        {!isMac && (
+          <div className="tl">
+            <div className="td td-r" onClick={() => window.ipcRenderer?.send('win-close')} />
+            <div className="td td-y" onClick={() => window.ipcRenderer?.send('win-minimize')} />
+            <div className="td td-g" onClick={() => window.ipcRenderer?.send('win-maximize')} />
+          </div>
+        )}
         <span className="app-name" style={{ marginRight: 10, display: 'flex', alignItems: 'center', gap: 7 }}><span className="mark-slot"><Geuru expr="happy" scale={1} title="GitGrove" /></span>GitGrove</span>
         <div style={{ width: 1, height: 20, background: 'var(--c-border)', flexShrink: 0, marginRight: 6 }} />
         <div
