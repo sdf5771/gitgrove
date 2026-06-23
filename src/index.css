@@ -1464,3 +1464,143 @@ body { display: flex; align-items: center; justify-content: center; }
 /* AddRepoModal Clone 탭 → 전용 모달 진입 안내 */
 .addrepo-clone-redirect { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; padding: 18px 8px 10px; }
 .addrepo-clone-redirect-txt { font-size: 12px; color: var(--c-text-muted); line-height: 1.6; max-width: 280px; }
+
+/* ── 첫 실행 온보딩("첫 경험") ── */
+/* z-index 38: 앱 셸·타이틀바·RepoManager 위, 설정창(.sett-wrap z40)·모달(.modal-bd z50) 아래 →
+   "연결" 클릭 시 설정창이 온보딩 위로 뜬다. */
+.ob-bd {
+  position: absolute; inset: 0; z-index: 38;
+  background: radial-gradient(120% 120% at 50% 0%, var(--c-bg-surface) 0%, var(--c-bg-deep) 70%);
+  display: flex; align-items: center; justify-content: center;
+  animation: mfade 220ms ease;
+}
+.ob-box {
+  position: relative;
+  width: 720px; max-width: calc(100vw - 48px);
+  min-height: 560px;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 28px 32px 32px;
+  background: var(--c-bg-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(244,236,210,.05);
+  animation: mslide 260ms cubic-bezier(.2,.8,.2,1);
+}
+
+/* 진행 레일 */
+.ob-rail { display: flex; align-items: center; gap: 0; width: 100%; max-width: 520px; margin: 4px auto 0; }
+.ob-rail-step { display: flex; align-items: center; gap: 7px; flex: 1; position: relative; }
+.ob-rail-step:not(:last-child)::after {
+  content: ''; position: absolute; left: 16px; right: -4px; top: 5px; height: 2px;
+  background: var(--c-border); z-index: 0;
+}
+.ob-rail-step.done::after { background: var(--c-grove-d); }
+.ob-rail-dot {
+  width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; z-index: 1;
+  background: var(--c-bg-elevated); border: 2px solid var(--c-border);
+  transition: background 160ms, border-color 160ms;
+}
+.ob-rail-step.on .ob-rail-dot { background: var(--c-gold-400); border-color: var(--c-gold-border); box-shadow: 0 0 0 3px var(--c-gold-bg); }
+.ob-rail-step.done .ob-rail-dot { background: var(--c-grove); border-color: var(--c-grove-d); }
+.ob-rail-label {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .04em;
+  color: var(--c-text-faint); white-space: nowrap; z-index: 1; background: var(--c-bg-surface); padding-right: 6px;
+}
+.ob-rail-step.on .ob-rail-label { color: var(--c-gold-300); }
+.ob-rail-step.done .ob-rail-label { color: var(--c-text-muted); }
+
+/* 건너뛰기 */
+.ob-skip {
+  position: absolute; top: 20px; right: 22px;
+  background: none; border: none; cursor: pointer;
+  font-family: var(--font-body); font-size: 12px; color: var(--c-text-faint);
+  transition: color 120ms;
+}
+.ob-skip:hover { color: var(--c-text); }
+
+/* 단계 본문 */
+.ob-body { flex: 1; display: flex; align-items: center; justify-content: center; width: 100%; animation: obFadeUp 320ms cubic-bezier(.2,.8,.2,1); }
+.ob-stage { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; max-width: 540px; }
+.ob-title { font-family: var(--font-display); font-size: 22px; color: var(--c-text-strong); letter-spacing: .3px; margin-top: 4px; }
+.ob-accent { color: var(--c-gold-300); }
+.ob-sub { font-size: 13px; line-height: 1.7; color: var(--c-text-muted); max-width: 460px; }
+.ob-badge {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .06em;
+  color: var(--c-gold-300); background: var(--c-gold-bg); border: 1px solid var(--c-gold-border);
+  border-radius: var(--rpill); padding: 5px 12px; margin-top: 2px;
+}
+
+/* 그루 bob 애니메이션(환영 단계) */
+.ob-geuru-bob { animation: obBob 2.4s ease-in-out infinite; }
+
+/* 서비스 연결 카드 */
+.ob-cards { display: flex; gap: 14px; margin-top: 6px; width: 100%; justify-content: center; }
+.ob-card {
+  flex: 1; max-width: 220px; display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 18px 16px; background: var(--c-bg-inset); border: 1px solid var(--c-border); border-radius: 8px;
+}
+.ob-card-name { font-family: var(--font-display); font-size: 14px; color: var(--c-text-strong); }
+.ob-card-desc { font-size: 11px; color: var(--c-text-muted); line-height: 1.5; }
+.ob-card-btn {
+  margin-top: 4px; padding: 6px 18px; cursor: pointer;
+  background: var(--c-bg-elevated); border: 1px solid var(--c-border); border-radius: var(--r2);
+  color: var(--c-text-strong); font-family: var(--font-display); font-size: 12px;
+  transition: border-color 120ms, color 120ms, background 120ms;
+}
+.ob-card-btn:hover { border-color: var(--c-gold-border); color: var(--c-gold-300); background: var(--c-gold-bg-soft); }
+
+/* 사용법 팁 카드 */
+.ob-tips { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; margin-top: 4px; }
+.ob-tip { text-align: left; padding: 12px 14px; background: var(--c-bg-inset); border: 1px solid var(--c-border); border-radius: 8px; }
+.ob-tip-name { font-family: var(--font-display); font-size: 13px; color: var(--c-text-strong); margin-bottom: 3px; }
+.ob-tip-desc { font-size: 12px; color: var(--c-text-muted); line-height: 1.5; }
+
+/* 완료 단계 나무 + sparkle */
+.ob-sprout-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
+.ob-tree { display: inline-block; line-height: 0; animation: obSprout 600ms cubic-bezier(.2,.8,.2,1); transform-origin: bottom center; }
+.ob-sparkle { position: absolute; top: 8px; right: 12px; width: 8px; height: 8px; border-radius: 50%; background: var(--c-gold-200); box-shadow: 0 0 8px var(--c-gold-200); animation: obPop 1.4s ease-in-out infinite; }
+
+/* 완료 칩 */
+.ob-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+.ob-chip {
+  font-family: var(--font-display); font-size: 11px; color: var(--c-gold-300);
+  background: var(--c-gold-bg); border: 1px solid var(--c-gold-border); border-radius: var(--rpill);
+  padding: 5px 12px;
+}
+
+/* 하단 dots 네비 */
+.ob-nav { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 4px; }
+.ob-nav-arrow {
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid var(--c-border); border-radius: 50%; cursor: pointer;
+  color: var(--c-text-muted); font-size: 16px; line-height: 1; transition: border-color 120ms, color 120ms;
+}
+.ob-nav-arrow:hover:not(:disabled) { border-color: var(--c-gold-border); color: var(--c-gold-300); }
+.ob-nav-arrow:disabled { opacity: .3; cursor: default; }
+.ob-nav-arrow-spacer { border-color: transparent; cursor: default; }
+.ob-dots { display: flex; gap: 8px; }
+.ob-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-border-strong); transition: background 160ms, transform 160ms; }
+.ob-dot.on { background: var(--c-gold-400); transform: scale(1.25); }
+
+/* 주 버튼 영역 */
+.ob-actions { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; }
+.ob-primary {
+  padding: 9px 24px; background: linear-gradient(180deg, var(--c-gold-400), var(--c-gold-500));
+  border: 1px solid var(--c-gold-border); border-radius: var(--r2);
+  color: var(--c-text-on-gold); font-family: var(--font-display); font-size: 13px; font-weight: 600; cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255,235,170,.25), 0 1px 0 rgba(0,0,0,.4); transition: filter 120ms, transform 80ms;
+}
+.ob-primary:hover { filter: brightness(1.08); }
+.ob-primary:active { filter: brightness(.95); transform: translateY(1px); }
+.ob-ghost {
+  padding: 9px 18px; background: none; border: 1px solid var(--c-border); border-radius: var(--r2);
+  color: var(--c-text-muted); font-family: var(--font-body); font-size: 13px; cursor: pointer;
+  transition: border-color 120ms, color 120ms;
+}
+.ob-ghost:hover { border-color: var(--c-border-strong); color: var(--c-text); }
+
+/* 온보딩 애니메이션 */
+@keyframes obFadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes obBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes obSprout { from { opacity: 0; transform: scaleY(.4) translateY(20px); } to { opacity: 1; transform: none; } }
+@keyframes obPop { 0%, 100% { opacity: .4; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.2); } }

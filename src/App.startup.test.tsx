@@ -11,6 +11,8 @@ const shown = (msg: string) => screen.queryAllByText(msg).length > 0
 describe('앱 시작 화면', () => {
   beforeEach(() => {
     localStorage.clear()
+    // 첫 실행 온보딩은 이 시작-화면 테스트의 관심사가 아니므로 본 것으로 표시(오버레이 비노출).
+    localStorage.setItem('gitgrove:onboarding-seen', '1')
     installGitApiMock()
   })
   afterEach(() => {
