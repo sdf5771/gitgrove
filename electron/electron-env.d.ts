@@ -135,6 +135,9 @@ interface RepoActivity {
 
 interface Window {
   appAPI: {
+    // 현재 OS 플랫폼(동기 값). 'darwin' | 'win32' | 'linux' 등. 첫 페인트 전 사용 가능.
+    // frontend: 'darwin'이면 네이티브 신호등 사용 → 커스텀 신호등 미렌더 + 타이틀바 좌측 패딩 확보.
+    platform: NodeJS.Platform
     // 'app:update-available' 구독. 반환 함수 호출로 구독 해제(effect cleanup). dmgUrl 없으면 frontend는 openReleaseUrl 브라우저 폴백.
     onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => () => void
     openReleaseUrl: (url: string) => void

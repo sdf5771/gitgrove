@@ -220,18 +220,26 @@ function finishSplashAndShow() {
 }
 
 function createWindow() {
+  // macOS는 네이티브 신호등(traffic lights)을 사용하고(titleBarStyle: 'hiddenInset'),
+  // 그 외 플랫폼(win/linux)은 네이티브 신호등이 없으므로 기존 frameless + 커스텀
+  // 신호등(win-* IPC)을 유지한다. 두 모드는 상호 배타적이다(hiddenInset과 frame:false
+  // 동시 사용 시 신호등이 표시되지 않음).
+  const isMac = process.platform === 'darwin'
   win = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    frame: false,
     show: false,
     backgroundColor: '#0d1220',
     icon: path.join(process.env.VITE_PUBLIC, 'gitgrove-icon.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
+    // 타이틀바 높이 40px 기준 신호등 클러스터 수직 중앙 근사값(시각 미세조정은 QA 단계).
+    ...(isMac
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 13 } }
+      : { frame: false }),
   })
 
   // 윈도우 컨트롤 IPC
