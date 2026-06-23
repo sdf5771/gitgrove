@@ -130,7 +130,10 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
     getMergeRequestChangesMock.mockResolvedValue([
       { old_path: 'a.ts', new_path: 'a.ts', new_file: false, renamed_file: false, deleted_file: false, diff: '+added\n-removed\n' },
     ] as GitlabMrChange[])
-    render(<MRView repoPath="/repo/gl" />)
+    const { container } = render(<MRView repoPath="/repo/gl" />)
+    // 버그3: 탭 진입 시 미선택 — 목록에서 클릭해야 상세가 뜬다.
+    await waitFor(() => expect(screen.getByText('!128')).toBeInTheDocument())
+    fireEvent.click(within(container.querySelector('.pr-list-scroll') as HTMLElement).getByText('토큰 회전'))
     await waitFor(() => expect(screen.getByText('Description')).toBeInTheDocument())
 
     fireEvent.click(screen.getByRole('button', { name: /^변경 \(/ }))
@@ -151,6 +154,8 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
     ] as GitlabPipeline[])
     const { container } = render(<MRView repoPath="/repo/gl" />)
     await waitFor(() => expect(screen.getByText('!126')).toBeInTheDocument())
+    // 버그3: 상세를 보려면 먼저 목록에서 선택한다.
+    fireEvent.click(within(container.querySelector('.pr-list-scroll') as HTMLElement).getByText('WIP'))
     // 상세 헤더 파이프라인 배지가 pipe-run으로 갱신될 때까지 대기
     await waitFor(() => expect(container.querySelector('.pipe-run')).toBeTruthy())
     // running은 주황(.pipe에 직접 주황 색 지정) 아님 — pipe-run 클래스(info 블루)
@@ -166,7 +171,9 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
       approvals_left: 1,
       approved_by: [{ user: { id: 5, username: 'alex', name: '알렉스 첸', avatar_url: null } }],
     } as GitlabMrApprovals)
-    render(<MRView repoPath="/repo/gl" />)
+    const { container } = render(<MRView repoPath="/repo/gl" />)
+    await waitFor(() => expect(screen.getByText('!128')).toBeInTheDocument())
+    fireEvent.click(within(container.querySelector('.pr-list-scroll') as HTMLElement).getByText('토큰 회전'))
     await waitFor(() => expect(screen.getByText('승인 (Approvals)')).toBeInTheDocument())
     expect(screen.getByText('1/2')).toBeInTheDocument()
     expect(screen.getByText('승인 대기 중')).toBeInTheDocument()
@@ -197,11 +204,34 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
   it('open MR 상세에 승인/변경요청/Merge 버튼 노출 + 낙관적 토글', async () => {
     installApi()
     getMergeRequestsMock.mockResolvedValue([mr({ iid: 128, title: '토큰 회전', state: 'opened' })])
-    render(<MRView repoPath="/repo/gl" />)
+    const { container } = render(<MRView repoPath="/repo/gl" />)
+    await waitFor(() => expect(screen.getByText('!128')).toBeInTheDocument())
+    fireEvent.click(within(container.querySelector('.pr-list-scroll') as HTMLElement).getByText('토큰 회전'))
     await waitFor(() => expect(screen.getByRole('button', { name: '승인' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: '승인' }))
     await waitFor(() => expect(screen.getByRole('button', { name: '✓ 승인함' })).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Merge' })).toBeInTheDocument()
+  })
+
+  it('버그3: 탭 진입 시 상세는 미선택(빈 상태) — 특정 MR 상세가 자동 로드되지 않는다', async () => {
+    installApi()
+    getMergeRequestsMock.mockResolvedValue([mr({ iid: 128, title: '토큰 회전', state: 'opened' })])
+    render(<MRView repoPath="/repo/gl" />)
+    // 목록은 뜨지만(클릭 가능)…
+    await waitFor(() => expect(screen.getByText('!128')).toBeInTheDocument())
+    // 상세 빈 상태 플레이스홀더가 보이고, 상세 헤더(Description)는 없다.
+    expect(screen.getByText('왼쪽에서 MR을 고르면 여기에 보여요')).toBeInTheDocument()
+    expect(screen.queryByText('Description')).not.toBeInTheDocument()
+  })
+
+  it('버그3: 목록 항목을 클릭하면 해당 MR 상세가 뜬다', async () => {
+    installApi()
+    getMergeRequestsMock.mockResolvedValue([mr({ iid: 128, title: '토큰 회전', state: 'opened' })])
+    const { container } = render(<MRView repoPath="/repo/gl" />)
+    await waitFor(() => expect(screen.getByText('!128')).toBeInTheDocument())
+    fireEvent.click(within(container.querySelector('.pr-list-scroll') as HTMLElement).getByText('토큰 회전'))
+    await waitFor(() => expect(screen.getByText('Description')).toBeInTheDocument())
+    expect(screen.queryByText('왼쪽에서 MR을 고르면 여기에 보여요')).not.toBeInTheDocument()
   })
 
   it('!iid·프로젝트 점은 GitLab 식별색(주황), Merge 버튼은 골드 클래스', async () => {
@@ -212,6 +242,8 @@ describe('MRView — GitLab MR 뷰 (GL7)', () => {
     expect(container.querySelector('.gl-dot')).toBeTruthy()
     const num = screen.getByText('!128') as HTMLElement
     expect(num.style.color).toMatch(/252|fc6d26/i)
-    expect(container.querySelector('.pr-merge-btn')).toBeTruthy()
+    // 버그3: Merge 버튼은 상세에 있으므로 선택 후 확인.
+    fireEvent.click(within(container.querySelector('.pr-list-scroll') as HTMLElement).getByText('토큰 회전'))
+    await waitFor(() => expect(container.querySelector('.pr-merge-btn')).toBeTruthy())
   })
 })
