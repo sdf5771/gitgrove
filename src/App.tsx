@@ -43,6 +43,8 @@ import { AddRepoModal } from './components/modals/AddRepoModal'
 import { CloneModal } from './components/modals/CloneModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
 import { RepoManager } from './components/RepoManager'
+import { Onboarding } from './components/Onboarding'
+import { hasSeenOnboarding, markOnboardingSeen } from './utils/onboarding'
 import { NotificationBell } from './components/NotificationBell'
 import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loadWorkspaces, saveWorkspaces, createWorkspaceId, type RecentRepoEntry, type Workspace } from './utils/repoStore'
 import { useNotifications } from './hooks/useNotifications'
@@ -304,6 +306,9 @@ export default function App() {
   const [showRebase,     setShowRebase]     = useState(false)
   const [showSettings,   setShowSettings]   = useState(false)
   const [settingsTab,    setSettingsTab]    = useState<SettingsTab | undefined>(undefined)
+  // 첫 실행 온보딩("첫 경험") — 키가 없으면 최초 1회만 노출.
+  const [showOnboarding, setShowOnboarding] = useState(() => !hasSeenOnboarding())
+  const closeOnboarding = useCallback(() => { markOnboardingSeen(); setShowOnboarding(false) }, [])
   const [showAddRepo,    setShowAddRepo]    = useState(false)
   // CL2 — 클론 인터랙션 모달. null=닫힘. url 프리필(브라우저 Clone 진입 시).
   const [cloneModal,     setCloneModal]     = useState<{ url: string } | null>(null)
@@ -1627,6 +1632,13 @@ export default function App() {
           />
         )}
         {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify(...spread(TOASTS.conflictResolved()))} />}
+        {showOnboarding  && (
+          <Onboarding
+            onClose={closeOnboarding}
+            onConnectGithub={() => { setSettingsTab('github'); setShowSettings(true) }}
+            onConnectGitlab={() => { setSettingsTab('gitlab'); setShowSettings(true) }}
+          />
+        )}
 
         <NotificationStack notifs={notifs} onDismiss={dismiss} />
       </div>
