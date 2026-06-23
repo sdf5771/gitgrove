@@ -150,6 +150,8 @@ export function installGitApiMock() {
   const appAPI = {
     onUpdateAvailable: vi.fn() as Mock<(cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => () => void>,
     openReleaseUrl: vi.fn(),
+    getVersion: vi.fn().mockResolvedValue('1.19.9') as Mock<() => Promise<string>>,
+    checkUpdates: vi.fn().mockResolvedValue({ updateAvailable: false, current: '1.19.9' }) as Mock<() => Promise<{ updateAvailable: boolean; version?: string; dmgUrl?: string; current: string }>>,
     downloadUpdate: vi.fn(async (): Promise<{ path: string }> => ({ path: '/tmp/GitGrove-Update.dmg' })) as Mock<(dmgUrl: string) => Promise<{ path: string }>>,
     onUpdateDownloadProgress: vi.fn(() => () => {}) as Mock<(cb: (p: { received: number; total?: number; pct?: number }) => void) => (() => void)>,
     githubIsEncryptionAvailable: vi.fn(async () => false),

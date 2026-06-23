@@ -1448,39 +1448,64 @@ function stopUpdateChecks() {
   }
 }
 
+// GitHub Releases API에서 latest 릴리즈를 fetch해 파싱한 메타를 반환하는 순수 헬퍼.
+// 자동 경로(checkForUpdates)와 수동 경로(app:check-updates 핸들러)가 공유해 중복 fetch 코드를 제거.
+// 네트워크/파싱 실패는 throw하지 않고 null로 graceful 반환(호출자가 "최신 상태"로 처리).
+type LatestRelease = {
+  version: string          // tag_name에서 'v' 접두사 제거
+  htmlUrl: string          // release.html_url
+  dmgUrl?: string          // .dmg 자산 URL(있으면)
+  notes?: string           // 정제된 릴리즈 노트(있으면)
+}
+
+function fetchLatestRelease(): Promise<LatestRelease | null> {
+  const url = `https://api.github.com/repos/${REPO}/releases/latest`
+  return new Promise((resolve) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'GitGrove-App' } }, (res) => {
+      let data = ''
+      res.on('data', chunk => { data += chunk })
+      res.on('end', () => {
+        try {
+          const release = JSON.parse(data)
+          const version = (release.tag_name as string)?.replace(/^v/, '') ?? ''
+          if (!version) { resolve(null); return }
+          const dmgAsset = pickDmgAsset(release.assets)
+          const notes = buildReleaseNotes(release.body)
+          resolve({
+            version,
+            htmlUrl: release.html_url as string,
+            ...(dmgAsset ? { dmgUrl: dmgAsset.browser_download_url } : {}),
+            ...(notes ? { notes } : {}),
+          })
+        } catch {
+          resolve(null) // 파싱 실패 → graceful
+        }
+      })
+    })
+    req.on('error', () => resolve(null)) // 네트워크 실패 → graceful
+    req.end()
+  })
+}
+
 function checkForUpdates() {
   // 모든 체크 진입점(초기/주기/포커스)에서 마지막 체크 시각 갱신 → focus throttle 기준.
   lastUpdateCheckAt = Date.now()
   const currentVersion = app.getVersion()
-  const url = `https://api.github.com/repos/${REPO}/releases/latest`
 
-  const req = https.get(url, { headers: { 'User-Agent': 'GitGrove-App' } }, (res) => {
-    let data = ''
-    res.on('data', chunk => { data += chunk })
-    res.on('end', () => {
-      try {
-        const release = JSON.parse(data)
-        const latest = (release.tag_name as string)?.replace(/^v/, '') ?? ''
-        // 현재 버전보다 새롭고(isNewer), 직전에 같은 버전으로 알린 적이 없을 때만 send.
-        // (주기/포커스 체크가 동일 버전을 반복 전송해 시작 토스트가 매번 뜨는 것 방지)
-        if (latest && isNewer(latest, currentVersion) && latest !== lastNotifiedVersion) {
-          lastNotifiedVersion = latest
-          const dmgAsset = pickDmgAsset(release.assets)
-          const notes = buildReleaseNotes(release.body)
-          win?.webContents.send('app:update-available', {
-            version: latest,
-            url: release.html_url as string,
-            ...(dmgAsset ? { dmgUrl: dmgAsset.browser_download_url } : {}),
-            ...(notes ? { notes } : {}),
-          })
-        }
-      } catch {
-        // ignore parse errors
-      }
-    })
+  void fetchLatestRelease().then((latest) => {
+    if (!latest) return
+    // 현재 버전보다 새롭고(isNewer), 직전에 같은 버전으로 알린 적이 없을 때만 send.
+    // (주기/포커스 체크가 동일 버전을 반복 전송해 시작 토스트가 매번 뜨는 것 방지)
+    if (isNewer(latest.version, currentVersion) && latest.version !== lastNotifiedVersion) {
+      lastNotifiedVersion = latest.version
+      win?.webContents.send('app:update-available', {
+        version: latest.version,
+        url: latest.htmlUrl,
+        ...(latest.dmgUrl ? { dmgUrl: latest.dmgUrl } : {}),
+        ...(latest.notes ? { notes: latest.notes } : {}),
+      })
+    }
   })
-  req.on('error', () => {})
-  req.end()
 }
 
 function isNewer(latest: string, current: string): boolean {
@@ -1495,6 +1520,36 @@ function isNewer(latest: string, current: string): boolean {
 ipcMain.on('app:open-release-url', (_e, url: string) => {
   shell.openExternal(url)
 })
+
+// app:get-version — 현재 앱 버전 반환(About 탭 표시용). 단순 동기 조회.
+ipcMain.handle('app:get-version', (): string => app.getVersion())
+
+// app:check-updates — 수동 업데이트 확인(About 탭 "업데이트 확인" 버튼).
+//   fetchLatestRelease()를 자동 경로와 공유해 fetch+버전비교 로직을 재사용한다.
+//   새 버전이 있으면 { updateAvailable:true, version, dmgUrl?, current }, 없으면 { updateAvailable:false, current }.
+//   네트워크/파싱 실패는 throw하지 않고 { updateAvailable:false, current }로 graceful 반환(About 탭이 "최신 상태"로 표시).
+//   주의: 토스트(send)·lastNotifiedVersion 디듀프·주기/포커스 throttle 등 자동 동작은 건드리지 않는다(회귀 방지).
+ipcMain.handle(
+  'app:check-updates',
+  async (): Promise<{ updateAvailable: boolean; version?: string; dmgUrl?: string; current: string }> => {
+    const current = app.getVersion()
+    try {
+      const latest = await fetchLatestRelease()
+      if (latest && isNewer(latest.version, current)) {
+        return {
+          updateAvailable: true,
+          version: latest.version,
+          ...(latest.dmgUrl ? { dmgUrl: latest.dmgUrl } : {}),
+          current,
+        }
+      }
+      return { updateAvailable: false, current }
+    } catch (err) {
+      console.warn('[app:check-updates] 업데이트 확인 실패(graceful):', err)
+      return { updateAvailable: false, current }
+    }
+  },
+)
 
 // ──────────────────────────────────────────────
 // app:* — OS 네이티브 알림 / Dock (기능 B)
