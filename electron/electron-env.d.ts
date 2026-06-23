@@ -138,6 +138,10 @@ interface Window {
     // 'app:update-available' 구독. 반환 함수 호출로 구독 해제(effect cleanup). dmgUrl 없으면 frontend는 openReleaseUrl 브라우저 폴백.
     onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => () => void
     openReleaseUrl: (url: string) => void
+    // 현재 앱 버전 조회(About 탭 표시용). 메인 app.getVersion() 반환.
+    getVersion: () => Promise<string>
+    // 수동 업데이트 확인(About 탭). 새 버전이 있으면 updateAvailable:true + version/dmgUrl, 없거나 네트워크 실패 시 updateAvailable:false. current는 항상 현재 버전.
+    checkUpdates: () => Promise<{ updateAvailable: boolean; version?: string; dmgUrl?: string; current: string }>
     // 옵션 1: 무서명 인앱 DMG 다운로드 → quarantine 제거 → DMG 열기. 성공 시 저장 경로 반환, 실패 시 reject(throw).
     downloadUpdate: (dmgUrl: string) => Promise<{ path: string }>
     // 다운로드 진행률 구독. 반환 함수 호출로 구독 해제(effect cleanup). total 모르면 pct 생략(indeterminate).

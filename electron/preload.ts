@@ -9,6 +9,16 @@ contextBridge.exposeInMainWorld('appAPI', {
     return () => ipcRenderer.removeListener('app:update-available', handler)
   },
   openReleaseUrl: (url: string) => ipcRenderer.send('app:open-release-url', url),
+  // 현재 앱 버전 조회(About 탭 표시용).
+  getVersion: () => ipcRenderer.invoke('app:get-version') as Promise<string>,
+  // 수동 업데이트 확인(About 탭). 새 버전 유무 결과를 동기적으로 반환. 네트워크 실패 시 graceful.
+  checkUpdates: () =>
+    ipcRenderer.invoke('app:check-updates') as Promise<{
+      updateAvailable: boolean
+      version?: string
+      dmgUrl?: string
+      current: string
+    }>,
   // 옵션 1: 무서명 인앱 DMG 다운로드 → quarantine 제거 → DMG 열기. 저장 경로 반환.
   downloadUpdate: (dmgUrl: string) =>
     ipcRenderer.invoke('app:download-update', dmgUrl) as Promise<{ path: string }>,
