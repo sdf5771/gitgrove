@@ -4,8 +4,27 @@ import { getCurrentUser, GitlabApiError, type GitlabUser } from '../../utils/git
 import { normalizeGitlabHost } from '../../utils/gitlab'
 import { NOTIFICATION_SOUNDS } from '../../utils/notifSettings'
 import { Geuru } from '../Geuru'
+import { GhMark, GlMark } from '../ProviderMark'
 
+// ── 외부 계약 (불변) ────────────────────────────────────────────────
+// SettingsTab은 App.tsx / 온보딩 / RepoManager의 호출(setSettingsTab('github') 등)이
+// 의존하는 외부 계약이라 그대로 유지한다. 내부 nav id(NavId)로 매핑해 사용한다.
 export type SettingsTab = 'git' | 'appearance' | 'remotes' | 'github' | 'gitlab'
+
+// 좌측 사이드바 nav 내부 식별자. 'conn'은 GitHub+GitLab 통합 탭.
+type NavId = 'git' | 'look' | 'remote' | 'conn' | 'about'
+
+// 외부 탭 → 내부 nav 매핑. github/gitlab은 모두 'conn'(서비스 연결)로 라우팅하고
+// 해당 provider 연결 흐름에 포커스한다.
+function navIdForTab(tab: SettingsTab): NavId {
+  switch (tab) {
+    case 'appearance': return 'look'
+    case 'remotes': return 'remote'
+    case 'github':
+    case 'gitlab': return 'conn'
+    default: return 'git'
+  }
+}
 
 const GITLAB_COM_HOST = 'https://gitlab.com'
 type GitlabKind = 'com' | 'self'
@@ -25,6 +44,14 @@ const CLASSIC_TOKEN_URL =
 const FINEGRAINED_TOKEN_URL =
   'https://github.com/settings/personal-access-tokens/new'
 
+// 외부 링크 (About 탭)
+const REPO_URL = 'https://github.com/sdf5771/gitgrove'
+const ISSUES_URL = 'https://github.com/sdf5771/gitgrove/issues'
+const RELEASES_URL = 'https://github.com/sdf5771/gitgrove/releases'
+
+const GITHUB_SCOPES = ['repo', 'read:user', 'notifications']
+const GITLAB_SCOPES = ['api', 'read_user', 'read_repository']
+
 type VerifyState = 'idle' | 'verifying' | 'success' | 'error'
 
 interface VerifyResult {
@@ -35,8 +62,6 @@ interface VerifyResult {
 }
 
 // 토큰 영속화 추상화: safeStorage(메인) 우선, 미가용 시에만 localStorage 평문 fallback.
-// 소비자(App.tsx / PRView.tsx)가 async IPC 조회로 이관됐으므로(v1.7.0),
-// safeStorage 사용 가능 시 평문 미러를 남기지 않고 오히려 삭제해 보안을 마무리한다.
 async function persistToken(token: string): Promise<void> {
   let encrypted = false
   try {
@@ -46,10 +71,8 @@ async function persistToken(token: string): Promise<void> {
   } catch { encrypted = false }
   try {
     if (encrypted) {
-      // safeStorage에 저장 성공 → 평문 미러 제거 (보안)
       localStorage.removeItem(GITHUB_TOKEN_KEY)
     } else if (token) {
-      // safeStorage 미가용 → 평문 fallback
       localStorage.setItem(GITHUB_TOKEN_KEY, token)
     } else {
       localStorage.removeItem(GITHUB_TOKEN_KEY)
@@ -57,7 +80,7 @@ async function persistToken(token: string): Promise<void> {
   } catch { /* ignore */ }
 }
 
-// 초기 토큰 로드 + 1회 마이그레이션: localStorage 평문 토큰이 있으면 safeStorage로 이관 후 평문 삭제.
+// 초기 토큰 로드 + 1회 마이그레이션
 async function loadInitialToken(): Promise<string> {
   let plain = ''
   try { plain = localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { plain = '' }
@@ -65,12 +88,10 @@ async function loadInitialToken(): Promise<string> {
     if (await window.appAPI?.githubIsEncryptionAvailable()) {
       const stored = await window.appAPI.githubGetToken()
       if (stored) {
-        // 암호화 저장본 우선. 남아 있을 수 있는 평문 미러 제거.
         try { localStorage.removeItem(GITHUB_TOKEN_KEY) } catch { /* ignore */ }
         return stored
       }
       if (plain) {
-        // 마이그레이션: 평문 → safeStorage 이관 후 평문 삭제
         const ok = await window.appAPI.githubSetToken(plain)
         if (ok) { try { localStorage.removeItem(GITHUB_TOKEN_KEY) } catch { /* ignore */ } }
       }
@@ -79,7 +100,7 @@ async function loadInitialToken(): Promise<string> {
   return plain
 }
 
-// GitLab PAT 발급 딥링크 — host-상대. self-hosted 인스턴스에서도 같은 경로를 연다.
+// GitLab PAT 발급 딥링크 — host-상대.
 function gitlabTokenUrl(host: string): string {
   const base = normalizeGitlabHost(host) || GITLAB_COM_HOST
   return `${base}/-/user_settings/personal_access_tokens?scopes=api,read_user`
@@ -103,6 +124,51 @@ function glResultFromUser(user: GitlabUser, host: string): GitlabVerifyResult {
   }
 }
 
+type DlState = 'idle' | 'downloading' | 'done'
+
+interface UpdateInfo {
+  updateAvailable: boolean
+  version?: string
+  dmgUrl?: string
+  current: string
+}
+
+const NAV: Array<{ id: NavId; label: string }> = [
+  { id: 'git', label: 'Git 정보' },
+  { id: 'look', label: '모양' },
+  { id: 'remote', label: '원격' },
+  { id: 'conn', label: '서비스 연결' },
+  { id: 'about', label: '정보 · 업데이트' },
+]
+
+const HEADS: Record<NavId, [string, string]> = {
+  git: ['Git 정보', '커밋에 남을 이름과 이메일, 기본 브랜치를 정해요'],
+  look: ['모양', 'GitGrove는 다크모드 전용이에요 · 폰트와 코드 표시를 맞춰요'],
+  remote: ['원격', '이 저장소가 연결된 원격을 관리해요'],
+  conn: ['서비스 연결', 'GitHub · GitLab을 연결해 PR · 이슈를 앱 안에서 봐요'],
+  about: ['정보 · 업데이트', '버전 확인과 새 버전 받기'],
+}
+
+// nav 아이콘 (디자인 I.* 포팅)
+function NavIcon({ id }: { id: NavId }) {
+  switch (id) {
+    case 'git':
+      return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="5" cy="4" r="2" /><circle cx="5" cy="12" r="2" /><circle cx="11" cy="4" r="2" /><path d="M5 6v4M5 6c0 2 6 2 6-2" /></svg>
+    case 'look':
+      return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="8" r="6" /><path d="M8 2a6 6 0 0 1 0 12z" fill="currentColor" stroke="none" opacity=".5" /></svg>
+    case 'remote':
+      return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="8" r="6" /><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12" /></svg>
+    case 'conn':
+      return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M6.5 9.5l3-3M6 4l1-1a2.8 2.8 0 0 1 4 4l-1 1M10 12l-1 1a2.8 2.8 0 0 1-4-4l1-1" /></svg>
+    case 'about':
+      return <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="8" r="6.2" /><path d="M8 7.2v3.6M8 5v.01" /></svg>
+  }
+}
+
+const ICON_DL = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M8 2v8M5 7l3 3 3-3M3 13h10" /></svg>
+const ICON_EXT = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.7"><path d="M5 11L11 5M11 5H6M11 5v5" /></svg>
+const ICON_BUG = <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="5" y="6" width="6" height="7" rx="3" /><path d="M5 9H2M11 9h3M5 6l-1.5-1.5M11 6l1.5-1.5M8 3v3" /></svg>
+
 interface Props {
   onClose: () => void
   repoPath?: string | null
@@ -111,11 +177,17 @@ interface Props {
 }
 
 export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
-  const [tab, setTab] = useState<SettingsTab>(initialTab ?? 'git')
+  // 좌측 nav 활성 항목. 외부 initialTab을 내부 nav id로 매핑.
+  const [nav, setNav] = useState<NavId>(() => navIdForTab(initialTab ?? 'git'))
+  // 서비스 연결 탭에서 인라인 연결 흐름이 열린 provider (null | 'github' | 'gitlab').
+  // initialTab이 github/gitlab이면 해당 흐름을 바로 연다.
+  const [connFlow, setConnFlow] = useState<'github' | 'gitlab' | null>(
+    initialTab === 'github' ? 'github' : initialTab === 'gitlab' ? 'gitlab' : null
+  )
+
   const [cfg, setCfg] = useState({ name: '', email: '', defaultBranch: 'main', gpg: false })
   const [remotes, setRemotes] = useState<Array<{ n: string; url: string }>>([])
   const [newRemote, setNewRemote] = useState({ n: '', url: '' })
-  const [saved, setSaved] = useState(false)
   const [cfgLoading, setCfgLoading] = useState(false)
   const [githubToken, setGithubToken] = useState(() => {
     try { return localStorage.getItem(GITHUB_TOKEN_KEY) ?? '' } catch { return '' }
@@ -127,20 +199,20 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
   const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null)
   const [verifyError, setVerifyError] = useState<string>('')
 
-  // GitLab 탭 상태 (GL4)
+  // GitLab 상태
   const [glKind, setGlKind] = useState<GitlabKind>('com')
-  const [glHostInput, setGlHostInput] = useState('') // self-hosted Host URL 입력
+  const [glHostInput, setGlHostInput] = useState('')
   const [glToken, setGlToken] = useState('')
   const [glShowToken, setGlShowToken] = useState(false)
   const [glVerifyState, setGlVerifyState] = useState<VerifyState>('idle')
   const [glVerifyResult, setGlVerifyResult] = useState<GitlabVerifyResult | null>(null)
   const [glVerifyError, setGlVerifyError] = useState('')
 
-  // 현재 선택된 종류로부터 사용할 host (정규화 후). com이면 고정.
   const glActiveHost = glKind === 'com' ? GITLAB_COM_HOST : normalizeGitlabHost(glHostInput)
 
   const _saved = loadSettings()
-  const [density, setDensity] = useState<'comfortable' | 'compact'>(
+  // density / showDiffStats는 디자인에서 UI가 빠졌지만 값은 보존·계속 저장(회귀 방지).
+  const [density] = useState<'comfortable' | 'compact'>(
     (_saved.density === 'compact' ? 'compact' : 'comfortable')
   )
   const [fontSize, setFontSize] = useState<string>(
@@ -149,10 +221,9 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
   const [tabWidth, setTabWidth] = useState<string>(
     typeof _saved.tabWidth === 'string' ? _saved.tabWidth : '2'
   )
-  const [showDiffStats, setShowDiffStats] = useState<boolean>(
+  const [showDiffStats] = useState<boolean>(
     typeof _saved.showDiffStats === 'boolean' ? _saved.showDiffStats : true
   )
-  // 알림 사운드 설정 (NotificationBell이 소비) — 기본 on / 'Glass'.
   const [notificationSoundEnabled, setNotificationSoundEnabled] = useState<boolean>(
     typeof _saved.notificationSoundEnabled === 'boolean' ? _saved.notificationSoundEnabled : true
   )
@@ -160,7 +231,17 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     typeof _saved.notificationSound === 'string' && _saved.notificationSound ? _saved.notificationSound : 'Glass'
   )
 
-  // 사운드 미리듣기 — 현재 선택된 사운드를 그 소리만 재생(배너 없음).
+  // About 탭 상태
+  const [version, setVersion] = useState('')
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [dlState, setDlState] = useState<DlState>('idle')
+  const [dlPct, setDlPct] = useState(0)
+
+  // 자동 저장 표시(디자인의 "자동 저장됨" 점). 변경이 한 번이라도 일어나면 노출.
+  const [touched, setTouched] = useState(false)
+
+  // 사운드 미리듣기
   const previewNotificationSound = () => {
     window.appAPI?.previewSound(notificationSound).then(res => {
       if (!res?.ok) console.warn('사운드 미리듣기 실패 ·', res?.error)
@@ -190,15 +271,13 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     return () => { cancelled = true }
   }, [])
 
-  // 마운트 시 GitLab 기존 연결 복원: 연결된 host가 있으면 종류/host/토큰을 반영하고
-  // 연결됨(success) 상태로 표시. (GitHub 탭 토큰 복원 패턴 미러)
+  // 마운트 시 GitLab 기존 연결 복원
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         const hosts = await window.appAPI?.gitlabListHosts()
         if (!hosts || hosts.length === 0) return
-        // gitlab.com을 우선, 없으면 첫 self-hosted host.
         const host = hosts.find(h => normalizeGitlabHost(h) === GITLAB_COM_HOST) ?? hosts[0]
         const token = await window.appAPI?.gitlabGetToken(host)
         if (cancelled || !token) return
@@ -213,13 +292,49 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
           setGlVerifyResult(glResultFromUser(user, normalized))
           setGlVerifyState('success')
         } catch {
-          // 저장된 토큰이 더 이상 유효하지 않을 수 있음 — idle 유지(연결됨으로 단정 금지).
+          // 저장 토큰이 더 이상 유효하지 않을 수 있음 — idle 유지.
         }
       } catch { /* ignore */ }
     })()
     return () => { cancelled = true }
   }, [])
 
+  // 마운트 시 버전 로드
+  useEffect(() => {
+    let cancelled = false
+    window.appAPI?.getVersion().then(v => { if (!cancelled) setVersion(v) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // About 탭을 처음 열 때 업데이트 자동 확인 (1회).
+  // deps에 checking/updateInfo를 넣으면 setChecking으로 effect가 재실행되며
+  // cleanup이 in-flight 호출을 취소해버린다 → nav만 의존하고 updateInfo로 1회 가드.
+  useEffect(() => {
+    if (nav !== 'about' || updateInfo) return
+    let cancelled = false
+    setChecking(true)
+    window.appAPI?.checkUpdates()
+      .then(info => { if (!cancelled && info) setUpdateInfo(info) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setChecking(false) })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nav])
+
+  // 다운로드 진행률 구독 (받는 중일 때만)
+  useEffect(() => {
+    if (dlState !== 'downloading') return
+    const cleanup = window.appAPI?.onUpdateDownloadProgress(p => {
+      const pct = typeof p.pct === 'number'
+        ? p.pct
+        : p.total ? Math.round((p.received / p.total) * 100) : 0
+      setDlPct(Math.max(0, Math.min(100, pct)))
+    })
+    return () => { cleanup?.() }
+  }, [dlState])
+
+  // 저장: 6필드 전부 보존 저장 + CSS 변수 적용 + 이벤트 dispatch + git config.
+  // "완료" 버튼은 저장 후 onClose. (디자인: 자동 저장됨 + 완료)
   const save = async () => {
     const settings = { density, fontSize, tabWidth, showDiffStats, notificationSoundEnabled, notificationSound }
     try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)) } catch { /* ignore */ }
@@ -232,41 +347,38 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
         await window.gitAPI?.setConfig(repoPath, { name: cfg.name, email: cfg.email, defaultBranch: cfg.defaultBranch })
       } catch { /* ignore */ }
     }
-
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1600)
   }
 
-  const upCfg = (k: keyof typeof cfg) => (v: string | boolean) => setCfg(p => ({ ...p, [k]: v }))
+  const done = async () => {
+    await save()
+    onClose()
+  }
 
-  // 토큰 입력 변경 시 검증 결과 초기화
+  const upCfg = (k: keyof typeof cfg) => (v: string | boolean) => { setCfg(p => ({ ...p, [k]: v })); setTouched(true) }
+
+  // ── GitHub 핸들러 ──
   const onTokenChange = (v: string) => {
     setGithubToken(v)
     if (verifyState !== 'idle') { setVerifyState('idle'); setVerifyResult(null); setVerifyError('') }
   }
 
-  // GitHub 토큰 검증: GET /user → scope/rate 조회
   const verifyToken = async () => {
     const token = githubToken.trim()
     if (!token) { setVerifyState('error'); setVerifyError('토큰을 입력하세요.'); return }
     setVerifyState('verifying'); setVerifyError(''); setVerifyResult(null)
     try {
-      // 공용 클라이언트로 일원화(B8). 토큰 검증은 항상 최신이어야 하므로 cache:false.
-      // 비-ok 응답은 GithubApiError로 throw → 아래 catch에서 status별 메시지 매핑.
       const { data: user, headers } = await getUser<{ login: string; avatar_url: string }>(token, { cache: false })
 
       const scopesHeader = headers.get('X-OAuth-Scopes') ?? ''
       const scopes = scopesHeader.split(',').map(s => s.trim()).filter(Boolean)
 
-      // scope 부족 점검 (classic 토큰은 X-OAuth-Scopes 노출, fine-grained는 비어있을 수 있음)
       const hasScopeHeader = scopesHeader.length > 0
       if (hasScopeHeader && !scopes.includes('repo')) {
         setVerifyState('error')
-        setVerifyError(`scope 부족: 'repo' 권한이 필요합니다. (현재: ${scopes.join(', ') || '없음'})`)
+        setVerifyError(`scope가 부족해요 · 'repo' 권한이 필요해요 · 현재: ${scopes.join(', ') || '없음'}`)
         return
       }
 
-      // rate limit 조회 (실패해도 검증 자체는 성공으로 취급). 항상 최신 → cache:false.
       let rate: VerifyResult['rate'] = null
       try {
         const { data } = await getRateLimit<{ rate?: { remaining: number; limit: number } }>(token, { cache: false })
@@ -275,7 +387,6 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
 
       setVerifyResult({ login: user.login, avatarUrl: user.avatar_url, scopes, rate })
       setVerifyState('success')
-      // 검증 성공 토큰은 즉시 영속화 + 구독부 갱신
       await persistToken(token)
       window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
     } catch (err) {
@@ -294,7 +405,6 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     }
   }
 
-  // 연결 해제: 토큰 제거 + safeStorage/localStorage 삭제 + 이벤트 dispatch
   const disconnect = async () => {
     setGithubToken('')
     setVerifyState('idle'); setVerifyResult(null); setVerifyError('')
@@ -302,9 +412,7 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
   }
 
-  // ── GitLab 탭 핸들러 (GL4) ──
-
-  // 종류 전환: com↔self. 전환 시 진행 중 검증 상태 초기화(host가 바뀌므로).
+  // ── GitLab 핸들러 ──
   const onGlKindChange = (kind: GitlabKind) => {
     if (kind === glKind) return
     setGlKind(kind)
@@ -321,7 +429,6 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     if (glVerifyState !== 'idle') { setGlVerifyState('idle'); setGlVerifyResult(null); setGlVerifyError('') }
   }
 
-  // GitLab 토큰 검증: GET /user → 성공 시 host-키로 토큰 저장 + 연결됨 카드.
   const verifyGitlab = async () => {
     const token = glToken.trim()
     const host = glActiveHost
@@ -332,7 +439,6 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
       const user = await getCurrentUser(host, token, { cache: false })
       setGlVerifyResult(glResultFromUser(user, host))
       setGlVerifyState('success')
-      // 검증 성공 토큰을 host-키로 안전 저장(safeStorage, IPC 내부에서 host 정규화).
       try { await window.appAPI?.gitlabSetToken(host, token) } catch { /* ignore */ }
       window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
     } catch (err) {
@@ -355,7 +461,6 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     }
   }
 
-  // GitLab 연결 해제: host-키 토큰 제거.
   const disconnectGitlab = async () => {
     const host = glVerifyResult?.host ?? glActiveHost
     setGlVerifyState('idle'); setGlVerifyResult(null); setGlVerifyError('')
@@ -363,426 +468,531 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
     window.dispatchEvent(new CustomEvent('gitgrove:settings-changed'))
   }
 
+  // ── About: 업데이트 받기 ──
+  const startDownload = async () => {
+    const dmgUrl = updateInfo?.dmgUrl
+    if (!dmgUrl) {
+      // dmgUrl 없으면 릴리스 페이지 브라우저 폴백.
+      window.appAPI?.openReleaseUrl(updateInfo?.version ? RELEASES_URL : RELEASES_URL)
+      return
+    }
+    setDlState('downloading'); setDlPct(0)
+    try {
+      await window.appAPI?.downloadUpdate(dmgUrl)
+      setDlState('done'); setDlPct(100)
+    } catch {
+      setDlState('idle'); setDlPct(0)
+    }
+  }
+
+  // ── 렌더 ──
+  const ghConnected = verifyState === 'success' && verifyResult
+  const glConnected = glVerifyState === 'success' && glVerifyResult
+
+  const [headTitle, headDesc] = HEADS[nav]
+
+  function navBadge(id: NavId): 'ok' | 'warn' | null {
+    if (id === 'conn') return (ghConnected || glConnected) ? 'ok' : 'warn'
+    if (id === 'remote') return remotes.length === 0 && !cfgLoading ? 'warn' : null
+    if (id === 'git') return !cfg.name && !cfgLoading ? 'warn' : null
+    return null
+  }
+
   return (
-    <div className="sett-wrap">
-      <div className="sett-bd" onClick={onClose} />
-      <div className="sett-panel">
-        <div className="pnl-hdr" style={{ borderBottom: '1px solid var(--c-border)' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-          <h3>Settings</h3>
-          <button className="modal-close" style={{ marginLeft: 'auto' }} onClick={onClose}>×</button>
+    <div className="set2-overlay">
+      <div className="set2-scrim" onClick={onClose} />
+      <div className="set2-win" role="dialog" aria-label="설정">
+        <div className="set2-titlebar">
+          <div className="set2-tb-title">
+            <Geuru expr="idle" scale={1} />
+            설정 <span className="set2-k">⌘,</span>
+          </div>
+          <button className="set2-tb-close" aria-label="닫기" onClick={onClose}>×</button>
         </div>
-        <div className="sett-tabs">
-          {([['git', 'Git Config'], ['appearance', 'Appearance'], ['remotes', 'Remotes'], ['github', 'GitHub'], ['gitlab', 'GitLab']] as const).map(([id, label]) => (
-            <button
-              key={id}
-              className={`sett-tab${id === 'gitlab' ? ' gl' : ''}${tab === id ? ' on' : ''}`}
-              onClick={() => setTab(id)}
-            >{label}</button>
-          ))}
-        </div>
-        <div className="sett-body">
-          {tab === 'git' && (
-            <>
-              {cfgLoading && <div style={{ padding: '8px 16px', fontSize: 11, color: 'var(--c-text-faint)' }}>Loading git config…</div>}
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Identity</div>
-                <div className="sett-field"><div className="sett-lbl">Display name</div><input className="sett-inp" value={cfg.name} onChange={e => upCfg('name')(e.target.value)} placeholder="Your Name" /></div>
-                <div className="sett-field"><div className="sett-lbl">Email</div><input className="sett-inp" value={cfg.email} onChange={e => upCfg('email')(e.target.value)} placeholder="you@example.com" /></div>
-              </div>
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Repository</div>
-                <div className="sett-field">
-                  <div className="sett-lbl">Default branch name</div>
-                  <select className="sett-sel" value={cfg.defaultBranch} onChange={e => upCfg('defaultBranch')(e.target.value)}>
-                    {['main', 'master', 'develop', 'trunk'].map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Commit signing</div>
-                <div className="sett-toggle" onClick={() => upCfg('gpg')(!cfg.gpg)}>
-                  <div className="sett-toggle-info"><div className="sett-toggle-lbl">GPG signing</div><div className="sett-toggle-sub">Sign commits with your GPG key</div></div>
-                  <button className={`sett-sw ${cfg.gpg ? 'on' : 'off'}`} />
-                </div>
-                {cfg.gpg && <div className="sett-field"><div className="sett-lbl">GPG Key ID</div><input className="sett-inp" placeholder="0xABCD1234…" style={{ fontFamily: 'var(--font-mono)' }} /></div>}
-              </div>
-            </>
-          )}
-          {tab === 'appearance' && (
-            <>
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Graph</div>
-                <div className="sett-field"><div className="sett-lbl">Row density</div>
-                  <select className="sett-sel" value={density} onChange={e => setDensity(e.target.value as 'comfortable' | 'compact')}>
-                    {(['comfortable', 'compact'] as const).map(v => <option key={v} value={v}>{v.charAt(0).toUpperCase() + v.slice(1)}</option>)}
-                  </select>
-                </div>
-                <div className="sett-toggle" onClick={() => setShowDiffStats(v => !v)}>
-                  <div className="sett-toggle-info"><div className="sett-toggle-lbl">Show diff stats per row</div><div className="sett-toggle-sub">+adds / −dels on each commit row</div></div>
-                  <button className={`sett-sw ${showDiffStats ? 'on' : 'off'}`} />
-                </div>
-              </div>
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Editor</div>
-                <div className="sett-field"><div className="sett-lbl">Font size</div>
-                  <select className="sett-sel" value={fontSize} onChange={e => setFontSize(e.target.value)}>
-                    {['11','12','13','14'].map(v => <option key={v} value={v}>{v}px</option>)}
-                  </select>
-                </div>
-                <div className="sett-field"><div className="sett-lbl">Tab width</div>
-                  <select className="sett-sel" value={tabWidth} onChange={e => setTabWidth(e.target.value)}>
-                    {['2','4','8'].map(v => <option key={v} value={v}>{v} spaces</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className="sett-section">
-                <div className="sett-sec-ttl">알림</div>
-                <div className="sett-toggle" onClick={() => setNotificationSoundEnabled(v => !v)}>
-                  <div className="sett-toggle-info"><div className="sett-toggle-lbl">알림 소리</div><div className="sett-toggle-sub">새 알림이 오면 소리로 알려줘요</div></div>
-                  <button className={`sett-sw ${notificationSoundEnabled ? 'on' : 'off'}`} />
-                </div>
-                <div className="sett-field"><div className="sett-lbl">사운드</div>
-                  <div className="sett-sound-row">
-                    <select
-                      className="sett-sel"
-                      aria-label="알림 사운드"
-                      value={notificationSound}
-                      disabled={!notificationSoundEnabled}
-                      onChange={e => setNotificationSound(e.target.value)}
-                    >
-                      {NOTIFICATION_SOUNDS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <button
-                      type="button"
-                      className="sett-preview-btn"
-                      disabled={!notificationSoundEnabled}
-                      onClick={previewNotificationSound}
-                    >
-                      ▶ 들어보기
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-          {tab === 'remotes' && (
-            <>
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Configured remotes</div>
-                {remotes.length === 0 && !cfgLoading && (
-                  <div style={{ fontSize: 12, color: 'var(--c-text-faint)', padding: '4px 0' }}>No remotes configured</div>
-                )}
-                {remotes.map(r => (
-                  <div key={r.n} className="sett-remote">
-                    <span className="sett-remote-name">{r.n}</span>
-                    <span className="sett-remote-url">{r.url}</span>
-                    <button className="sett-del" onClick={() => setRemotes(p => p.filter(x => x.n !== r.n))}>×</button>
-                  </div>
-                ))}
-              </div>
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Add remote</div>
-                <div className="sett-field"><div className="sett-lbl">Name</div><input className="sett-inp" placeholder="upstream" value={newRemote.n} onChange={e => setNewRemote(p => ({ ...p, n: e.target.value }))} /></div>
-                <div className="sett-field"><div className="sett-lbl">URL</div><input className="sett-inp" placeholder="git@github.com:org/repo.git" value={newRemote.url} onChange={e => setNewRemote(p => ({ ...p, url: e.target.value }))} /></div>
-                <button className="sallbtn" style={{ alignSelf: 'flex-start', padding: '5px 14px' }}
-                  onClick={() => { if (newRemote.n && newRemote.url) { setRemotes(p => [...p, newRemote]); setNewRemote({ n: '', url: '' }) } }}>
-                  + Add remote
-                </button>
-              </div>
-            </>
-          )}
-          {tab === 'github' && (
-            <div className="sett-section">
-              <div className="sett-sec-ttl">Personal Access Token</div>
-              <div className="sett-field">
-                <div className="sett-lbl">Token</div>
-                <div className="sett-token-row">
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <input
-                      className="sett-inp"
-                      type={showToken ? 'text' : 'password'}
-                      value={githubToken}
-                      onChange={e => onTokenChange(e.target.value)}
-                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                      style={{ fontFamily: 'var(--font-mono)', paddingRight: 42 }}
-                    />
-                    <button
-                      type="button"
-                      className="tok-eye"
-                      title={showToken ? '토큰 숨기기' : '토큰 보기'}
-                      aria-label={showToken ? '토큰 숨기기' : '토큰 보기'}
-                      onClick={() => setShowToken(v => !v)}
-                    >
-                      <Geuru expr={showToken ? 'idle' : 'blink'} scale={1.15} />
-                    </button>
-                  </div>
-                  <button
-                    className="sett-verify-btn"
-                    onClick={verifyToken}
-                    disabled={verifyState === 'verifying' || !githubToken.trim()}
-                  >
-                    {verifyState === 'verifying'
-                      ? (<><span className="sett-spinner" />Verifying…</>)
-                      : 'Verify'}
-                  </button>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.4 }}>
-                  PR 뷰에서 실제 Pull Request를 조회하는 데 써요.
-                  <br />
-                  필요 scope: <span className="sett-scope-chip">repo</span>{' '}
-                  <span className="sett-scope-chip">read:user</span>{' '}
-                  <span className="sett-scope-chip">notifications</span>
-                </div>
-              </div>
 
-              {/* 검증 결과 */}
-              {verifyState === 'success' && verifyResult && (
-                <div className="sett-verify-ok">
-                  <div className="sett-verify-acct">
-                    <img className="sett-verify-avatar" src={verifyResult.avatarUrl} alt="" />
-                    <div className="sett-verify-acct-info">
-                      <div className="sett-verify-acct-login">@{verifyResult.login}</div>
-                      <div className="sett-verify-acct-sub">연결됨 · GitHub 계정 확인 완료</div>
-                    </div>
-                  </div>
-                  <div className="sett-verify-meta">
-                    <span className="sett-verify-meta-lbl">Scopes</span>
-                    <span className="sett-verify-meta-val">
-                      {verifyResult.scopes.length > 0
-                        ? verifyResult.scopes.join(', ')
-                        : '(fine-grained 또는 미노출)'}
-                    </span>
-                  </div>
-                  {verifyResult.scopes.length > 0 && !verifyResult.scopes.includes('notifications') && (
-                    <div className="sett-verify-meta" style={{ color: 'var(--c-warning)' }}>
-                      <span className="sett-verify-meta-lbl">알림</span>
-                      <span className="sett-verify-meta-val">
-                        notifications 권한이 없어 알림 벨이 동작하지 않아요. 위 링크로 토큰을 다시 발급하세요.
-                      </span>
-                    </div>
-                  )}
-                  {verifyResult.rate && (
-                    <div className="sett-verify-meta">
-                      <span className="sett-verify-meta-lbl">Rate limit</span>
-                      <span className="sett-verify-meta-val">
-                        {verifyResult.rate.remaining} / {verifyResult.rate.limit} 남음
-                      </span>
-                    </div>
-                  )}
-                  <button className="sett-disconnect-btn" onClick={disconnect}>Disconnect</button>
-                </div>
-              )}
-
-              {verifyState === 'error' && (
-                <div className="sett-verify-err">{verifyError}</div>
-              )}
-
-              <div className="sett-section">
-                <div className="sett-sec-ttl">토큰 발급</div>
-                <div style={{ fontSize: 11, color: 'var(--c-text-muted)', lineHeight: 1.5 }}>
-                  <strong style={{ color: 'var(--c-text)' }}>Classic</strong>: 계정 전체에 적용되는 단순 토큰. 빠르게 시작할 때 권장.
-                  <br />
-                  <strong style={{ color: 'var(--c-text)' }}>Fine-grained</strong>: 특정 repo/권한만 허용하는 세분화 토큰. 더 안전하지만 설정 단계가 많음.
-                </div>
-                <div className="sett-token-links">
-                  <button
-                    className="sett-token-link-btn"
-                    onClick={() => window.appAPI?.openReleaseUrl(CLASSIC_TOKEN_URL)}
-                  >
-                    Classic 토큰 생성 ↗
-                  </button>
-                  <button
-                    className="sett-token-link-btn"
-                    onClick={() => window.appAPI?.openReleaseUrl(FINEGRAINED_TOKEN_URL)}
-                  >
-                    Fine-grained 토큰 생성 ↗
-                  </button>
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
-                  Classic 링크에는 <code className="sett-code-inline">repo</code>,{' '}
-                  <code className="sett-code-inline">read:user</code>,{' '}
-                  <code className="sett-code-inline">notifications</code> scope와 설명이 미리 채워져 있어요.
-                  <br />
-                  알림 벨은 <code className="sett-code-inline">notifications</code> 권한이 있어야 동작해요.
-                  {' '}이미 토큰을 발급해 쓰고 있다면, 알림 벨을 쓰려면 위 링크로{' '}
-                  <strong style={{ color: 'var(--c-text)' }}>새로 발급</strong>해야 해요 — scope는 발급 후 바꿀 수 없어요.
-                </div>
+        <div className="set2-body">
+          {/* ── 좌측 nav ── */}
+          <nav className="set2-nav">
+            <div className="set2-nav-head">
+              <Geuru expr="idle" scale={1.3} />
+              <div>
+                <div className="set2-nm">GitGrove</div>
+                <div className="set2-ver">{version ? `v${version}` : ''}</div>
               </div>
             </div>
-          )}
-          {tab === 'gitlab' && (
-            <>
-              <div className="sett-section">
-                <div className="sett-sec-ttl" style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <Geuru expr="idle" scale={1.4} className="geuru-mini" /> GitLab 연결
-                </div>
-                {glVerifyState === 'idle' && (
-                  <div className="conn-status cs-idle">
-                    <Geuru expr="idle" scale={1.1} className="geuru-mini" />
-                    아직 연결되지 않았어요 · 토큰을 입력하고 검증하세요
-                  </div>
-                )}
-                {glVerifyState === 'verifying' && (
-                  <div className="conn-status cs-verify">
-                    <span className="sett-spinner gl" />
-                    {glActiveHost || '호스트'} 에 연결 확인 중…
-                  </div>
-                )}
-                {glVerifyState === 'success' && glVerifyResult && (
-                  <div className="conn-status cs-ok">
-                    <Geuru expr="happy" scale={1.1} className="geuru-mini" />
-                    연결됨 · @{glVerifyResult.username} · {glVerifyResult.host}
-                  </div>
-                )}
-                {glVerifyState === 'error' && (
-                  <div className="conn-status cs-err">
-                    <Geuru expr="conflict" scale={1.1} className="geuru-mini" />
-                    연결 실패 · 토큰 또는 호스트를 확인하세요
-                  </div>
-                )}
-              </div>
+            <div className="set2-nav-label">설정</div>
+            {NAV.map(n => {
+              const badge = navBadge(n.id)
+              return (
+                <button
+                  key={n.id}
+                  className={`set2-nav-item${nav === n.id ? ' on' : ''}`}
+                  onClick={() => setNav(n.id)}
+                >
+                  <NavIcon id={n.id} />
+                  {n.label}
+                  {badge && <span className={`set2-badge ${badge}`} />}
+                </button>
+              )
+            })}
+            <div className="set2-nav-foot">
+              <Geuru expr="happy" scale={1.2} className="geu" />
+              <span>막히면 ⌘K로<br />그루를 불러요</span>
+            </div>
+          </nav>
 
-              <div className="sett-section">
-                <div className="sett-sec-ttl">종류</div>
-                <div className="gl-type">
-                  <button
-                    type="button"
-                    className={`gl-type-opt${glKind === 'com' ? ' on' : ''}`}
-                    aria-pressed={glKind === 'com'}
-                    onClick={() => onGlKindChange('com')}
-                  >
-                    <span className="gl-radio" />
-                    <span className="gl-type-txt"><b>GitLab.com</b><span>gitlab.com</span></span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`gl-type-opt${glKind === 'self' ? ' on' : ''}`}
-                    aria-pressed={glKind === 'self'}
-                    onClick={() => onGlKindChange('self')}
-                  >
-                    <span className="gl-radio" />
-                    <span className="gl-type-txt"><b>Self-hosted</b><span>사내 인스턴스</span></span>
-                  </button>
-                </div>
-                {glKind === 'self' && (
-                  <div className="sett-field" style={{ marginTop: 2 }}>
-                    <div className="sett-lbl">Host URL</div>
-                    <input
-                      className="sett-inp"
-                      style={{ fontFamily: 'var(--font-mono)' }}
-                      value={glHostInput}
-                      onChange={e => onGlHostChange(e.target.value)}
-                      placeholder="https://gitlab.mycompany.com"
-                      spellCheck={false}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="sett-section">
-                <div className="sett-sec-ttl">Personal Access Token</div>
-                <div className="sett-field">
-                  <div className="sett-lbl">Token</div>
-                  <div className="sett-token-row">
-                    <div className="tok-wrap">
-                      <input
-                        className="sett-inp"
-                        type={glShowToken ? 'text' : 'password'}
-                        value={glToken}
-                        onChange={e => onGlTokenChange(e.target.value)}
-                        placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
-                        style={{ fontFamily: 'var(--font-mono)', paddingRight: 42 }}
-                      />
-                      <button
-                        type="button"
-                        className="tok-eye"
-                        title={glShowToken ? '토큰 숨기기' : '토큰 보기'}
-                        aria-label={glShowToken ? '토큰 숨기기' : '토큰 보기'}
-                        onClick={() => setGlShowToken(v => !v)}
-                      >
-                        <Geuru expr={glShowToken ? 'idle' : 'blink'} scale={1.15} />
-                      </button>
+          {/* ── 우측 content ── */}
+          <div className="set2-content">
+            <div className="set2-chead">
+              <h2>{headTitle}</h2>
+              <p>{headDesc}</p>
+            </div>
+            <div className="set2-cbody" key={nav}>
+              {nav === 'git' && (
+                <>
+                  {!cfg.name && !cfgLoading && (
+                    <div className="set2-empty">
+                      <Geuru expr="sleepy" scale={3.4} />
+                      <b>아직 이름이 없어요</b>
+                      <span>커밋에 남길 이름과 이메일을 정하면 그루가 그로브에 기록해요.</span>
                     </div>
-                    <button
-                      className="sett-verify-btn"
-                      onClick={verifyGitlab}
-                      disabled={glVerifyState === 'verifying' || !glToken.trim()}
-                    >
-                      {glVerifyState === 'verifying'
-                        ? (<><span className="sett-spinner" />검증중…</>)
-                        : '검증'}
-                    </button>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
-                    MR 뷰·인박스에서 실제 Merge Request와 이슈를 조회하는 데 써요.
-                    <br />
-                    필요 scope: <span className="sett-scope-chip">api</span>{' '}
-                    <span className="sett-scope-chip">read_user</span>{' '}
-                    <span className="sett-scope-chip">read_repository</span>
-                  </div>
-                </div>
-
-                {/* 검증 결과 — 연결됨 카드(GitLab 주황 식별 보더) */}
-                {glVerifyState === 'success' && glVerifyResult && (
-                  <div className="sett-verify-ok gl">
-                    <div className="sett-verify-acct">
-                      {glVerifyResult.avatarUrl
-                        ? <img className="sett-verify-avatar" src={glVerifyResult.avatarUrl} alt="" />
-                        : <div className="sett-verify-avatar gl-fallback">{(glVerifyResult.name || glVerifyResult.username).charAt(0).toUpperCase()}</div>}
-                      <div className="sett-verify-acct-info">
-                        <div className="sett-verify-acct-login">@{glVerifyResult.username}</div>
-                        <div className="sett-verify-acct-sub">연결됨 · GitLab 계정 확인 완료</div>
+                  )}
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">사용자</div>
+                    <div className="set2-row2">
+                      <div className="set2-field">
+                        <div className="set2-flabel">이름</div>
+                        <input className="set2-inp" value={cfg.name} onChange={e => upCfg('name')(e.target.value)} placeholder="예: seobisback" />
+                      </div>
+                      <div className="set2-field">
+                        <div className="set2-flabel">이메일</div>
+                        <input className="set2-inp mono" value={cfg.email} onChange={e => upCfg('email')(e.target.value)} placeholder="you@example.com" />
                       </div>
                     </div>
-                    <div className="sett-verify-meta">
-                      <span className="sett-verify-meta-lbl">Host</span>
-                      <span className="sett-verify-meta-val">{glVerifyResult.host}</span>
+                    <div className="set2-field">
+                      <div className="set2-flabel">기본 브랜치<span className="set2-hint">새 저장소를 만들 때 쓰는 이름</span></div>
+                      <input className="set2-inp mono" value={cfg.defaultBranch} onChange={e => upCfg('defaultBranch')(e.target.value)} placeholder="main" />
                     </div>
-                    {glVerifyResult.name && (
-                      <div className="sett-verify-meta">
-                        <span className="sett-verify-meta-lbl">Name</span>
-                        <span className="sett-verify-meta-val">{glVerifyResult.name}</span>
+                  </div>
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">커밋</div>
+                    <div className="set2-toggle" onClick={() => upCfg('gpg')(!cfg.gpg)}>
+                      <div className="set2-toggle-info"><b>GPG 서명</b><span>커밋에 서명을 붙여요 · git config commit.gpgsign</span></div>
+                      <button type="button" className={`set2-sw ${cfg.gpg ? 'on' : 'off'}`} aria-pressed={cfg.gpg} aria-label="GPG 서명" />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {nav === 'look' && (
+                <>
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">테마</div>
+                    <div className="set2-theme-lock">
+                      <div className="set2-sw-faux" />
+                      <div className="set2-theme-lock-info">
+                        <b>다크모드 <span className="lock">· 고정</span></b>
+                        <span>레트로 아케이드 무드는 어둠 속에서 가장 빛나요 · 라이트모드는 앞으로도 없어요.</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">코드 표시</div>
+                    <div className="set2-row2">
+                      <div className="set2-field">
+                        <div className="set2-flabel">폰트 크기</div>
+                        <select className="set2-sel" value={fontSize} onChange={e => { setFontSize(e.target.value); setTouched(true) }}>
+                          {['11', '12', '13', '14'].map(v => <option key={v} value={v}>{v}px</option>)}
+                        </select>
+                      </div>
+                      <div className="set2-field">
+                        <div className="set2-flabel">탭 너비</div>
+                        <select className="set2-sel" value={tabWidth} onChange={e => { setTabWidth(e.target.value); setTouched(true) }}>
+                          {['2', '4', '8'].map(v => <option key={v} value={v}>{v} spaces</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="set2-font-prev" style={{ fontSize: `${fontSize}px` }}>
+                      <div><span className="kw">function</span> <span className="gd">plant</span>(commit) {'{'}</div>
+                      <div>&nbsp;&nbsp;<span className="kw">return</span> <span className="st">'새싹 하나'</span></div>
+                      <div>{'}'}</div>
+                    </div>
+                  </div>
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">알림 소리</div>
+                    <div className="set2-toggle" onClick={() => { setNotificationSoundEnabled(v => !v); setTouched(true) }}>
+                      <div className="set2-toggle-info"><b>소리 켜기</b><span>새 알림이 오면 소리로 알려줘요</span></div>
+                      <button type="button" className={`set2-sw ${notificationSoundEnabled ? 'on' : 'off'}`} aria-pressed={notificationSoundEnabled} aria-label="알림 소리" />
+                    </div>
+                    <div className={`set2-snd-block${notificationSoundEnabled ? '' : ' off'}`}>
+                      <div className="set2-field">
+                        <div className="set2-flabel">사운드<span className="set2-hint">macOS 시스템 사운드</span></div>
+                        <div className="set2-snd-row">
+                          <select
+                            className="set2-sel"
+                            aria-label="알림 사운드"
+                            value={notificationSound}
+                            disabled={!notificationSoundEnabled}
+                            onChange={e => { setNotificationSound(e.target.value); setTouched(true) }}
+                          >
+                            {NOTIFICATION_SOUNDS.map(s => <option key={s} value={s}>{s}</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            className="set2-snd-play"
+                            disabled={!notificationSoundEnabled}
+                            onClick={previewNotificationSound}
+                          >
+                            ▶ 들어보기
+                          </button>
+                        </div>
+                      </div>
+                      <div className="set2-snd-note">
+                        <Geuru expr="idle" scale={1.05} />
+                        <span>알림은 종류와 상관없이 <b>알림창에 뜨면</b> 이 소리로 울려요 · 소리 목록은 macOS <span className="mono">시스템 설정 · 사운드</span>를 따라요.</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {nav === 'remote' && (
+                <>
+                  {remotes.length === 0 && !cfgLoading ? (
+                    <div className="set2-empty">
+                      <Geuru expr="sleepy" scale={3.4} />
+                      <b>연결된 원격이 없어요</b>
+                      <span>로컬에서만 자라는 나무예요 · 원격을 더하면 다른 곳과도 주고받을 수 있어요.</span>
+                    </div>
+                  ) : (
+                    <div className="set2-group">
+                      <div className="set2-group-ttl">연결된 원격</div>
+                      {remotes.map(r => (
+                        <div key={r.n} className="set2-remote">
+                          <span className="set2-remote-name">{r.n}</span>
+                          <span className="set2-remote-url">{r.url}</span>
+                          <button className="set2-remote-del" aria-label={`${r.n} 삭제`} onClick={() => { setRemotes(p => p.filter(x => x.n !== r.n)); setTouched(true) }}>×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">원격 추가</div>
+                    <div className="set2-field">
+                      <div className="set2-flabel">이름</div>
+                      <input className="set2-inp mono" placeholder="origin" value={newRemote.n} onChange={e => setNewRemote(p => ({ ...p, n: e.target.value }))} />
+                    </div>
+                    <div className="set2-field">
+                      <div className="set2-flabel">URL</div>
+                      <div className="set2-token-row">
+                        <input className="set2-inp mono" placeholder="https://github.com/…" value={newRemote.url} onChange={e => setNewRemote(p => ({ ...p, url: e.target.value }))} />
+                        <button
+                          className="set2-verify-btn"
+                          onClick={() => { if (newRemote.n && newRemote.url) { setRemotes(p => [...p, newRemote]); setNewRemote({ n: '', url: '' }); setTouched(true) } }}
+                        >추가</button>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {nav === 'conn' && (
+                <>
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">계정</div>
+
+                    {/* GitHub 카드 */}
+                    {ghConnected ? (
+                      <div className="set2-conn connected">
+                        <img className="set2-conn-avatar" src={verifyResult.avatarUrl} alt="" />
+                        <div className="set2-conn-info">
+                          <b>GitHub <span className="set2-conn-status cs-on">연결됨</span></b>
+                          <span className="set2-conn-acct">
+                            <span>@{verifyResult.login}</span>
+                            {verifyResult.scopes.length > 0 && <span className="dotsep">·</span>}
+                            {verifyResult.scopes.map(s => <span key={s} className="set2-scope mini">{s}</span>)}
+                          </span>
+                        </div>
+                        <button className="set2-conn-btn ghost" onClick={disconnect}>연결 해제</button>
+                      </div>
+                    ) : (
+                      <div className="set2-conn">
+                        <div className="set2-conn-mark"><GhMark size={20} /></div>
+                        <div className="set2-conn-info">
+                          <b>GitHub <span className="set2-conn-status cs-off">미연결</span></b>
+                          <span>PR · 이슈 · 내 저장소 가져오기</span>
+                        </div>
+                        <button
+                          className={`set2-conn-btn ${connFlow === 'github' ? 'ghost' : 'gold'}`}
+                          onClick={() => setConnFlow(connFlow === 'github' ? null : 'github')}
+                        >{connFlow === 'github' ? '닫기' : '연결'}</button>
                       </div>
                     )}
-                    <button className="sett-disconnect-btn" onClick={disconnectGitlab}>연결 해제</button>
-                  </div>
-                )}
 
-                {glVerifyState === 'error' && (
-                  <div className="sett-verify-err">
-                    <Geuru expr="conflict" scale={1.1} className="geuru-mini" />
-                    <div>{glVerifyError}</div>
+                    {/* GitLab 카드 */}
+                    {glConnected ? (
+                      <div className="set2-conn connected">
+                        {glVerifyResult.avatarUrl
+                          ? <img className="set2-conn-avatar" src={glVerifyResult.avatarUrl} alt="" />
+                          : <div className="set2-conn-mark"><GlMark size={20} /></div>}
+                        <div className="set2-conn-info">
+                          <b>GitLab <span className="set2-conn-status cs-on">연결됨</span></b>
+                          <span className="set2-conn-acct">
+                            <span>@{glVerifyResult.username}</span>
+                            <span className="dotsep">·</span>
+                            <span>{glVerifyResult.host}</span>
+                          </span>
+                        </div>
+                        <button className="set2-conn-btn ghost" onClick={disconnectGitlab}>연결 해제</button>
+                      </div>
+                    ) : (
+                      <div className="set2-conn">
+                        <div className="set2-conn-mark"><GlMark size={20} /></div>
+                        <div className="set2-conn-info">
+                          <b>GitLab <span className="set2-conn-status cs-off">미연결</span></b>
+                          <span>GitLab.com · Self-hosted</span>
+                        </div>
+                        <button
+                          className={`set2-conn-btn ${connFlow === 'gitlab' ? 'ghost' : 'gold'}`}
+                          onClick={() => setConnFlow(connFlow === 'gitlab' ? null : 'gitlab')}
+                        >{connFlow === 'gitlab' ? '닫기' : '연결'}</button>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
 
-              <div className="sett-section">
-                <div className="sett-sec-ttl">토큰 발급</div>
-                <div style={{ fontSize: 11, color: 'var(--c-text-faint)', lineHeight: 1.5 }}>
-                  {glKind === 'self' ? '사내 GitLab 인스턴스' : 'GitLab.com'}의 설정에서 토큰을 발급하세요. 아래 링크는 호스트에 맞춰 열립니다.
-                </div>
-                <div className="sett-token-links">
-                  <button
-                    className="sett-token-link-btn gl"
-                    disabled={!glActiveHost}
-                    onClick={() => { if (glActiveHost) window.appAPI?.openReleaseUrl(gitlabTokenUrl(glActiveHost)) }}
-                  >
-                    {glActiveHost || '호스트'} 토큰 발급 ↗
-                  </button>
-                </div>
-                {glActiveHost && (
-                  <div style={{ fontSize: 11, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)', wordBreak: 'break-all', lineHeight: 1.5 }}>
-                    {gitlabTokenUrl(glActiveHost)}
+                  {/* GitHub 연결 흐름 */}
+                  {!ghConnected && connFlow === 'github' && (
+                    <div className="set2-group set2-cflow">
+                      <div className="set2-group-ttl">GitHub 연결</div>
+                      <div className="set2-cstep">
+                        <span className="set2-cstep-num">1</span>
+                        <div className="set2-cstep-body">
+                          <b>권한이 미리 선택된 발급 페이지를 열어요</b>
+                          <span className="set2-cstep-sub">아래 버튼을 누르면 브라우저에서 GitHub 토큰 생성창이 열려요 · 필요한 권한이 이미 체크돼 있어요.</span>
+                          <div className="set2-cstep-actions">
+                            <button className="set2-flow-btn gold" onClick={() => window.appAPI?.openReleaseUrl(CLASSIC_TOKEN_URL)}>
+                              GitHub에서 토큰 발급 <span className="ext">↗</span>
+                            </button>
+                            <button className="set2-flow-btn ghost" onClick={() => window.appAPI?.openReleaseUrl(FINEGRAINED_TOKEN_URL)}>
+                              세밀한 권한 토큰
+                            </button>
+                          </div>
+                          <div className="set2-scope-chips">{GITHUB_SCOPES.map(s => <span key={s} className="set2-scope">{s}</span>)}</div>
+                          <div className="set2-url-mono">{CLASSIC_TOKEN_URL}</div>
+                        </div>
+                      </div>
+                      <div className="set2-cstep">
+                        <span className="set2-cstep-num">2</span>
+                        <div className="set2-cstep-body">
+                          <b>받은 토큰을 붙여넣고 검증해요</b>
+                          <span className="set2-cstep-sub">발급된 토큰은 한 번만 보여요 · 복사해서 여기에 붙여넣어 주세요.</span>
+                          <div className="set2-token-row" style={{ marginTop: 8 }}>
+                            <div className="set2-token-wrap">
+                              <input
+                                className="set2-inp mono"
+                                type={showToken ? 'text' : 'password'}
+                                value={githubToken}
+                                onChange={e => onTokenChange(e.target.value)}
+                                placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                                style={{ paddingRight: 38 }}
+                              />
+                              <button
+                                type="button"
+                                className="set2-token-eye"
+                                title={showToken ? '토큰 숨기기' : '토큰 보기'}
+                                aria-label={showToken ? '토큰 숨기기' : '토큰 보기'}
+                                onClick={() => setShowToken(v => !v)}
+                              >
+                                <Geuru expr={showToken ? 'idle' : 'blink'} scale={1.05} />
+                              </button>
+                            </div>
+                            <button
+                              className="set2-verify-btn"
+                              onClick={verifyToken}
+                              disabled={verifyState === 'verifying' || !githubToken.trim()}
+                            >
+                              {verifyState === 'verifying' ? '검증 중…' : '검증'}
+                            </button>
+                          </div>
+
+                          {verifyState === 'verifying' && (
+                            <div className="set2-vr vr-wait"><span className="set2-spinner" /><span>GitHub에 토큰을 확인하는 중…</span></div>
+                          )}
+                          {verifyState === 'error' && (
+                            <div className="set2-vr vr-err">
+                              <Geuru expr="conflict" scale={1.1} className="geu" />
+                              <div><b>검증에 실패했어요</b><span>{verifyError}</span></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* GitLab 연결 흐름 — com/self 선택 + host 입력 보존 */}
+                  {!glConnected && connFlow === 'gitlab' && (
+                    <div className="set2-group set2-cflow">
+                      <div className="set2-group-ttl">GitLab 연결</div>
+                      <div className="set2-cstep">
+                        <span className="set2-cstep-num">1</span>
+                        <div className="set2-cstep-body">
+                          <b>호스트를 고르고 발급 페이지를 열어요</b>
+                          <span className="set2-cstep-sub">GitLab.com이나 사내 인스턴스를 골라요 · 발급 페이지가 호스트에 맞춰 열려요.</span>
+                          <div className="set2-gl-type">
+                            <button
+                              type="button"
+                              className={`set2-gl-type-opt${glKind === 'com' ? ' on' : ''}`}
+                              aria-pressed={glKind === 'com'}
+                              onClick={() => onGlKindChange('com')}
+                            >
+                              <span className="set2-gl-radio" />
+                              <span className="set2-gl-type-txt"><b>GitLab.com</b><span>gitlab.com</span></span>
+                            </button>
+                            <button
+                              type="button"
+                              className={`set2-gl-type-opt${glKind === 'self' ? ' on' : ''}`}
+                              aria-pressed={glKind === 'self'}
+                              onClick={() => onGlKindChange('self')}
+                            >
+                              <span className="set2-gl-radio" />
+                              <span className="set2-gl-type-txt"><b>Self-hosted</b><span>사내 인스턴스</span></span>
+                            </button>
+                          </div>
+                          {glKind === 'self' && (
+                            <div className="set2-field" style={{ marginTop: 2 }}>
+                              <div className="set2-flabel">Host URL</div>
+                              <input
+                                className="set2-inp mono"
+                                value={glHostInput}
+                                onChange={e => onGlHostChange(e.target.value)}
+                                placeholder="https://gitlab.mycompany.com"
+                                spellCheck={false}
+                              />
+                            </div>
+                          )}
+                          <div className="set2-cstep-actions">
+                            <button
+                              className="set2-flow-btn gold"
+                              disabled={!glActiveHost}
+                              onClick={() => { if (glActiveHost) window.appAPI?.openReleaseUrl(gitlabTokenUrl(glActiveHost)) }}
+                            >
+                              GitLab에서 토큰 발급 <span className="ext">↗</span>
+                            </button>
+                          </div>
+                          <div className="set2-scope-chips">{GITLAB_SCOPES.map(s => <span key={s} className="set2-scope">{s}</span>)}</div>
+                          {glActiveHost && <div className="set2-url-mono">{gitlabTokenUrl(glActiveHost)}</div>}
+                        </div>
+                      </div>
+                      <div className="set2-cstep">
+                        <span className="set2-cstep-num">2</span>
+                        <div className="set2-cstep-body">
+                          <b>받은 토큰을 붙여넣고 검증해요</b>
+                          <span className="set2-cstep-sub">발급된 토큰은 한 번만 보여요 · 복사해서 여기에 붙여넣어 주세요.</span>
+                          <div className="set2-token-row" style={{ marginTop: 8 }}>
+                            <div className="set2-token-wrap">
+                              <input
+                                className="set2-inp mono"
+                                type={glShowToken ? 'text' : 'password'}
+                                value={glToken}
+                                onChange={e => onGlTokenChange(e.target.value)}
+                                placeholder="glpat-xxxxxxxxxxxxxxxxxxxx"
+                                style={{ paddingRight: 38 }}
+                              />
+                              <button
+                                type="button"
+                                className="set2-token-eye"
+                                title={glShowToken ? '토큰 숨기기' : '토큰 보기'}
+                                aria-label={glShowToken ? '토큰 숨기기' : '토큰 보기'}
+                                onClick={() => setGlShowToken(v => !v)}
+                              >
+                                <Geuru expr={glShowToken ? 'idle' : 'blink'} scale={1.05} />
+                              </button>
+                            </div>
+                            <button
+                              className="set2-verify-btn"
+                              onClick={verifyGitlab}
+                              disabled={glVerifyState === 'verifying' || !glToken.trim()}
+                            >
+                              {glVerifyState === 'verifying' ? '검증 중…' : '검증'}
+                            </button>
+                          </div>
+
+                          {glVerifyState === 'verifying' && (
+                            <div className="set2-vr vr-wait"><span className="set2-spinner" /><span>{glActiveHost || '호스트'}에 토큰을 확인하는 중…</span></div>
+                          )}
+                          {glVerifyState === 'error' && (
+                            <div className="set2-vr vr-err">
+                              <Geuru expr="conflict" scale={1.1} className="geu" />
+                              <div><b>검증에 실패했어요</b><span>{glVerifyError}</span></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {nav === 'about' && (
+                <>
+                  <div className="set2-about-hero">
+                    <Geuru expr="happy" scale={3} />
+                    <div className="info">
+                      <b>GitGrove</b>
+                      <div className="v">{version ? `v${version}` : '…'} · Apple Silicon · macOS</div>
+                      <div className="tag">커밋 하나, 새싹 하나.</div>
+                      <div className="by">developed by <b>seobisback</b> · Seoul, Republic of Korea</div>
+                    </div>
                   </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-        <div className="sett-footer">
-          <button className="mbtn-cancel" onClick={onClose}>Close</button>
-          <button className="mbtn-ok" onClick={save}>{saved ? '✓ Saved' : 'Save changes'}</button>
+
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">업데이트</div>
+                    {checking ? (
+                      <div className="set2-update-row"><span className="ic"><span className="set2-spinner" /></span><div className="txt"><b>업데이트 확인 중…</b></div></div>
+                    ) : dlState === 'downloading' ? (
+                      <div className="set2-update-row dl">
+                        <span className="ic"><span className="set2-spinner" /></span>
+                        <div className="txt"><b>받는 중… {dlPct}%</b><div className="set2-dlbar"><i style={{ width: `${dlPct}%` }} /></div></div>
+                      </div>
+                    ) : dlState === 'done' ? (
+                      <div className="set2-update-row done">
+                        <span className="ic geu"><Geuru expr="merge" scale={1.2} /></span>
+                        <div className="txt"><b>{`다운로드 완료${updateInfo?.version ? ` · v${updateInfo.version}` : ''}`}</b><span>설치 창이 열렸어요 · 안내대로 교체해 주세요</span></div>
+                      </div>
+                    ) : updateInfo?.updateAvailable ? (
+                      <div className="set2-update-row">
+                        <span className="ic">{ICON_DL}</span>
+                        <div className="txt"><b>{`새 버전이 있어요${updateInfo.version ? ` · v${updateInfo.version}` : ''}`}</b></div>
+                        <button className="go" onClick={startDownload}>받기</button>
+                      </div>
+                    ) : (
+                      <div className="set2-update-row done">
+                        <span className="ic geu"><Geuru expr="happy" scale={1.2} /></span>
+                        <div className="txt"><b>최신 상태예요</b>{version && <span>{`v${version} · 지금이 가장 최신이에요`}</span>}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="set2-group">
+                    <div className="set2-group-ttl">링크</div>
+                    <div className="set2-links">
+                      <button className="set2-link-btn" onClick={() => window.appAPI?.openReleaseUrl(REPO_URL)}>{ICON_EXT} GitHub 저장소</button>
+                      <button className="set2-link-btn" onClick={() => window.appAPI?.openReleaseUrl(ISSUES_URL)}>{ICON_BUG} 이슈 · 제안</button>
+                      <button className="set2-link-btn" onClick={() => window.appAPI?.openReleaseUrl(RELEASES_URL)}>{ICON_DL} 릴리스 노트</button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="set2-cfoot">
+              <span className="set2-saved">
+                <span className="dot" style={{ opacity: touched ? 1 : 0.45 }} />
+                자동 저장됨
+              </span>
+              <button className="set2-btn set2-btn-gold" onClick={done}>완료</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
