@@ -2,6 +2,9 @@ import { ipcRenderer, contextBridge } from 'electron'
 
 // --------- App update bridge ---------
 contextBridge.exposeInMainWorld('appAPI', {
+  // 동기 값. 첫 페인트 전에 사용 가능(깜빡임 없음). frontend가 신호등 조건부 렌더에 사용.
+  // 'darwin' | 'win32' | 'linux' 등. mac이면 네이티브 신호등을 쓰므로 커스텀 신호등을 렌더하지 않음.
+  platform: process.platform,
   // 'app:update-available' 구독. 반환된 함수를 호출해 구독 해제(effect cleanup, 리스너 누수 방지).
   onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, info: { version: string; url: string; dmgUrl?: string; notes?: string }) => cb(info)

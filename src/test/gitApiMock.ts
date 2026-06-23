@@ -148,6 +148,8 @@ export function installGitApiMock() {
   }
 
   const appAPI = {
+    // 프론트 테스트 기본값: mac 분기(네이티브 신호등) 검증. 필요 시 테스트에서 오버라이드.
+    platform: 'darwin' as NodeJS.Platform,
     onUpdateAvailable: vi.fn() as Mock<(cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => () => void>,
     openReleaseUrl: vi.fn(),
     getVersion: vi.fn().mockResolvedValue('1.19.9') as Mock<() => Promise<string>>,
