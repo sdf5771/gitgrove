@@ -1,7 +1,7 @@
 {
   "name": "gitgrove",
   "private": true,
-  "version": "1.20.3",
+  "version": "1.20.4",
   "description": "Electron 기반 데스크톱 Git 클라이언트 — 커밋 그래프·diff·per-hunk staging·PR 뷰·GitHub 연동",
   "author": {
     "name": "seobisback",
