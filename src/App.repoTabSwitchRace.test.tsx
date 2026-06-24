@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, waitFor, cleanup, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { installGitApiMockWithLatency, FIXTURES } from './test/gitApiMock'
@@ -64,7 +64,8 @@ describe('레포 탭 전환 — 레이스 근본원인 계측', () => {
     await user.click(tabB)
     await new Promise(r => setTimeout(r, 500))
 
-    const tabBEl = screen.getByText('b').closest('.repo-tab')!
+    // 그로브 헤더에도 레포명 'b'가 노출되므로 탭 스트립으로 스코프해 탭 요소만 집는다.
+    const tabBEl = within(document.querySelector('.repo-tabs')!).getByText('b').closest('.repo-tab')!
     console.log('RACE_RESULT',
       'tabB_active=', tabBEl.className.includes('on'),
       'showsA=', screen.queryAllByText(FIXTURES['/repo/a'].commitMsg).length > 0,

@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
 } as const
 import { computeLanes } from './utils/computeLanes'
 import { BranchSidebar } from './components/BranchSidebar'
+import { RepoCoach } from './components/RepoCoach'
 import { CommitGraph } from './components/CommitGraph'
 import { CommitDetail } from './components/CommitDetail'
 import { StageArea } from './components/StageArea'
@@ -317,6 +318,9 @@ export default function App() {
   // CL2 — 클론 인터랙션 모달. null=닫힘. url 프리필(브라우저 Clone 진입 시).
   const [cloneModal,     setCloneModal]     = useState<{ url: string } | null>(null)
   const [showConflict,   setShowConflict]   = useState(false)
+  // 코치 배너 닫기(세션 상태). `${repoPath}|${coachKind}` 토큰을 기억해, 레포 전환·상태 변화 시
+  // 다시 평가되도록 한다(같은 레포의 같은 상태에서만 숨김 유지).
+  const [coachDismissed, setCoachDismissed] = useState<string | null>(null)
   const [showCmd,        setShowCmd]        = useState(false)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; commit: Commit; idx: number } | null>(null)
   const [branchCtxMenu, setBranchCtxMenu] = useState<{ x: number; y: number; name: string; type: 'local' | 'remote' | 'tag'; isCurrent: boolean } | null>(null)
@@ -1262,6 +1266,19 @@ export default function App() {
         ? 'done'
         : 'idle'
 
+  // ── 코치 배너 상태 파생 (우선순위 conflict > behind > dirty > clean) ──
+  const coachConflict = showConflict || activeSyncResult?.kind === 'conflict'
+  const coachBehind = repo?.behind ?? 0
+  const coachDirty = !!repo?.dirty
+  const coachKind: 'conflict' | 'behind' | 'dirty' | 'clean' =
+    coachConflict ? 'conflict' : coachBehind > 0 ? 'behind' : coachDirty ? 'dirty' : 'clean'
+  // 같은 레포·같은 상태에서만 숨김 유지(레포 전환/상태 변화 시 재노출).
+  const coachToken = `${repoPath ?? ''}|${coachKind}`
+  // SyncHud(진행/결과)가 현재 레포에 떠 있는 동안엔 코치를 숨긴다 — HUD가 같은 액션(충돌 해결 등)을
+  // 이미 제공하므로 중복 배너/버튼을 막는다.
+  const syncHudVisible = !!syncModel && syncForCurrentRepo
+  const showCoach = !!repoPath && coachDismissed !== coachToken && !syncHudVisible
+
   // ── 빈 화면 (레포 미선택, 로딩 중이 아님) ──
   const renderEmptyState = () => (
     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 16, color: 'var(--c-text-faint)' }}>
@@ -1443,6 +1460,7 @@ export default function App() {
             <BranchSidebar
               activeBranch={activeBranch}
               onBranchAction={handleBranchAction}
+              onBranchClick={handleBranchSwitch}
               onBranchContextMenu={(e, name, type, isCurrent) => {
                 e.preventDefault()
                 setBranchCtxMenu({ x: e.clientX, y: e.clientY, name, type, isCurrent })
@@ -1450,6 +1468,10 @@ export default function App() {
               localBranches={realBranches.length > 0 ? realBranches : undefined}
               remoteBranches={realRemotes.length > 0 ? realRemotes : undefined}
               tags={realTags.length > 0 ? realTags : undefined}
+              repoName={repo?.name}
+              repoOwner={githubUser?.login ?? undefined}
+              conflict={showConflict || activeSyncResult?.kind === 'conflict'}
+              geuruState={geuruState}
               style={{ width: sidebarWidth }}
             />
 
@@ -1489,6 +1511,20 @@ export default function App() {
             ) : (
               <>
                 <div className="cpanel">
+                  {showCoach && (
+                    <RepoCoach
+                      conflict={coachConflict}
+                      behind={coachBehind}
+                      dirty={coachDirty}
+                      changeCount={realUnstaged.length + realStaged.length}
+                      conflictCount={syncResultView?.kind === 'conflict' ? (syncResultView.changedFiles ?? 0) : 0}
+                      branch={displayBranch}
+                      onPull={handlePull}
+                      onViewChanges={() => setView('commit')}
+                      onResolveConflict={() => setShowConflict(true)}
+                      onDismiss={() => setCoachDismissed(coachToken)}
+                    />
+                  )}
                   {view === 'history' ? (
                     <>
                       <div className="graph-hdr">
