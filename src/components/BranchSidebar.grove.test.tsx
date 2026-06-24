@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BranchSidebar } from './BranchSidebar'
@@ -36,6 +36,8 @@ function renderSb(extra?: Partial<React.ComponentProps<typeof BranchSidebar>>) {
   return { onBranchAction, onBranchClick, onBranchContextMenu, container: utils.container }
 }
 
+// 기본 모드(키 없음)=grove 전제. 다른 테스트가 남긴 gitgrove:branchView를 비워 둔다.
+beforeEach(() => localStorage.clear())
 afterEach(() => cleanup())
 
 describe('BranchSidebar — 그로브 패널', () => {

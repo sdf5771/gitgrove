@@ -167,6 +167,19 @@ body { display: flex; align-items: center; justify-content: center; }
 .gsb-head .info b { font-family: var(--font-mono); font-size: 13px; color: var(--c-text-strong); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gsb-head .info span { font-size: 10.5px; color: var(--c-text-muted); font-family: var(--font-mono); }
 .gsb-head .cnt { font-family: var(--font-mono); font-size: 10px; color: var(--c-gold-300); background: var(--c-gold-bg); border: 1px solid var(--c-gold-border); padding: 1px 7px; border-radius: 999px; flex-shrink: 0; }
+/* 그로브 헤더에서는 토글이 다음 줄로 떨어져 정보·배지와 한 줄에서 충돌하지 않게 한다 */
+.grove-sb .gsb-head { flex-wrap: wrap; }
+.grove-sb .gsb-head .bview-toggle { flex-basis: 100%; margin-top: 9px; }
+
+/* ── 목록(기존) 모드 헤더 ── */
+.blist-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 11px 13px 9px; border-bottom: 1px solid var(--c-divider); flex-shrink: 0; }
+.blist-head .blist-title { font-family: var(--font-display); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--c-gold-300); }
+
+/* ── 브랜치 보기 토글 (나무/목록 세그먼트) — 두 모드 공통 ── */
+.bview-toggle { display: inline-flex; gap: 2px; padding: 2px; background: var(--c-bg-inset); border: 1px solid var(--c-border); border-radius: var(--r2); flex-shrink: 0; }
+.bview-toggle button { background: none; border: none; cursor: pointer; font-family: var(--font-display); font-size: 10px; letter-spacing: .04em; color: var(--c-text-muted); padding: 3px 10px; border-radius: 4px; line-height: 1.4; transition: background .12s, color .12s; }
+.bview-toggle button:hover { color: var(--c-gold-300); }
+.bview-toggle button.on { color: var(--c-gold-200); background: var(--c-gold-bg); }
 .gsb-scroll { flex: 1; overflow-y: auto; padding: 6px 0 10px; }
 .gsb-sec {
   font-family: var(--font-display); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;

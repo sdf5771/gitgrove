@@ -8,6 +8,27 @@ type BranchAction = 'create' | 'rename' | 'delete'
 
 type HealthKind = 'healthy' | 'behind' | 'ahead' | 'conflict'
 
+type BranchView = 'grove' | 'list'
+
+const VIEW_KEY = 'gitgrove:branchView'
+
+// 마운트 시 동기 read로 초기 모드 결정(깜빡임 없게). 키 없으면 기본 'grove'.
+function readInitialView(): BranchView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grove'
+  } catch {
+    return 'grove'
+  }
+}
+
+function persistView(v: BranchView) {
+  try {
+    localStorage.setItem(VIEW_KEY, v)
+  } catch {
+    /* localStorage 비활성(프라이빗 모드 등) — 무시하고 세션 state로만 동작 */
+  }
+}
+
 interface Props {
   activeBranch: string
   onBranchAction: (mode: BranchAction, name?: string) => void
@@ -52,6 +73,32 @@ function branchHealthOf(
   return { kind: 'healthy', label: '최신' }
 }
 
+// 그로브/목록 공통 헤더 토글 — 두 모드에서 동일하게 보이도록 분리.
+function ViewToggle({ view, onChange }: { view: BranchView; onChange: (v: BranchView) => void }) {
+  return (
+    <div className="bview-toggle" role="group" aria-label="브랜치 보기 전환">
+      <button
+        type="button"
+        className={view === 'grove' ? 'on' : ''}
+        aria-pressed={view === 'grove'}
+        aria-label="나무 보기"
+        onClick={() => onChange('grove')}
+      >
+        나무
+      </button>
+      <button
+        type="button"
+        className={view === 'list' ? 'on' : ''}
+        aria-pressed={view === 'list'}
+        aria-label="목록 보기"
+        onClick={() => onChange('list')}
+      >
+        목록
+      </button>
+    </div>
+  )
+}
+
 export function BranchSidebar({
   activeBranch,
   onBranchAction,
@@ -66,9 +113,15 @@ export function BranchSidebar({
   onBranchClick,
   style,
 }: Props) {
+  const [view, setView] = useState<BranchView>(readInitialView)
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [query, setQuery] = useState('')
   const toggle = (k: string) => setCollapsed(p => ({ ...p, [k]: !p[k] }))
+
+  const changeView = (v: BranchView) => {
+    setView(v)
+    persistView(v)
+  }
 
   const localList = localBranches ?? LOCAL_BRANCHES
   const remoteList = remoteBranches ?? REMOTE_BRANCHES.map(b => b.name)
@@ -87,6 +140,79 @@ export function BranchSidebar({
   const headName = repoName || 'gitgrove'
   const headSub = repoOwner ? `${repoOwner} · 정원` : '정원'
 
+  // ── 목록(기존) 모드 — 재디자인 이전 플랫 리스트 복원 ──
+  if (view === 'list') {
+    return (
+      <div className="bsidebar" style={style}>
+        <div className="blist-head">
+          <span className="blist-title">브랜치</span>
+          <ViewToggle view={view} onChange={changeView} />
+        </div>
+        <div className="bsearch"><input placeholder="브랜치 찾기" value={query} onChange={e => setQuery(e.target.value)} /></div>
+        <div className="blist">
+          <div className="bsec-hd">
+            <span>Local</span>
+            <div style={{ display: 'flex', gap: 2 }}>
+              <button onClick={() => onBranchAction('create')} title="새 브랜치" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: 14, padding: '0 3px', borderRadius: 3, lineHeight: 1 }}>+</button>
+              <button onClick={() => toggle('local')} title={collapsed.local ? '펼치기' : '접기'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px', borderRadius: 3, lineHeight: 1 }}>{collapsed.local ? '›' : '⌄'}</button>
+            </div>
+          </div>
+          {!collapsed.local && filteredLocal.map(b => {
+            const isHead = b.name === activeBranch
+            return (
+              <div key={b.name}
+                className={`bitem${isHead ? ' cur' : ''}`}
+                onClick={() => onBranchClick?.(b.name)}
+                onContextMenu={e => {
+                  e.preventDefault()
+                  onBranchContextMenu?.(e, b.name, 'local', isHead)
+                }}>
+                <span className="bdot" style={{ background: LANE_COLORS[b.lane % LANE_COLORS.length] }} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.name}</span>
+                {isHead && <span style={{ fontSize: 9, fontFamily: 'var(--font-display)', color: 'var(--c-gold-300)', background: 'var(--c-gold-bg)', border: '1px solid var(--c-gold-border)', padding: '1px 5px', borderRadius: 999, letterSpacing: '.06em', textTransform: 'uppercase' }}>HEAD</span>}
+                {b.ahead != null && b.ahead > 0 && <span className="bab"><span className="bab-a">↑{b.ahead}</span></span>}
+              </div>
+            )
+          })}
+
+          <div className="bsec-hd" style={{ marginTop: 6 }}>
+            <span>Remote</span>
+            <button onClick={() => toggle('remote')} title={collapsed.remote ? '펼치기' : '접기'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px' }}>{collapsed.remote ? '›' : '⌄'}</button>
+          </div>
+          {!collapsed.remote && filteredRemote.map(name => (
+            <div key={name} className="bitem"
+              onContextMenu={e => {
+                e.preventDefault()
+                onBranchContextMenu?.(e, name, 'remote', false)
+              }}>
+              <span className="bdot bdot-r" />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--c-text-muted)' }}>{name}</span>
+            </div>
+          ))}
+
+          <div className="bsec-hd" style={{ marginTop: 6 }}>
+            <span>Tags</span>
+            <button onClick={() => toggle('tags')} title={collapsed.tags ? '펼치기' : '접기'} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-muted)', fontSize: 13, padding: '0 3px' }}>{collapsed.tags ? '›' : '⌄'}</button>
+          </div>
+          {!collapsed.tags && filteredTags.map(name => (
+            <div key={name} className="bitem"
+              onContextMenu={e => {
+                e.preventDefault()
+                onBranchContextMenu?.(e, name, 'tag', false)
+              }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--c-grove)" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+                <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+                <line x1="7" y1="7" x2="7.01" y2="7"/>
+              </svg>
+              <span style={{ flex: 1, color: 'var(--c-success)' }}>{name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // ── 나무(그로브, 기본) 모드 ──
   return (
     <div className="grove-sb bsidebar" style={style}>
       <div className="gsb-head">
@@ -95,6 +221,7 @@ export function BranchSidebar({
           <span>{headSub}</span>
         </div>
         <span className="cnt">{localList.length}그루</span>
+        <ViewToggle view={view} onChange={changeView} />
       </div>
 
       <div className="bsearch"><input placeholder="브랜치 찾기" value={query} onChange={e => setQuery(e.target.value)} /></div>
