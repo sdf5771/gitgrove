@@ -167,9 +167,10 @@ body { display: flex; align-items: center; justify-content: center; }
 .gsb-head .info b { font-family: var(--font-mono); font-size: 13px; color: var(--c-text-strong); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gsb-head .info span { font-size: 10.5px; color: var(--c-text-muted); font-family: var(--font-mono); }
 .gsb-head .cnt { font-family: var(--font-mono); font-size: 10px; color: var(--c-gold-300); background: var(--c-gold-bg); border: 1px solid var(--c-gold-border); padding: 1px 7px; border-radius: 999px; flex-shrink: 0; }
-/* 그로브 헤더에서는 토글이 다음 줄로 떨어져 정보·배지와 한 줄에서 충돌하지 않게 한다 */
+/* 그로브 헤더에서도 토글은 목록 모드와 동일하게 컴팩트 크기·우측 정렬로 둔다(모드 간 일관).
+   wrap으로 다음 줄에 떨어지되 전체폭으로 늘리지 않고, 우측 끝에 붙여 목록 헤더와 같은 위치감을 준다. */
 .grove-sb .gsb-head { flex-wrap: wrap; }
-.grove-sb .gsb-head .bview-toggle { flex-basis: 100%; margin-top: 9px; }
+.grove-sb .gsb-head .bview-toggle { margin-left: auto; margin-top: 9px; }
 
 /* ── 목록(기존) 모드 헤더 ── */
 .blist-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 11px 13px 9px; border-bottom: 1px solid var(--c-divider); flex-shrink: 0; }

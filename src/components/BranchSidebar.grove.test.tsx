@@ -112,12 +112,21 @@ describe('BranchSidebar — 그로브 패널', () => {
     expect(labels.length).toBe(2)
   })
 
-  it('plot 클릭 시 onBranchClick(이름)을 호출한다 (체크아웃 배선)', async () => {
+  it('plot 단일 클릭은 onBranchClick(체크아웃)을 호출하지 않는다', async () => {
     const user = userEvent.setup()
     const { onBranchClick, container } = renderSb()
     const plots = Array.from(container.querySelectorAll('.plot')) as HTMLElement[]
     const featurePlot = plots.find(p => within(p).queryByText('feature/x'))!
     await user.click(featurePlot)
+    expect(onBranchClick).not.toHaveBeenCalled()
+  })
+
+  it('plot 더블클릭 시 onBranchClick(이름)을 호출한다 (체크아웃 배선)', async () => {
+    const user = userEvent.setup()
+    const { onBranchClick, container } = renderSb()
+    const plots = Array.from(container.querySelectorAll('.plot')) as HTMLElement[]
+    const featurePlot = plots.find(p => within(p).queryByText('feature/x'))!
+    await user.dblClick(featurePlot)
     expect(onBranchClick).toHaveBeenCalledWith('feature/x')
   })
 

@@ -125,12 +125,21 @@ describe('BranchSidebar — 리스트(목록) 모드 동작 보존', () => {
     expect(within(fx).getByText('↑4')).toBeTruthy()
   })
 
-  it('브랜치 클릭 시 onBranchClick(이름)을 호출한다', async () => {
+  it('브랜치 단일 클릭은 onBranchClick(체크아웃)을 호출하지 않는다', async () => {
     const user = userEvent.setup()
     const { onBranchClick, container } = renderList()
     const items = Array.from(container.querySelectorAll('.bitem')) as HTMLElement[]
     const fx = items.find(i => within(i).queryByText('feature/x'))!
     await user.click(fx)
+    expect(onBranchClick).not.toHaveBeenCalled()
+  })
+
+  it('브랜치 더블클릭 시 onBranchClick(이름)을 호출한다', async () => {
+    const user = userEvent.setup()
+    const { onBranchClick, container } = renderList()
+    const items = Array.from(container.querySelectorAll('.bitem')) as HTMLElement[]
+    const fx = items.find(i => within(i).queryByText('feature/x'))!
+    await user.dblClick(fx)
     expect(onBranchClick).toHaveBeenCalledWith('feature/x')
   })
 

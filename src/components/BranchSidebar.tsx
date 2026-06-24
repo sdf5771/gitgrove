@@ -162,7 +162,8 @@ export function BranchSidebar({
             return (
               <div key={b.name}
                 className={`bitem${isHead ? ' cur' : ''}`}
-                onClick={() => onBranchClick?.(b.name)}
+                title="더블클릭으로 전환"
+                onDoubleClick={() => onBranchClick?.(b.name)}
                 onContextMenu={e => {
                   e.preventDefault()
                   onBranchContextMenu?.(e, b.name, 'local', isHead)
@@ -243,7 +244,8 @@ export function BranchSidebar({
             <div
               key={b.name}
               className={`plot${isHead ? ' head on' : ''}`}
-              onClick={() => onBranchClick?.(b.name)}
+              title="더블클릭으로 전환"
+              onDoubleClick={() => onBranchClick?.(b.name)}
               onContextMenu={e => {
                 e.preventDefault()
                 onBranchContextMenu?.(e, b.name, 'local', isHead)
