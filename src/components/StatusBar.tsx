@@ -31,6 +31,8 @@ interface Props {
   geuruState?: GeuruExpr
   // 동기화 신호등(SY2). running=골드 펄스 / done=녹색 / err=빨강 / idle=평시.
   syncState?: 'running' | 'done' | 'err' | 'idle'
+  // 저장소 전환 로딩 — "불러오는 중…" + sync dot + 그루 think로 대체한다.
+  loading?: boolean
 }
 
 const SYNC_STATE_TEXT: Record<'running' | 'done' | 'err', { txt: string; color: string }> = {
@@ -47,14 +49,34 @@ const GEURU_TITLE: Partial<Record<GeuruExpr, string>> = {
   conflict: '그루 — 충돌 해결 필요',
 }
 
-export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary, geuruState = 'idle', syncState = 'idle' }: Props) {
-  // 신호등 dot 수식어 — running=골드 펄스, err=빨강, 그 외(done/idle)=녹색 기본.
-  const dotClass = syncState === 'running' ? 'sdot sync' : syncState === 'err' ? 'sdot err' : 'sdot'
+export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary, geuruState = 'idle', syncState = 'idle', loading = false }: Props) {
+  // 전환 로딩 중에는 그루 think + sync dot으로 통일(상태 신호등은 로딩이 우선).
+  const effGeuru: GeuruExpr = loading ? 'think' : geuruState
+  // 신호등 dot 수식어 — 로딩/running=골드 펄스, err=빨강, 그 외(done/idle)=녹색 기본.
+  const dotClass = (loading || syncState === 'running') ? 'sdot sync' : syncState === 'err' ? 'sdot err' : 'sdot'
   const stateText = syncState !== 'idle' ? SYNC_STATE_TEXT[syncState] : null
+  if (loading) {
+    return (
+      <div className="sbar sb-loading">
+        <span className="geuru-status" title="그루 — 저장소를 여는 중">
+          <Geuru expr="think" scale={1.3} title="그루 — 저장소를 여는 중" />
+        </span>
+        <div className="sbranch">
+          <span className={dotClass} />
+          <span className="sb-spin" aria-hidden="true" />
+          <span aria-live="polite">불러오는 중…</span>
+        </div>
+        <button onClick={onSettings} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: '11px', padding: '0 4px', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'var(--font-mono)' }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          Settings
+        </button>
+      </div>
+    )
+  }
   return (
     <div className="sbar">
-      <span className="geuru-status" title={GEURU_TITLE[geuruState]}>
-        <Geuru expr={geuruState} scale={1.3} title={GEURU_TITLE[geuruState]} />
+      <span className="geuru-status" title={GEURU_TITLE[effGeuru]}>
+        <Geuru expr={effGeuru} scale={1.3} title={GEURU_TITLE[effGeuru]} />
       </span>
       {repoSummary ? (
         <div className="sbranch">

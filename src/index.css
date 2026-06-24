@@ -1139,6 +1139,62 @@ body { display: flex; align-items: center; justify-content: center; }
 .skel-row{display:flex;align-items:center;gap:12px;padding:11px 12px;}
 .skel{background:linear-gradient(90deg,var(--c-bg-surface) 25%,var(--c-bg-elevated) 50%,var(--c-bg-surface) 75%);background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:5px;}
 @keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+
+/* ════ 저장소 전환 로딩 (스켈레톤 + 코치 로딩 + 상태바/알약) ════ */
+/* shimmer 스켈레톤 기본 블록 — 디자인 .sk / .sk.soft */
+.sk{display:inline-block;border-radius:var(--r2);background:linear-gradient(90deg,var(--c-bg-elevated) 25%,var(--c-bg-surface) 50%,var(--c-bg-elevated) 75%);background-size:200% 100%;animation:shimmer 1.3s linear infinite;}
+.sk.sk-soft{opacity:.6;}
+@keyframes riseIn{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:translateY(0);}}
+@keyframes sproutPop{0%{opacity:0;transform:scale(.7);}70%{transform:scale(1.06);}100%{opacity:1;transform:scale(1);}}
+@keyframes skFadeIn{from{opacity:0;}to{opacity:1;}}
+
+/* 브랜치 사이드바 스켈레톤 */
+.sk-branches{animation:skFadeIn .2s ease;}
+.sk-branches .tile-seed{cursor:default;animation:riseIn .32s cubic-bezier(.2,.8,.2,1) both;}
+.sk-branches .tile-seed .spr{opacity:.5;animation:sproutPop .5s cubic-bezier(.2,.8,.2,1) both;}
+.sk-branches .tile-seed:hover{background:none;}
+.sk-bitem{display:flex;align-items:center;gap:9px;padding:7px 12px;}
+.sk-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+/* 커밋 그래프 스켈레톤 */
+.sk-commits{animation:skFadeIn .2s ease;}
+.sk-graph-svg{position:absolute;left:0;top:0;pointer-events:none;z-index:1;}
+.sk-commits .sk-line{opacity:.28;}
+.sk-commits .sk-node{opacity:.55;animation:sproutPop .5s cubic-bezier(.2,.8,.2,1) both;}
+.sk-row{cursor:default;}
+.sk-row:hover{background:none;}
+.sk-h{height:11px;border-radius:3px;flex-shrink:0;}
+.sk-msg{height:12px;border-radius:3px;}
+.sk-av{width:18px;height:18px;border-radius:50%;flex-shrink:0;}
+.sk-time{width:34px;height:10px;border-radius:3px;flex-shrink:0;margin-left:auto;}
+
+/* 디테일 패널 스켈레톤 */
+.sk-detail{flex:1;display:flex;flex-direction:column;padding:16px;animation:skFadeIn .2s ease;}
+.sk-detail .sk{border-radius:4px;}
+.sk-detail-meta{display:flex;flex-direction:column;gap:8px;margin:16px 0;}
+.sk-block{display:flex;flex-direction:column;gap:7px;margin-top:8px;padding:12px;border:1px solid var(--c-border);border-radius:var(--r2);background:var(--c-bg-inset);}
+
+/* 코치 로딩 배너 — .coach.loading (그루 think + 진행 바 + 라벨) */
+.coach.loading{background:linear-gradient(180deg,rgba(230,165,54,.06),transparent 80%),var(--c-bg-surface);border-color:var(--c-gold-border);}
+.coach.loading::after{background:var(--c-gold-400);}
+.coach.loading .coach-geuru{animation:bob 2.4s ease-in-out infinite;}
+.coach-bar{margin-top:8px;height:5px;border-radius:999px;background:var(--c-bg-inset);overflow:hidden;}
+.coach-bar-fill{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--c-gold-400),var(--c-gold-200));transition:width .35s cubic-bezier(.2,.8,.2,1);}
+.coach-pct{flex-shrink:0;align-self:flex-start;font-family:var(--font-mono);font-size:11px;color:var(--c-gold-300);}
+
+/* 레포 알약 미니 스피너 — .mini-spin */
+.mini-spin{width:11px;height:11px;flex-shrink:0;border-radius:50%;border:1.6px solid var(--c-border);border-top-color:var(--c-gold-300);animation:spin .6s linear infinite;}
+
+/* 상태바 로딩 — .sb-loading / .sb-spin */
+.sb-loading .sb-spin{width:11px;height:11px;border-radius:50%;border:1.6px solid var(--c-border);border-top-color:var(--c-gold-300);animation:spin .6s linear infinite;}
+
+/* 커밋 행 스트림인 — .crow.in (riseIn) */
+.crow.in{animation:riseIn .26s cubic-bezier(.2,.8,.2,1) both;}
+
+@media (prefers-reduced-motion:reduce){
+  .sk,.coach.loading .coach-geuru,.sk-commits .sk-node,.sk-branches .tile-seed,.sk-branches .tile-seed .spr,.crow.in,.mini-spin,.sb-loading .sb-spin{animation:none;}
+  .sk{opacity:.6;}
+}
 /* 더 보기 (페이지네이션) */
 .rm-loadmore{display:flex;justify-content:center;padding:14px 0 4px;}
 .rm-loadmore button{padding:7px 18px;background:var(--c-bg-elevated);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:12px;cursor:pointer;transition:border-color 120ms,color 120ms;font-family:var(--font-body);}

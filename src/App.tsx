@@ -16,6 +16,7 @@ import { computeLanes } from './utils/computeLanes'
 import { BranchSidebar } from './components/BranchSidebar'
 import { RepoCoach } from './components/RepoCoach'
 import { CommitGraph } from './components/CommitGraph'
+import { CommitSkeletons, DetailSkeleton, CoachLoading } from './components/SwitchSkeletons'
 import { CommitDetail } from './components/CommitDetail'
 import { StageArea } from './components/StageArea'
 import { DiffPanel } from './components/DiffPanel'
@@ -129,8 +130,10 @@ function statusToFileEntry(
 // RepoTabs 컴포넌트
 // ──────────────────────────────────────────────
 
-function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
+function RepoTabs({ repos, active, switchingPath, onSelect, onAdd, onClose }: {
   repos: Repo[]; active: number
+  /** 전환 중인 레포 경로 — 해당 탭에 미니 스피너를 표시한다. */
+  switchingPath?: string | null
   onSelect: (i: number) => void
   onAdd: () => void
   onClose: (i: number) => void
@@ -148,7 +151,9 @@ function RepoTabs({ repos, active, onSelect, onAdd, onClose }: {
             onClick={() => onSelect(i)}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i) } }}
           >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .7, flexShrink: 0 }}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+            {switchingPath === r.path
+              ? <span className="mini-spin" aria-label="불러오는 중" title="불러오는 중" />
+              : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .7, flexShrink: 0 }}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>}
             {r.dirty && <span className="repo-tab-dirty" title="커밋 안 된 변경" />}
             <span>{r.name}</span>
             {r.behind > 0 && <span style={{ fontSize: 9, color: 'var(--c-warning)', fontFamily: 'var(--font-mono)' }}>↓{r.behind}</span>}
@@ -243,6 +248,14 @@ export default function App() {
   const [repoPath, setRepoPath] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // ── 전환 로딩 상태 ──
+  // 탭 전환은 loadRepo(...,{silent:true})라 setIsLoading을 건너뛴다(이전 화면 유지).
+  // 전환 중에도 피드백을 주되 전면 로딩 대신 스켈레톤을 띄우기 위한 별도 플래그.
+  const [repoSwitching, setRepoSwitching] = useState(false)
+  // 전환 중 표시할 레포 경로(레포 알약 미니 스피너의 대상 식별). 완료 시 null.
+  const [switchingPath, setSwitchingPath] = useState<string | null>(null)
+  // 정직한 진행률: getLog/getBranches/getStatus 세 promise 중 resolve된 개수(0..3).
+  const [loadProgress, setLoadProgress] = useState(0)
 
   // ── 레포 탭 닫기 (repoPath 선언 이후에 정의) ──
   const closeRepo = useCallback((i: number) => {
@@ -430,12 +443,18 @@ export default function App() {
   // ── git 데이터 로드 ──
   // loadRepo는 git 데이터 로드 + repos 목록 갱신만 책임진다.
   // "어느 탭을 active로 둘지"는 호출자가 opts.activate로 소유한다(디커플링).
-  const loadRepo = useCallback(async (path: string, opts: { silent?: boolean; activate?: boolean } = {}) => {
-    const { silent = false, activate = false } = opts
+  const loadRepo = useCallback(async (path: string, opts: { silent?: boolean; activate?: boolean; switching?: boolean } = {}) => {
+    const { silent = false, activate = false, switching = false } = opts
     // 이 호출의 시퀀스를 발급하고 in-flight path를 기록한다.
     const mySeq = ++loadSeqRef.current
     loadingPathRef.current = path
     if (!silent) setIsLoading(true)
+    // 전환 로딩(스켈레톤) 표시 — silent 전환이라도 피드백을 준다. 최신 호출만 소유.
+    if (switching) {
+      setRepoSwitching(true)
+      setSwitchingPath(path)
+      setLoadProgress(0)
+    }
     setLoadError(null)
 
     // ── 유효성 검사 ── .git 없는 빈/삭제된 디렉토리를 broken 상태로 만들지 않는다.
@@ -446,22 +465,32 @@ export default function App() {
         notify(...spread(TOASTS.notARepo()))
         loadingPathRef.current = null
         if (!silent) setIsLoading(false)
+        if (switching) { setRepoSwitching(false); setSwitchingPath(null) }
       }
       return false
     }
 
     try {
       const limit = logLimitRef.current
-      const [gitCommits, gitBranches, gitStatus] = await Promise.all([
-        window.gitAPI?.getLog(path, { limit, all: showAllBranchesRef.current }) ?? Promise.resolve([]),
-        window.gitAPI?.getBranches(path) ?? Promise.resolve({ current: '', local: [], remote: [], tags: [] }),
-        (window.gitAPI?.getStatus(path) as Promise<{ staged: Array<{ path: string; status: string; additions: number; deletions: number }>; unstaged: Array<{ path: string; status: string; additions: number; deletions: number }> }> | undefined) ?? Promise.resolve({ staged: [] as Array<{ path: string; status: string; additions: number; deletions: number }>, unstaged: [] as Array<{ path: string; status: string; additions: number; deletions: number }> }),
-      ])
+      // 세 promise를 병렬 유지하되, 각각 resolve 시 진행률(0..3)을 정직하게 갱신한다.
+      // (가짜 단계% 금지 — 실제로 끝난 promise 수만 센다.) 최신 호출일 때만 반영.
+      const bump = () => { if (switching && mySeq === loadSeqRef.current) setLoadProgress(p => p + 1) }
+      const pLog = (window.gitAPI?.getLog(path, { limit, all: showAllBranchesRef.current }) ?? Promise.resolve([]))
+      const pBranches = (window.gitAPI?.getBranches(path) ?? Promise.resolve({ current: '', local: [], remote: [], tags: [] }))
+      const pStatus = ((window.gitAPI?.getStatus(path) as Promise<{ staged: Array<{ path: string; status: string; additions: number; deletions: number }>; unstaged: Array<{ path: string; status: string; additions: number; deletions: number }> }> | undefined) ?? Promise.resolve({ staged: [] as Array<{ path: string; status: string; additions: number; deletions: number }>, unstaged: [] as Array<{ path: string; status: string; additions: number; deletions: number }> }))
+      void pLog.then(bump, () => {})
+      void pBranches.then(bump, () => {})
+      void pStatus.then(bump, () => {})
+      const [gitCommits, gitBranches, gitStatus] = await Promise.all([pLog, pBranches, pStatus])
 
       // ── 레이스 가드 ── 응답이 도착한 시점에 더 늦은 loadRepo 호출이 있었다면
       // 이 응답은 stale이다. 모든 setState(활성 탭 포함)를 스킵하고 조기 return해
       // last-write-wins 덮어쓰기와 activate 되돌림을 모두 차단한다.
       if (mySeq !== loadSeqRef.current) return false
+
+      // 최신 응답 — 전환 로딩 해제(실데이터가 곧 그려진다). finally에서도 가드하지만
+      // 여기서 먼저 풀어 스켈레톤→실데이터 전환에 끊김이 없게 한다.
+      if (switching) { setRepoSwitching(false); setSwitchingPath(null) }
 
       const hashes = gitCommits.map(c => c.id)
       const laneMap = computeLanes(gitCommits)
@@ -517,7 +546,11 @@ export default function App() {
       return false
     } finally {
       // 최신 호출일 때만 in-flight 표식을 해제한다(나보다 늦은 호출이 진행 중이면 그쪽이 소유).
-      if (mySeq === loadSeqRef.current) loadingPathRef.current = null
+      // 전환 로딩 플래그도 최신 호출만 정리한다(stale 호출이 새 전환 스켈레톤을 끄지 못하게).
+      if (mySeq === loadSeqRef.current) {
+        loadingPathRef.current = null
+        if (switching) { setRepoSwitching(false); setSwitchingPath(null) }
+      }
       if (!silent) setIsLoading(false)
     }
   }, [notify])
@@ -775,7 +808,8 @@ export default function App() {
     const path = reposRef.current[activeRepo]?.path
     // 이미 표시 중이거나(repoPathRef) 로드 중인(loadingPathRef) 경로면 중복 로드하지 않는다.
     if (path && path !== repoPathRef.current && path !== loadingPathRef.current) {
-      loadRepo(path, { silent: true })
+      // silent(전면 로딩 스킵)는 유지하되 switching으로 스켈레톤·코치 로딩·미니 스피너를 띄운다.
+      loadRepo(path, { silent: true, switching: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRepo])
@@ -1325,6 +1359,7 @@ export default function App() {
         <RepoTabs
           repos={repos}
           active={showRepoManager ? -1 : activeRepo}
+          switchingPath={repoSwitching ? switchingPath : null}
           onSelect={i => { setShowRepoManager(false); setActiveRepo(i) }}
           onAdd={() => setShowAddRepo(true)}
           onClose={handleCloseRepoTab}
@@ -1472,6 +1507,7 @@ export default function App() {
               repoOwner={githubUser?.login ?? undefined}
               conflict={showConflict || activeSyncResult?.kind === 'conflict'}
               geuruState={geuruState}
+              loading={repoSwitching}
               style={{ width: sidebarWidth }}
             />
 
@@ -1511,7 +1547,9 @@ export default function App() {
             ) : (
               <>
                 <div className="cpanel">
-                  {showCoach && (
+                  {repoSwitching ? (
+                    <CoachLoading progress={loadProgress} />
+                  ) : showCoach && (
                     <RepoCoach
                       conflict={coachConflict}
                       behind={coachBehind}
@@ -1544,17 +1582,21 @@ export default function App() {
                         <span className="gha">Author</span>
                         <span className="ght">Time</span>
                       </div>
-                      <CommitGraph
-                        commits={filteredCommits}
-                        selectedIdx={selIdx}
-                        onSelect={handleSelectCommit}
-                        onActivate={i => { void handleSelectCommit(i); setView('diff') }}
-                        onContextMenu={(e, c, i) => setCtxMenu({ x: e.clientX, y: e.clientY, commit: c, idx: i })}
-                        showStats={true}
-                        rowH={rowH}
-                        activeBranch={activeBranch}
-                      />
-                      {repoPath && hasMoreCommits && !searchQuery && (
+                      {repoSwitching ? (
+                        <CommitSkeletons rows={8} rowH={rowH} />
+                      ) : (
+                        <CommitGraph
+                          commits={filteredCommits}
+                          selectedIdx={selIdx}
+                          onSelect={handleSelectCommit}
+                          onActivate={i => { void handleSelectCommit(i); setView('diff') }}
+                          onContextMenu={(e, c, i) => setCtxMenu({ x: e.clientX, y: e.clientY, commit: c, idx: i })}
+                          showStats={true}
+                          rowH={rowH}
+                          activeBranch={activeBranch}
+                        />
+                      )}
+                      {!repoSwitching && repoPath && hasMoreCommits && !searchQuery && (
                         <button className="loadmore-btn" onClick={loadMoreCommits} disabled={loadingMore}>
                           {loadingMore
                             ? <span style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Loading…</span>
@@ -1598,7 +1640,9 @@ export default function App() {
                   onMouseOut={e => (e.currentTarget.style.background = 'transparent')}
                 />
                 <div className="rpanel" style={{ width: rpanelWidth }}>
-                  {view === 'history' ? (
+                  {repoSwitching ? (
+                    <DetailSkeleton />
+                  ) : view === 'history' ? (
                     <>
                       <div className="pnl-hdr">
                         <h3>Commit Detail</h3>
@@ -1712,6 +1756,7 @@ export default function App() {
         repoSummary={showRepoManager ? { total: repos.length, dirty: repos.filter(r => r.dirty).length } : null}
         geuruState={showRepoManager ? 'idle' : geuruState}
         syncState={showRepoManager ? 'idle' : syncState}
+        loading={!showRepoManager && repoSwitching}
       />
 
       {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} commit={ctxMenu.commit} onClose={() => setCtxMenu(null)} onAction={handleCtxAction} />}

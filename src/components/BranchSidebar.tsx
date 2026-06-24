@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { LOCAL_BRANCHES, REMOTE_BRANCHES, LANE_COLORS, type Branch } from '../data/mockData'
 import { Tree } from './Tree'
 import { Geuru, type GeuruExpr } from './Geuru'
+import { BranchSkeletons } from './SwitchSkeletons'
 import type { GrowthStage } from '../utils/repoActivity'
 
 type BranchAction = 'create' | 'rename' | 'delete'
@@ -50,6 +51,8 @@ interface Props {
   geuruState?: GeuruExpr
   /** 브랜치 클릭 = 체크아웃 등. 없으면 무동작(시각만). */
   onBranchClick?: (name: string) => void
+  /** 저장소 전환 로딩 중 — 브랜치 목록 자리에 스켈레톤(새싹/shimmer)을 띄운다. */
+  loading?: boolean
   style?: React.CSSProperties
 }
 
@@ -111,6 +114,7 @@ export function BranchSidebar({
   conflict = false,
   geuruState = 'idle',
   onBranchClick,
+  loading = false,
   style,
 }: Props) {
   const [view, setView] = useState<BranchView>(readInitialView)
@@ -149,6 +153,7 @@ export function BranchSidebar({
           <ViewToggle view={view} onChange={changeView} />
         </div>
         <div className="bsearch"><input placeholder="브랜치 찾기" value={query} onChange={e => setQuery(e.target.value)} /></div>
+        {loading ? <BranchSkeletons view="list" /> : (
         <div className="blist">
           <div className="bsec-hd">
             <span>Local</span>
@@ -209,6 +214,7 @@ export function BranchSidebar({
             </div>
           ))}
         </div>
+        )}
       </div>
     )
   }
@@ -227,6 +233,7 @@ export function BranchSidebar({
 
       <div className="bsearch"><input placeholder="브랜치 찾기" value={query} onChange={e => setQuery(e.target.value)} /></div>
 
+      {loading ? <BranchSkeletons view="grove" /> : (
       <div className="gsb-scroll blist">
         <div className="gsb-sec bsec-hd">
           <span>로컬 브랜치</span>
@@ -309,6 +316,7 @@ export function BranchSidebar({
           </div>
         ))}
       </div>
+      )}
     </div>
   )
 }
