@@ -67,7 +67,6 @@ body { display: flex; align-items: center; justify-content: center; }
    이 영역엔 별도 no-drag 요소가 없어 -webkit-app-region: drag로 창 드래그 가능하게 남는다. */
 .title-bar.mac { padding-left: 78px; }
 .title-bar button,
-.title-bar .repo-pill,
 .title-bar .repo-tabs,
 .title-bar .tb-repos-tab,
 .title-bar .update-pill,
@@ -76,13 +75,6 @@ body { display: flex; align-items: center; justify-content: center; }
 .td { width: 13px; height: 13px; border-radius: 50%; border: .5px solid rgba(0,0,0,.2); cursor: pointer; flex-shrink: 0; }
 .td-r { background: #ff5f57; } .td-y { background: #ffbd2e; } .td-g { background: #28c840; }
 .app-name { font-family: var(--font-display); font-size: 17px; color: var(--c-gold-200); letter-spacing: .5px; flex-shrink: 0; }
-.repo-pill {
-  display: flex; align-items: center; gap: 6px; padding: 4px 10px;
-  background: var(--c-bg-elevated); border: 1px solid var(--c-border); border-radius: var(--r2);
-  font-size: 12px; color: var(--c-text-strong); cursor: pointer;
-  transition: border-color 120ms;
-}
-.repo-pill:hover { border-color: var(--c-border-strong); }
 /* 타이틀 바 우측 고정 그룹(브랜치 표시 + 알림 벨).
    margin-left:auto로 남는 슬랙을 흡수해 항상 우측 끝에 핀되고,
    flex-shrink:0로 탭 개수 변동에도 줄어들지 않는다. .repo-tabs(flex:1)가
@@ -165,6 +157,106 @@ body { display: flex; align-items: center; justify-content: center; }
 .bdot-r { background: var(--c-text-muted); }
 .bab { margin-left: auto; display: flex; align-items: center; gap: 3px; font-size: 10px; color: var(--c-text-faint); font-family: var(--font-mono); }
 .bab-a { color: var(--c-success); }
+
+/* ── Grove sidebar (디자인 정본 .grove-sb 포팅) ──
+   BranchSidebar를 "그로브" 패널로 리디자인. 헤더(레포명·소유자·N그루) + 로컬 브랜치 plot(픽셀 나무
+   + 정원지기 그루) + 원격/태그 행. .bsidebar/.bsearch/.blist 등 기존 클래스도 함께 붙어 레이아웃·
+   리사이즈(width prop)·검색 동작을 그대로 재사용한다. */
+.gsb-head { display: flex; align-items: center; gap: 9px; padding: 12px 13px 11px; border-bottom: 1px solid var(--c-divider); flex-shrink: 0; }
+.gsb-head .info { flex: 1; min-width: 0; }
+.gsb-head .info b { font-family: var(--font-mono); font-size: 13px; color: var(--c-text-strong); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsb-head .info span { font-size: 10.5px; color: var(--c-text-muted); font-family: var(--font-mono); }
+.gsb-head .cnt { font-family: var(--font-mono); font-size: 10px; color: var(--c-gold-300); background: var(--c-gold-bg); border: 1px solid var(--c-gold-border); padding: 1px 7px; border-radius: 999px; flex-shrink: 0; }
+/* 그로브 헤더에서도 토글은 목록 모드와 동일하게 컴팩트 크기·우측 정렬로 둔다(모드 간 일관).
+   wrap으로 다음 줄에 떨어지되 전체폭으로 늘리지 않고, 우측 끝에 붙여 목록 헤더와 같은 위치감을 준다. */
+.grove-sb .gsb-head { flex-wrap: wrap; }
+.grove-sb .gsb-head .bview-toggle { margin-left: auto; margin-top: 9px; }
+
+/* ── 목록(기존) 모드 헤더 ── */
+.blist-head { display: flex; align-items: center; justify-content: space-between; gap: 9px; padding: 11px 13px 9px; border-bottom: 1px solid var(--c-divider); flex-shrink: 0; }
+.blist-head .blist-title { font-family: var(--font-display); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--c-gold-300); }
+
+/* ── 브랜치 보기 토글 (나무/목록 세그먼트) — 두 모드 공통 ── */
+.bview-toggle { display: inline-flex; gap: 2px; padding: 2px; background: var(--c-bg-inset); border: 1px solid var(--c-border); border-radius: var(--r2); flex-shrink: 0; }
+.bview-toggle button { background: none; border: none; cursor: pointer; font-family: var(--font-display); font-size: 10px; letter-spacing: .04em; color: var(--c-text-muted); padding: 3px 10px; border-radius: 4px; line-height: 1.4; transition: background .12s, color .12s; }
+.bview-toggle button:hover { color: var(--c-gold-300); }
+.bview-toggle button.on { color: var(--c-gold-200); background: var(--c-gold-bg); }
+.gsb-scroll { flex: 1; overflow-y: auto; padding: 6px 0 10px; }
+.gsb-sec {
+  font-family: var(--font-display); font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--c-gold-300); display: flex; align-items: center; justify-content: space-between; padding: 11px 13px 6px;
+}
+.gsb-sec .add, .gsb-sec button { background: none; border: none; color: var(--c-text-muted); font-size: 14px; line-height: 1; cursor: pointer; padding: 0 3px; border-radius: 3px; }
+.gsb-sec .add:hover, .gsb-sec button:hover { color: var(--c-gold-300); }
+
+.plot { position: relative; display: flex; align-items: center; gap: 10px; margin: 2px 8px; padding: 8px 10px 9px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: background .12s, border-color .12s; }
+.plot:hover { background: var(--c-gold-bg-soft); }
+.plot.on { background: var(--c-gold-bg); border-color: var(--c-gold-border); }
+.plot.on::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2.5px; border-radius: 2px; background: var(--c-gold-400); }
+.tree-tile { position: relative; width: 42px; height: 44px; flex-shrink: 0; border-radius: 7px; background: var(--c-bg-inset); border: 1px solid var(--c-border); overflow: hidden; display: flex; align-items: flex-end; justify-content: center; }
+.tree-tile .soil { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; background: linear-gradient(180deg, rgba(138,90,30,0), rgba(138,90,30,.4)); }
+.tree-tile .soil::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: rgba(111,207,124,.4); }
+.tree-tile .spr { position: relative; z-index: 2; margin-bottom: 5px; }
+.tree-tile.sway .spr { animation: sway 3.5s ease-in-out infinite; transform-origin: bottom center; }
+.tree-tile.wilt { filter: saturate(.5) brightness(.82); }
+.tree-tile .gard { position: absolute; right: -2px; bottom: 3px; z-index: 3; }
+.plot-info { flex: 1; min-width: 0; }
+.plot-name { display: flex; align-items: center; gap: 6px; }
+.plot-name .lane { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.plot-name b { font-family: var(--font-mono); font-size: 12.5px; color: var(--c-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.plot.on .plot-name b, .plot.head .plot-name b { color: var(--c-gold-200); }
+.plot-sub { display: flex; align-items: center; gap: 7px; margin-top: 5px; font-family: var(--font-mono); font-size: 10px; }
+.plot-health { display: inline-flex; align-items: center; gap: 4px; padding: 1px 6px; border-radius: 999px; border: 1px solid; }
+.ph-healthy { color: var(--c-grove); background: rgba(111,207,124,.1); border-color: rgba(111,207,124,.3); }
+.ph-behind { color: var(--c-warning); background: rgba(255,206,90,.1); border-color: rgba(255,206,90,.3); }
+.ph-conflict { color: var(--c-danger); background: rgba(255,107,107,.1); border-color: rgba(255,107,107,.3); }
+.ph-ahead { color: var(--c-info); background: rgba(95,184,230,.1); border-color: rgba(95,184,230,.3); }
+.plot-sub .g-ab { color: var(--c-text-faint); display: flex; gap: 5px; }
+.plot-sub .g-ab .up { color: var(--c-grove); }
+.plot-sub .g-ab .dn { color: var(--c-warning); }
+.gsb-remote { margin: 2px 8px; padding: 7px 10px; display: flex; align-items: center; gap: 9px; border-radius: 7px; cursor: pointer; }
+.gsb-remote:hover { background: var(--c-gold-bg-soft); }
+.gsb-remote .rdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.gsb-remote b { font-family: var(--font-mono); font-size: 12px; color: var(--c-text); font-weight: 500; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gsb-remote span { font-family: var(--font-mono); font-size: 10px; color: var(--c-text-faint); flex-shrink: 0; }
+
+/* ── Repo coach banner (디자인 정본 .coach 포팅) ──
+   중앙 그래프/뷰 위에 현재 레포 상태를 그루가 안내. 톤(conflict/behind/dirty/clean)별 배경·좌측 컬러바. */
+.coach {
+  display: flex; align-items: center; gap: 13px; margin: 12px 14px; padding: 12px 14px;
+  border-radius: 10px; border: 1px solid; position: relative; overflow: hidden; flex-shrink: 0;
+  animation: coachFadeIn .2s ease;
+}
+.coach::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; }
+.coach-geuru { flex-shrink: 0; animation: bob 2.4s ease-in-out infinite; }
+.coach-body { flex: 1; min-width: 0; }
+.coach-body b { font-family: var(--font-display); font-size: 13.5px; letter-spacing: .2px; display: block; color: var(--c-text-strong); word-break: keep-all; }
+.coach-body span { font-size: 11.5px; color: var(--c-text-muted); display: block; margin-top: 2px; line-height: 1.45; word-break: keep-all; }
+.coach-body span .mono { font-family: var(--font-mono); color: var(--c-text); }
+.coach-acts { display: flex; gap: 7px; flex-shrink: 0; }
+.coach-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: var(--r2);
+  font-size: 12px; font-family: var(--font-display); letter-spacing: .2px; border: 1px solid; white-space: nowrap; cursor: pointer;
+}
+.coach-btn svg { width: 13px; height: 13px; }
+.coach-btn.primary {
+  color: var(--c-text-on-gold); border-color: var(--c-gold-border);
+  background: linear-gradient(180deg, var(--c-gold-400), var(--c-gold-500));
+  box-shadow: inset 0 1px 0 rgba(255,235,170,.25);
+}
+.coach-btn.primary:hover { filter: brightness(1.08); }
+.coach-btn.ghost { color: var(--c-text-muted); border-color: var(--c-border); background: var(--c-bg-elevated); }
+.coach-btn.ghost:hover { color: var(--c-text); border-color: var(--c-border-strong); }
+.coach-x { position: absolute; top: 8px; right: 10px; color: var(--c-text-faint); font-size: 13px; background: none; border: none; line-height: 1; cursor: pointer; }
+.coach-x:hover { color: var(--c-text-muted); }
+.coach.behind { background: linear-gradient(180deg, rgba(255,206,90,.07), transparent 80%), var(--c-bg-surface); border-color: rgba(255,206,90,.32); }
+.coach.behind::after { background: var(--c-warning); }
+.coach.conflict { background: linear-gradient(180deg, rgba(255,107,107,.08), transparent 80%), var(--c-bg-surface); border-color: rgba(255,107,107,.35); }
+.coach.conflict::after { background: var(--c-danger); }
+.coach.dirty { background: linear-gradient(180deg, rgba(230,165,54,.07), transparent 80%), var(--c-bg-surface); border-color: var(--c-gold-border); }
+.coach.dirty::after { background: var(--c-gold-400); }
+.coach.clean { background: linear-gradient(180deg, rgba(111,207,124,.06), transparent 80%), var(--c-bg-surface); border-color: rgba(111,207,124,.3); }
+.coach.clean::after { background: var(--c-grove); }
 
 /* ── Center panel ── */
 .cpanel { flex: 1; min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--c-border); overflow: hidden; }
@@ -440,6 +532,9 @@ body { display: flex; align-items: center; justify-content: center; }
 @keyframes mslide{from{opacity:0;transform:translateY(-14px) scale(.97);}to{opacity:1;transform:none;}}
 @keyframes graphIn{from{opacity:.25;transform:translateY(-8px);}to{opacity:1;transform:translateY(0);}}
 @keyframes spin{to{transform:rotate(360deg);}}
+@keyframes sway{0%,100%{transform:rotate(-1.5deg);}50%{transform:rotate(1.5deg);}}
+@keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-2px);}}
+@keyframes coachFadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes stashSlide{from{opacity:0;transform:translateX(18px);}to{opacity:1;transform:none;}}
 @keyframes notifIn{from{opacity:0;transform:translateX(24px);}to{opacity:1;transform:none;}}
 @keyframes notifBar{from{width:100%;}to{width:0%;}}
@@ -590,19 +685,22 @@ body { display: flex; align-items: center; justify-content: center; }
    max-content(전체 탭 너비)로 팽창해 .tb-right(우측 고정 그룹)를 뷰포트 밖으로 밀어낸다.
    overflow:hidden으로 래퍼가 넘치지 않고, 내부 .repo-tabs의 overflow-x:auto가
    실제 탭 가로 스크롤을 담당한다. '+'(repo-tab-add)는 flex-shrink:0로 항상 보인다. */
+/* 열린 레포 탭 = 알약(pill). 디자인 정본(.repo-pill/.repo-add) 톤을 기존 .repo-tab* 클래스에
+   리스타일로 적용(클래스명·JSX 구조 불변 — 가로스크롤·overflow 계약 유지). 각 탭이 둥근 보더를
+   가진 독립 알약이고, 탭 사이를 gap으로 띄운다. active(.on)=골드 보더 + inset 바닥 골드선. */
 .repo-tabs-wrap{display:flex;align-items:center;gap:0;flex:1 1 auto;min-width:0;overflow:hidden;}
-.repo-tabs{display:flex;align-items:center;gap:0;overflow-x:auto;flex:1 1 auto;min-width:0;scrollbar-width:none;}
+.repo-tabs{display:flex;align-items:center;gap:3px;overflow-x:auto;flex:1 1 auto;min-width:0;scrollbar-width:none;padding:0 2px;}
 .repo-tabs::-webkit-scrollbar{display:none;}
-.repo-tab{display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;font-size:12px;color:var(--c-text-muted);border-right:1px solid var(--c-border);white-space:nowrap;transition:background 80ms,color 80ms;position:relative;flex-shrink:0;}
-.repo-tab:hover{background:rgba(244,236,210,.04);color:var(--c-text);}
-.repo-tab.on{color:var(--c-text-strong);background:var(--c-bg-deep);}
-.repo-tab.on::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--c-gold-400);}
+.repo-tab{display:flex;align-items:center;gap:6px;padding:4px 10px;cursor:pointer;font-size:12px;color:var(--c-text-muted);background:var(--c-bg-elevated);border:1px solid var(--c-border);border-radius:var(--r2);white-space:nowrap;transition:border-color 120ms,color 120ms,background 120ms;position:relative;flex-shrink:0;}
+.repo-tab svg{width:12px;height:12px;}
+.repo-tab:hover{border-color:var(--c-border-strong);color:var(--c-text);}
+.repo-tab.on{color:var(--c-gold-200);border-color:var(--c-gold-border);background:var(--c-gold-bg-soft);box-shadow:inset 0 -2px 0 var(--c-gold-400);}
 .repo-tab:focus-visible{outline:none;color:var(--c-text-strong);box-shadow:inset 0 0 0 1px var(--c-gold-border);}
 .repo-tab-dirty{width:6px;height:6px;border-radius:50%;background:var(--c-warning);flex-shrink:0;}
 .repo-tab-close{color:var(--c-text-faint);font-size:13px;line-height:1;padding:1px 3px;border-radius:2px;background:none;border:none;cursor:pointer;margin-left:1px;transition:color 80ms,background 80ms;}
 .repo-tab-close:hover{color:var(--c-danger);background:rgba(255,107,107,.12);}
-.repo-tab-add{display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:none;border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-faint);cursor:pointer;font-size:16px;transition:border-color 120ms,color 120ms;flex-shrink:0;margin-left:6px;}
-.repo-tab-add:hover{border-color:var(--c-gold-border);color:var(--c-gold-300);}
+.repo-tab-add{display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:none;border:none;border-radius:var(--r2);color:var(--c-text-muted);cursor:pointer;font-size:15px;transition:background 120ms,color 120ms;flex-shrink:0;margin-left:4px;}
+.repo-tab-add:hover{background:var(--c-bg-elevated);color:var(--c-text);}
 .repo-recent{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r2);cursor:pointer;border:1px solid var(--c-border);background:var(--c-bg-inset);transition:border-color 100ms,background 100ms;}
 .repo-recent:hover{background:var(--c-gold-bg-soft);border-color:var(--c-gold-border);}
 .repo-recent-info{flex:1;min-width:0;}
@@ -1041,6 +1139,62 @@ body { display: flex; align-items: center; justify-content: center; }
 .skel-row{display:flex;align-items:center;gap:12px;padding:11px 12px;}
 .skel{background:linear-gradient(90deg,var(--c-bg-surface) 25%,var(--c-bg-elevated) 50%,var(--c-bg-surface) 75%);background-size:200% 100%;animation:shimmer 1.3s infinite;border-radius:5px;}
 @keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+
+/* ════ 저장소 전환 로딩 (스켈레톤 + 코치 로딩 + 상태바/알약) ════ */
+/* shimmer 스켈레톤 기본 블록 — 디자인 .sk / .sk.soft */
+.sk{display:inline-block;border-radius:var(--r2);background:linear-gradient(90deg,var(--c-bg-elevated) 25%,var(--c-bg-surface) 50%,var(--c-bg-elevated) 75%);background-size:200% 100%;animation:shimmer 1.3s linear infinite;}
+.sk.sk-soft{opacity:.6;}
+@keyframes riseIn{from{opacity:0;transform:translateY(7px);}to{opacity:1;transform:translateY(0);}}
+@keyframes sproutPop{0%{opacity:0;transform:scale(.7);}70%{transform:scale(1.06);}100%{opacity:1;transform:scale(1);}}
+@keyframes skFadeIn{from{opacity:0;}to{opacity:1;}}
+
+/* 브랜치 사이드바 스켈레톤 */
+.sk-branches{animation:skFadeIn .2s ease;}
+.sk-branches .tile-seed{cursor:default;animation:riseIn .32s cubic-bezier(.2,.8,.2,1) both;}
+.sk-branches .tile-seed .spr{opacity:.5;animation:sproutPop .5s cubic-bezier(.2,.8,.2,1) both;}
+.sk-branches .tile-seed:hover{background:none;}
+.sk-bitem{display:flex;align-items:center;gap:9px;padding:7px 12px;}
+.sk-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+/* 커밋 그래프 스켈레톤 */
+.sk-commits{animation:skFadeIn .2s ease;}
+.sk-graph-svg{position:absolute;left:0;top:0;pointer-events:none;z-index:1;}
+.sk-commits .sk-line{opacity:.28;}
+.sk-commits .sk-node{opacity:.55;animation:sproutPop .5s cubic-bezier(.2,.8,.2,1) both;}
+.sk-row{cursor:default;}
+.sk-row:hover{background:none;}
+.sk-h{height:11px;border-radius:3px;flex-shrink:0;}
+.sk-msg{height:12px;border-radius:3px;}
+.sk-av{width:18px;height:18px;border-radius:50%;flex-shrink:0;}
+.sk-time{width:34px;height:10px;border-radius:3px;flex-shrink:0;margin-left:auto;}
+
+/* 디테일 패널 스켈레톤 */
+.sk-detail{flex:1;display:flex;flex-direction:column;padding:16px;animation:skFadeIn .2s ease;}
+.sk-detail .sk{border-radius:4px;}
+.sk-detail-meta{display:flex;flex-direction:column;gap:8px;margin:16px 0;}
+.sk-block{display:flex;flex-direction:column;gap:7px;margin-top:8px;padding:12px;border:1px solid var(--c-border);border-radius:var(--r2);background:var(--c-bg-inset);}
+
+/* 코치 로딩 배너 — .coach.loading (그루 think + 진행 바 + 라벨) */
+.coach.loading{background:linear-gradient(180deg,rgba(230,165,54,.06),transparent 80%),var(--c-bg-surface);border-color:var(--c-gold-border);}
+.coach.loading::after{background:var(--c-gold-400);}
+.coach.loading .coach-geuru{animation:bob 2.4s ease-in-out infinite;}
+.coach-bar{margin-top:8px;height:5px;border-radius:999px;background:var(--c-bg-inset);overflow:hidden;}
+.coach-bar-fill{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--c-gold-400),var(--c-gold-200));transition:width .35s cubic-bezier(.2,.8,.2,1);}
+.coach-pct{flex-shrink:0;align-self:flex-start;font-family:var(--font-mono);font-size:11px;color:var(--c-gold-300);}
+
+/* 레포 알약 미니 스피너 — .mini-spin */
+.mini-spin{width:11px;height:11px;flex-shrink:0;border-radius:50%;border:1.6px solid var(--c-border);border-top-color:var(--c-gold-300);animation:spin .6s linear infinite;}
+
+/* 상태바 로딩 — .sb-loading / .sb-spin */
+.sb-loading .sb-spin{width:11px;height:11px;border-radius:50%;border:1.6px solid var(--c-border);border-top-color:var(--c-gold-300);animation:spin .6s linear infinite;}
+
+/* 커밋 행 스트림인 — .crow.in (riseIn) */
+.crow.in{animation:riseIn .26s cubic-bezier(.2,.8,.2,1) both;}
+
+@media (prefers-reduced-motion:reduce){
+  .sk,.coach.loading .coach-geuru,.sk-commits .sk-node,.sk-branches .tile-seed,.sk-branches .tile-seed .spr,.crow.in,.mini-spin,.sb-loading .sb-spin{animation:none;}
+  .sk{opacity:.6;}
+}
 /* 더 보기 (페이지네이션) */
 .rm-loadmore{display:flex;justify-content:center;padding:14px 0 4px;}
 .rm-loadmore button{padding:7px 18px;background:var(--c-bg-elevated);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:12px;cursor:pointer;transition:border-color 120ms,color 120ms;font-family:var(--font-body);}

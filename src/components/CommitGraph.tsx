@@ -84,8 +84,8 @@ export function CommitGraph({ commits, selectedIdx, onSelect, onActivate, onCont
           {commits.map((c, i) => (
             <div key={c.id}
               ref={i === selectedIdx ? selRowRef : undefined}
-              className={`crow${i === selectedIdx ? ' sel' : ''}`}
-              style={{ height: rowH }}
+              className={`crow in${i === selectedIdx ? ' sel' : ''}`}
+              style={{ height: rowH, animationDelay: i < 12 ? `${i * 22}ms` : undefined }}
               onClick={() => onSelect(i)}
               onDoubleClick={() => onActivate?.(i)}
               onContextMenu={e => { e.preventDefault(); onContextMenu(e, c, i) }}>
