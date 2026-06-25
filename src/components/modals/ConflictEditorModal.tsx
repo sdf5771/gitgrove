@@ -23,21 +23,22 @@ export function ConflictEditorModal({ onClose, onComplete }: Props) {
   const doneC = files.reduce((s, f) => s + f.conflicts.filter(c => c.resolved).length, 0)
   const allDone = doneC === totalC
 
+  const choiceLabel: Record<string, string> = { ours: '내 변경', theirs: '상대 변경', both: '둘 다' }
+
   return (
     <div className="modal-bd" onClick={onClose}>
       <div style={{ background: 'var(--c-bg-surface)', border: '1px solid var(--c-border)', borderRadius: 8, width: 720, height: 520, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,.65)', animation: 'mslide 200ms cubic-bezier(.2,.8,.2,1)' }}
         onClick={e => e.stopPropagation()}>
         <div className="modal-hdr">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 16, color: 'var(--c-danger)' }}>⚡</span>
-            <h3>Resolve Conflicts</h3>
-            <span style={{ fontSize: 11, color: 'var(--c-text-muted)', marginLeft: 4 }}>{doneC}/{totalC} resolved</span>
+            <h3>충돌 해결</h3>
+            <span style={{ fontSize: 11, color: 'var(--c-text-muted)', marginLeft: 4 }}>{doneC}/{totalC} 해결됨</span>
           </div>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <div className="cfl-files">
-            <div style={{ padding: '6px 12px 4px', fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)', borderBottom: '1px solid var(--c-divider)' }}>Files</div>
+            <div style={{ padding: '6px 12px 4px', fontSize: 10, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)', borderBottom: '1px solid var(--c-divider)' }}>파일</div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
               {files.map((f, fi) => {
                 const remaining = f.conflicts.filter(c => !c.resolved).length
@@ -57,23 +58,23 @@ export function ConflictEditorModal({ onClose, onComplete }: Props) {
               {files[selFile]?.conflicts.map((c, ci) => (
                 <div key={c.id} className={`cfl-block${c.resolved ? ' ok' : ''}`}>
                   <div className="cfl-block-hdr">
-                    <span>Conflict {ci + 1}</span>
-                    {c.resolved && <span style={{ color: 'var(--c-success)', fontSize: 10 }}>✓ {c.choice}</span>}
+                    <span>충돌 {ci + 1}</span>
+                    {c.resolved && c.choice && <span style={{ color: 'var(--c-success)', fontSize: 10 }}>✓ {choiceLabel[c.choice] ?? c.choice}</span>}
                   </div>
                   <div className="cfl-ours">
-                    <div className="cfl-side-hdr" style={{ color: 'var(--c-danger)' }}>◀ HEAD (ours)</div>
+                    <div className="cfl-side-hdr" style={{ color: 'var(--c-danger)' }}>◀ 내 변경 · HEAD</div>
                     <div className="cfl-code">{c.ours.map((l, i) => <div key={i}>{l || ' '}</div>)}</div>
                   </div>
                   <div className="cfl-divider" />
                   <div className="cfl-theirs">
-                    <div className="cfl-side-hdr" style={{ color: 'var(--c-success)' }}>▶ Incoming (theirs)</div>
+                    <div className="cfl-side-hdr" style={{ color: 'var(--c-success)' }}>▶ 들어오는 변경 · theirs</div>
                     <div className="cfl-code">{c.theirs.map((l, i) => <div key={i}>{l || ' '}</div>)}</div>
                   </div>
                   {!c.resolved && (
                     <div className="cfl-actions">
-                      <button className="cfl-btn cfl-btn-ours" onClick={() => resolve(selFile, c.id, 'ours')}>◀ Use ours</button>
-                      <button className="cfl-btn cfl-btn-theirs" onClick={() => resolve(selFile, c.id, 'theirs')}>▶ Use theirs</button>
-                      <button className="cfl-btn cfl-btn-both" onClick={() => resolve(selFile, c.id, 'both')}>Use both</button>
+                      <button className="cfl-btn cfl-btn-ours" onClick={() => resolve(selFile, c.id, 'ours')}>◀ 내 변경 사용</button>
+                      <button className="cfl-btn cfl-btn-theirs" onClick={() => resolve(selFile, c.id, 'theirs')}>▶ 상대 변경 사용</button>
+                      <button className="cfl-btn cfl-btn-both" onClick={() => resolve(selFile, c.id, 'both')}>둘 다 사용</button>
                     </div>
                   )}
                 </div>
@@ -82,10 +83,10 @@ export function ConflictEditorModal({ onClose, onComplete }: Props) {
             <div className="cfl-footer">
               <div className="cfl-progress"><div className="cfl-progress-bar" style={{ width: `${totalC ? Math.round(doneC / totalC * 100) : 0}%` }} /></div>
               <span style={{ fontSize: 11, color: 'var(--c-text-muted)', flexShrink: 0, minWidth: 32 }}>{doneC}/{totalC}</span>
-              <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
+              <button className="mbtn-cancel" onClick={onClose}>취소</button>
               <button className="mbtn-ok" disabled={!allDone} onClick={() => { onComplete?.(); onClose() }}
                 style={!allDone ? { opacity: .4, cursor: 'not-allowed' } : {}}>
-                {allDone ? 'Complete Merge →' : `${totalC - doneC} left`}
+                {allDone ? '머지 완료 →' : `${totalC - doneC}개 남음`}
               </button>
             </div>
           </div>

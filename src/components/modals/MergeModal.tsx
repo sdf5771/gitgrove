@@ -40,17 +40,20 @@ export function MergeModal({ onClose, onSuccess, branches, repoPath, currentBran
   }
 
   const strategies = [
-    ['merge', 'Merge commit', 'Creates a merge commit · preserves full branch history'],
-    ['rebase', 'Rebase', 'Reapplies commits on top of target · linear history'],
-    ['squash', 'Squash merge', 'Combines all commits into one · clean trunk history'],
+    ['merge', '머지 커밋', '머지 커밋을 만들어요 · 브랜치 히스토리 보존'],
+    ['rebase', '리베이스', '대상 위에 커밋을 다시 얹어요 · 선형 히스토리'],
+    ['squash', '스쿼시 머지', '커밋을 하나로 합쳐요 · 깔끔한 트렁크 히스토리'],
   ] as const
+
+  const doneLabel = { merge: '머지 완료', rebase: '리베이스 완료', squash: '스쿼시 완료' }[strategy]
+  const runLabel = { merge: '머지', rebase: '리베이스', squash: '스쿼시' }[strategy]
 
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
 
   return (
-    <ModalShell title="Merge / Rebase" width={440} onClose={onClose} icon={icon}>
+    <ModalShell title="머지 · 리베이스" width={440} onClose={onClose} icon={icon}>
       {isDone ? (
-        <SuccessState msg={`${strategy.charAt(0).toUpperCase() + strategy.slice(1)} complete`}
+        <SuccessState msg={doneLabel}
           sub={<><strong style={{ color: 'var(--c-text)' }}>{from}</strong> → <strong style={{ color: 'var(--c-text)' }}>{target}</strong></>} />
       ) : (
         <>
@@ -61,17 +64,17 @@ export function MergeModal({ onClose, onSuccess, branches, repoPath, currentBran
               </div>
             )}
             <div className="mfield">
-              <label>Into</label>
+              <label>대상</label>
               <div className="mval"><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e6a536', flexShrink: 0, display: 'inline-block' }} />{target}</div>
             </div>
             <div className="mfield">
-              <label>From</label>
+              <label>가져올 브랜치</label>
               <select className="mselect" value={from} onChange={e => setFrom(e.target.value)}>
                 {opts.map(b => <option key={b.name} value={b.name}>{b.name}</option>)}
               </select>
             </div>
             <div className="mfield">
-              <label>Strategy</label>
+              <label>방식</label>
               <div className="mradio-group">
                 {strategies.map(([val, title, desc]) => (
                   <div key={val} className={`mradio${strategy === val ? ' on' : ''}`} onClick={() => setStrategy(val)}>
@@ -83,15 +86,15 @@ export function MergeModal({ onClose, onSuccess, branches, repoPath, currentBran
             </div>
             <div className="minfo">
               <span className="minfo-icon">ℹ</span>
-              <span>Commits from <strong style={{ color: 'var(--c-text-strong)' }}>{from}</strong> → <strong style={{ color: 'var(--c-text-strong)' }}>{target}</strong></span>
+              <span><strong style={{ color: 'var(--c-text-strong)' }}>{from}</strong> → <strong style={{ color: 'var(--c-text-strong)' }}>{target}</strong> 로 커밋을 가져와요</span>
             </div>
           </div>
           <div className="modal-footer">
-            <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
+            <button className="mbtn-cancel" onClick={onClose}>취소</button>
             <button className={`mbtn-ok${doing ? ' doing' : ''}`} onClick={execute} disabled={doing}>
               {doing
-                ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Running…</span>
-                : `${strategy === 'merge' ? 'Merge' : strategy === 'rebase' ? 'Rebase' : 'Squash'} →`}
+                ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>진행 중…</span>
+                : `${runLabel} →`}
             </button>
           </div>
         </>
