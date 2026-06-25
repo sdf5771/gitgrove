@@ -1371,6 +1371,27 @@ ipcMain.handle('git:merge-state', async (_event, repoPath: string): Promise<Merg
   return { op, conflictedCount }
 })
 
+// continue 명령용 환경변수 구성. 현재 환경을 물려받되 GIT_EDITOR/GIT_SEQUENCE_EDITOR
+// 를 true 로 강제해 에디터/시퀀스 에디터가 뜨지 않게 한다.
+// simple-git 의 unsafe 검사는 .env() 로 넘긴 env 전체를 훑어 GIT_PAGER·GIT_ASKPASS·
+// GIT_SSH_COMMAND 등 '위험' 키가 (의도와 무관하게) 상속돼 있으면 차단하므로,
+// 우리가 의도적으로 설정하는 에디터 키를 제외한 위험 상속 키들을 미리 제거한다.
+const UNSAFE_INHERITED_ENV_KEYS = [
+  'EDITOR', 'GIT_EDITOR', 'GIT_SEQUENCE_EDITOR',
+  'PAGER', 'GIT_PAGER',
+  'GIT_ASKPASS', 'SSH_ASKPASS',
+  'GIT_SSH', 'GIT_SSH_COMMAND',
+  'GIT_CONFIG', 'GIT_CONFIG_GLOBAL', 'GIT_CONFIG_SYSTEM', 'GIT_CONFIG_COUNT',
+  'GIT_EXEC_PATH', 'GIT_EXTERNAL_DIFF', 'GIT_PROXY_COMMAND', 'GIT_TEMPLATE_DIR', 'PREFIX',
+]
+function buildNoEditorEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env }
+  for (const key of UNSAFE_INHERITED_ENV_KEYS) delete env[key]
+  env.GIT_EDITOR = 'true'
+  env.GIT_SEQUENCE_EDITOR = 'true'
+  return env
+}
+
 // git:continue — 진행중 작업 완료. 에디터 회피(GIT_EDITOR=true / --no-edit). git 에러는 graceful 반환.
 //   실행 전 unmerged 파일이 남아 있으면 {ok:false, conflict:true}. op 없으면 {ok:false, error}.
 ipcMain.handle('git:continue', async (_event, repoPath: string): Promise<ContinueResult> => {
@@ -1407,17 +1428,24 @@ ipcMain.handle('git:continue', async (_event, repoPath: string): Promise<Continu
     // status 실패 시에는 continue 시도로 넘어가 git 에러를 그대로 노출.
   }
 
-  // op 별 continue 명령. 에디터 안 뜨게 -c core.editor=true(+ merge 는 --no-edit).
-  // -c core.editor=true 는 GIT_EDITOR=true 와 동등하게 에디터 호출을 즉시 종료시킨다.
-  const noEditor = ['-c', 'core.editor=true']
+  // op 별 continue 명령. 에디터 회피는 -c core.editor 대신 환경변수로 처리한다.
+  // (simple-git 은 -c core.editor=... 인자를 allowUnsafeEditor 없이는 차단함.)
+  // GIT_EDITOR=true 로 에디터 호출을 즉시 종료시키고, rebase 의 todo 에디터는
+  // GIT_SEQUENCE_EDITOR=true 로 회피한다. merge 는 --no-edit 도 함께 유지.
   let args: string[]
-  if (op === 'merge') args = [...noEditor, 'commit', '--no-edit']
-  else if (op === 'rebase') args = [...noEditor, 'rebase', '--continue']
-  else if (op === 'cherry-pick') args = [...noEditor, 'cherry-pick', '--continue']
-  else args = [...noEditor, 'revert', '--continue']
+  if (op === 'merge') args = ['commit', '--no-edit']
+  else if (op === 'rebase') args = ['rebase', '--continue']
+  else if (op === 'cherry-pick') args = ['cherry-pick', '--continue']
+  else args = ['revert', '--continue']
 
   try {
-    await git.raw(args)
+    await simpleGit({
+      baseDir: repoPath,
+      // GIT_EDITOR / GIT_SEQUENCE_EDITOR 를 의도적으로 주입하므로 editor 검사 허용.
+      unsafe: { allowUnsafeEditor: true },
+    })
+      .env(buildNoEditorEnv())
+      .raw(args)
     return { ok: true }
   } catch (err: unknown) {
     // git 에러는 throw 말고 graceful 반환(stderr/message).
