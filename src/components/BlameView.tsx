@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { BLAME_LINES, type BlameLine, type Commit } from '../data/mockData'
+import { type Commit } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
 
 // IPC에서 반환되는 blame 라인 타입 (electron-env.d.ts의 GitBlameLine과 동일)
@@ -32,17 +32,6 @@ function fromRealBlameLine(line: RealBlameLine): DisplayLine {
   }
 }
 
-function fromMockBlameLine(line: BlameLine): DisplayLine {
-  return {
-    lineNum: line.n,
-    hash: line.hash,
-    author: line.au,
-    ac: line.ac,
-    timeAgo: line.t,
-    content: line.c,
-  }
-}
-
 interface Props {
   onSelectCommit: (i: number) => void
   repoPath?: string | null
@@ -69,13 +58,11 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
       .finally(() => setLoading(false))
   }, [repoPath, filePath])
 
-  // 실제 데이터가 있으면 사용. 실 레포(repoPath)에서는 데이터가 없어도
-  // mock으로 대체하지 않는다 (가짜 blame이 실데이터처럼 보이는 것 방지).
-  // 데모 모드(repoPath 없음)에서만 mock fallback 표시.
+  // 실제 데이터만 사용. blame 결과가 없으면 빈 목록(가짜 blame 미표시).
   const displayLines: DisplayLine[] = useMemo(() => {
     if (blameLines.length > 0) return blameLines.map(fromRealBlameLine)
-    return repoPath ? [] : BLAME_LINES.map(fromMockBlameLine)
-  }, [blameLines, repoPath])
+    return []
+  }, [blameLines])
 
   const displayFilePath = filePath ?? ''
 

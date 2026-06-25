@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { RECENT_REPOS, type Repo } from '../../data/mockData'
+import { type Repo } from '../../data/mockData'
 import { ModalShell } from './ModalShell'
 
 interface Props {
@@ -53,7 +53,7 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths, onCloneR
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {(recentPaths && recentPaths.length > 0
                 ? recentPaths.map(r => ({ name: r.name, path: r.path, lastOpened: '' }))
-                : RECENT_REPOS
+                : []
               ).map(r => (
                 <div key={r.path} className="repo-recent" onClick={() => openLocal(r.path)}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
