@@ -23,6 +23,12 @@ import {
   type CloneResult,
 } from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
+import {
+  parseConflicts,
+  reconstruct,
+  looksBinary,
+  type Choice,
+} from '../src/utils/conflictParse'
 import { normalizeDailyCounts, type RepoActivity } from '../src/utils/repoActivity'
 import {
   isAllowedUpdateHost,
@@ -1255,6 +1261,170 @@ ipcMain.handle('git:add-to-gitignore', async (_event, repoPath: string, patterns
   next += toAppend.join('\n') + '\n'
 
   await fsp.writeFile(gitignorePath, next, 'utf8')
+})
+
+// ──────────────────────────────────────────────
+// 머지 충돌 해결 IPC (git:conflicts / git:resolve-conflict / git:merge-state / git:continue)
+// ──────────────────────────────────────────────
+//
+// 실제 git 충돌을 읽어 ConflictEditorModal 이 소비. 파일 쓰기·커밋을 동반하는
+// 파괴적 연산이므로 비충돌 영역 손상 0(정확한 재구성)·실패 시 부분 상태 금지를 원칙으로 한다.
+// 충돌 파싱/재구성 로직은 src/utils/conflictParse.ts(순수 함수, 테스트 대상)에 둔다.
+
+// repoPath 하위 경로 검증(.. 트래버설 / 절대경로 탈출 차단). git 이 준 상대경로 기준.
+function resolveInsideRepo(repoPath: string, file: string): string | null {
+  const repoRoot = path.resolve(repoPath)
+  const abs = path.resolve(repoRoot, file)
+  const relFromRoot = path.relative(repoRoot, abs)
+  if (relFromRoot === '' || relFromRoot.startsWith('..') || path.isAbsolute(relFromRoot)) return null
+  return abs
+}
+
+// git:conflicts — 충돌(unmerged) 파일을 읽어 hunk 목록으로 파싱.
+//   바이너리/읽기 실패 파일은 conflicts:[] 로 graceful 스킵. 충돌 없으면 빈 배열.
+ipcMain.handle('git:conflicts', async (_event, repoPath: string): Promise<ConflictFile[]> => {
+  const git = simpleGit(repoPath)
+  const status = await git.status()
+  const conflicted = extractConflictedFiles(status.conflicted)
+  const result: ConflictFile[] = []
+  for (const file of conflicted) {
+    const abs = resolveInsideRepo(repoPath, file)
+    if (!abs) continue // 트래버설 방어 — 비정상 경로 스킵.
+    try {
+      const content = await fsp.readFile(abs, 'utf8')
+      if (looksBinary(content)) {
+        result.push({ path: file, conflicts: [] })
+        continue
+      }
+      result.push({ path: file, conflicts: parseConflicts(content, file) })
+    } catch {
+      // 읽기 실패(바이너리/권한/삭제 등) → graceful 스킵.
+      result.push({ path: file, conflicts: [] })
+    }
+  }
+  return result
+})
+
+// git:resolve-conflict — 한 파일의 충돌 블록들을 choices 로 치환·재구성 후 원자적 쓰기 → git add.
+//   choices 길이가 실제 충돌 수와 불일치하면 throw(부분 처리 금지). 비충돌 영역 정확 보존.
+ipcMain.handle('git:resolve-conflict', async (_event, repoPath: string, file: string, choices: Array<'ours' | 'theirs' | 'both'>): Promise<void> => {
+  const abs = resolveInsideRepo(repoPath, file)
+  if (!abs) throw new Error('저장소 밖의 경로는 해결할 수 없어요')
+
+  const content = await fsp.readFile(abs, 'utf8')
+
+  // 쓰기 전 검증: 충돌 블록 수와 choices 길이 일치 확인(불일치면 throw — 디스크 미변경).
+  const hunks = parseConflicts(content, file)
+  if (hunks.length !== choices.length) {
+    throw new Error(`충돌 블록 수(${hunks.length})와 선택 수(${choices.length})가 일치하지 않아요`)
+  }
+
+  // 재구성(reconstruct 도 블록 수 불일치/깨진 마커면 throw → 쓰기 전 안전 차단).
+  const next = reconstruct(content, choices as Choice[])
+
+  // 원자적 쓰기: 같은 디렉터리에 temp 파일로 쓴 뒤 rename(부분 쓰기로 깨진 상태 방지).
+  const dir = path.dirname(abs)
+  const tmp = path.join(dir, `.gitgrove-resolve-${process.pid}-${Date.now()}.tmp`)
+  try {
+    await fsp.writeFile(tmp, next, 'utf8')
+    await fsp.rename(tmp, abs)
+  } catch (err) {
+    try { await fsp.rm(tmp, { force: true }) } catch { /* temp 정리 실패 무시 */ }
+    throw err
+  }
+
+  // 기존 stage 로직과 동일하게 git add(해결 완료 표시).
+  await simpleGit(repoPath).add([file])
+})
+
+// git:merge-state — .git 내 진행중 작업(merge/rebase/cherry-pick/revert) 감지 + 현재 unmerged 수.
+ipcMain.handle('git:merge-state', async (_event, repoPath: string): Promise<MergeState> => {
+  const git = simpleGit(repoPath)
+
+  // .git 디렉터리 경로(워크트리/서브모듈 대비 rev-parse 로 정확히 조회).
+  let gitDir: string
+  try {
+    gitDir = (await git.raw(['rev-parse', '--git-dir'])).trim()
+    if (!path.isAbsolute(gitDir)) gitDir = path.resolve(repoPath, gitDir)
+  } catch {
+    gitDir = path.join(repoPath, '.git')
+  }
+
+  const exists = (rel: string): boolean => {
+    try { return fs.existsSync(path.join(gitDir, rel)) } catch { return false }
+  }
+
+  let op: MergeState['op'] = null
+  if (exists('rebase-merge') || exists('rebase-apply')) op = 'rebase'
+  else if (exists('MERGE_HEAD')) op = 'merge'
+  else if (exists('CHERRY_PICK_HEAD')) op = 'cherry-pick'
+  else if (exists('REVERT_HEAD')) op = 'revert'
+
+  let conflictedCount = 0
+  try {
+    const status = await git.status()
+    conflictedCount = extractConflictedFiles(status.conflicted).length
+  } catch {
+    conflictedCount = 0
+  }
+
+  return { op, conflictedCount }
+})
+
+// git:continue — 진행중 작업 완료. 에디터 회피(GIT_EDITOR=true / --no-edit). git 에러는 graceful 반환.
+//   실행 전 unmerged 파일이 남아 있으면 {ok:false, conflict:true}. op 없으면 {ok:false, error}.
+ipcMain.handle('git:continue', async (_event, repoPath: string): Promise<ContinueResult> => {
+  const git = simpleGit(repoPath)
+
+  // 진행중 작업 op 감지(merge-state 와 동일 로직).
+  let gitDir: string
+  try {
+    gitDir = (await git.raw(['rev-parse', '--git-dir'])).trim()
+    if (!path.isAbsolute(gitDir)) gitDir = path.resolve(repoPath, gitDir)
+  } catch {
+    gitDir = path.join(repoPath, '.git')
+  }
+  const exists = (rel: string): boolean => {
+    try { return fs.existsSync(path.join(gitDir, rel)) } catch { return false }
+  }
+  let op: MergeState['op'] = null
+  if (exists('rebase-merge') || exists('rebase-apply')) op = 'rebase'
+  else if (exists('MERGE_HEAD')) op = 'merge'
+  else if (exists('CHERRY_PICK_HEAD')) op = 'cherry-pick'
+  else if (exists('REVERT_HEAD')) op = 'revert'
+
+  if (op === null) {
+    return { ok: false, error: '진행 중인 작업이 없어요' }
+  }
+
+  // 충돌이 남아 있으면 continue 금지(아직 해결 안 됨).
+  try {
+    const status = await git.status()
+    if (extractConflictedFiles(status.conflicted).length > 0) {
+      return { ok: false, conflict: true }
+    }
+  } catch {
+    // status 실패 시에는 continue 시도로 넘어가 git 에러를 그대로 노출.
+  }
+
+  // op 별 continue 명령. 에디터 안 뜨게 -c core.editor=true(+ merge 는 --no-edit).
+  // -c core.editor=true 는 GIT_EDITOR=true 와 동등하게 에디터 호출을 즉시 종료시킨다.
+  const noEditor = ['-c', 'core.editor=true']
+  let args: string[]
+  if (op === 'merge') args = [...noEditor, 'commit', '--no-edit']
+  else if (op === 'rebase') args = [...noEditor, 'rebase', '--continue']
+  else if (op === 'cherry-pick') args = [...noEditor, 'cherry-pick', '--continue']
+  else args = [...noEditor, 'revert', '--continue']
+
+  try {
+    await git.raw(args)
+    return { ok: true }
+  } catch (err: unknown) {
+    // git 에러는 throw 말고 graceful 반환(stderr/message).
+    const e = err as { message?: string; stderr?: string }
+    const msg = (e.stderr && e.stderr.trim()) || (e.message && e.message.trim()) || '작업을 완료하지 못했어요'
+    return { ok: false, error: msg }
+  }
 })
 
 // ──────────────────────────────────────────────

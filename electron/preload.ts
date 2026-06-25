@@ -127,4 +127,9 @@ contextBridge.exposeInMainWorld('gitAPI', {
   openPath: (absPath: string) => ipcRenderer.invoke('git:open-path', absPath) as Promise<{ ok: boolean; error?: string }>,
   discardChanges: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:discard', repoPath, files) as Promise<void>,
   addToGitignore: (repoPath: string, patterns: string[]) => ipcRenderer.invoke('git:add-to-gitignore', repoPath, patterns) as Promise<void>,
+  // 머지 충돌 해결 (ConflictEditorModal)
+  getConflicts: (repoPath: string) => ipcRenderer.invoke('git:conflicts', repoPath) as Promise<ConflictFile[]>,
+  resolveConflict: (repoPath: string, file: string, choices: Array<'ours' | 'theirs' | 'both'>) => ipcRenderer.invoke('git:resolve-conflict', repoPath, file, choices) as Promise<void>,
+  getMergeState: (repoPath: string) => ipcRenderer.invoke('git:merge-state', repoPath) as Promise<MergeState>,
+  continueMerge: (repoPath: string) => ipcRenderer.invoke('git:continue', repoPath) as Promise<ContinueResult>,
 })

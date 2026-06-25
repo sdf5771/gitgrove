@@ -130,6 +130,36 @@ interface RepoActivity {
 }
 
 // ──────────────────────────────────────────────
+// 머지 충돌 해결 IPC 공유 타입 (ConflictEditorModal 이 소비)
+// ──────────────────────────────────────────────
+
+// 한 충돌 블록(hunk). ours/theirs 는 줄 배열(EOL 제외). diff3 base 섹션은 무시됨.
+interface ConflictHunk {
+  id: string        // `${path}#${i}` 형식 (파일 내 블록 순번)
+  ours: string[]    // <<<<<<< ~ (||||||| 또는 =======) 사이의 줄
+  theirs: string[]  // ======= ~ >>>>>>> 사이의 줄
+}
+
+// 충돌 파일 1개. 바이너리/읽기 실패 파일은 conflicts:[] (graceful 스킵).
+interface ConflictFile {
+  path: string            // repo 루트 상대경로(git 이 준 경로)
+  conflicts: ConflictHunk[]
+}
+
+// 진행중 머지/리베이스 류 작업 상태.
+interface MergeState {
+  op: 'merge' | 'rebase' | 'cherry-pick' | 'revert' | null
+  conflictedCount: number // 현재 unmerged 파일 수
+}
+
+// git:continue 결과. ok=true 면 완료. conflict=true 면 아직 충돌 남음. error 면 git 실패/진행작업 없음.
+interface ContinueResult {
+  ok: boolean
+  conflict?: boolean
+  error?: string
+}
+
+// ──────────────────────────────────────────────
 // Window 타입 보강
 // ──────────────────────────────────────────────
 
@@ -225,5 +255,15 @@ interface Window {
     discardChanges: (repoPath: string, files: string[]) => Promise<void>
     // <repoPath>/.gitignore 에 patterns의 각 줄을 중복(trim 비교) 제외하고 append(없으면 생성).
     addToGitignore: (repoPath: string, patterns: string[]) => Promise<void>
+    // 머지 충돌 해결 (ConflictEditorModal)
+    // 충돌(unmerged) 파일을 읽어 hunk 목록으로 파싱. 바이너리/읽기 실패는 conflicts:[]. 충돌 없으면 [].
+    getConflicts: (repoPath: string) => Promise<ConflictFile[]>
+    // 한 파일의 충돌 블록을 choices('ours'|'theirs'|'both')로 치환·재구성 후 원자적 쓰기 → git add.
+    // choices 길이가 실제 충돌 수와 불일치하면 reject(부분 처리 금지). 비충돌 영역 정확 보존.
+    resolveConflict: (repoPath: string, file: string, choices: Array<'ours' | 'theirs' | 'both'>) => Promise<void>
+    // 진행중 작업(merge/rebase/cherry-pick/revert) 감지 + 현재 unmerged 파일 수.
+    getMergeState: (repoPath: string) => Promise<MergeState>
+    // 진행중 작업 완료(에디터 회피). 충돌 남으면 {ok:false,conflict:true}. git 실패는 {ok:false,error}.
+    continueMerge: (repoPath: string) => Promise<ContinueResult>
   }
 }
