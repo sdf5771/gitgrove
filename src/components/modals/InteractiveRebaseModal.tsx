@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { COMMITS, type Commit } from '../../data/mockData'
+import { type Commit } from '../../data/mockData'
 import { ModalShell, SuccessState } from './ModalShell'
 
 type Action = 'pick' | 'squash' | 'fixup' | 'edit' | 'drop'
@@ -14,8 +14,8 @@ interface Props {
 
 export function InteractiveRebaseModal({ onClose, onSuccess, repoPath, commits, currentBranch }: Props) {
   const ACTIONS: Action[] = ['pick', 'squash', 'fixup', 'edit', 'drop']
-  const sourceCommits = (commits ?? COMMITS).filter(c => c.lane === 0).slice(0, 6)
-  const baseHash = (commits ?? COMMITS).filter(c => c.lane === 0)[6]?.id ?? 'unknown'
+  const sourceCommits = (commits ?? []).filter(c => c.lane === 0).slice(0, 6)
+  const baseHash = (commits ?? []).filter(c => c.lane === 0)[6]?.id ?? 'unknown'
 
   const [items, setItems] = useState(() =>
     sourceCommits.map(c => ({ ...c, action: 'pick' as Action }))

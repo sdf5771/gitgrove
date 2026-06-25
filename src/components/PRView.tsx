@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import { PR_DATA } from '../data/mockData'
 import type { PullRequest } from '../data/mockData'
 import { FilePath } from './FilePath'
 import { Markdown } from './Markdown'
@@ -138,7 +137,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
     )
   }
 
-  const prData = realPRs ?? PR_DATA
+  const prData = realPRs ?? []
 
   // ghInfo가 로드됐지만 PR이 없는 경우 (빈 배열)
   const openCount = prData.filter(p => p.status === 'open').length

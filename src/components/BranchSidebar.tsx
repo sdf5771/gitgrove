@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LOCAL_BRANCHES, REMOTE_BRANCHES, LANE_COLORS, type Branch } from '../data/mockData'
+import { LANE_COLORS, type Branch } from '../data/mockData'
 import { Tree } from './Tree'
 import { Geuru, type GeuruExpr } from './Geuru'
 import { BranchSkeletons } from './SwitchSkeletons'
@@ -127,9 +127,9 @@ export function BranchSidebar({
     persistView(v)
   }
 
-  const localList = localBranches ?? LOCAL_BRANCHES
-  const remoteList = remoteBranches ?? REMOTE_BRANCHES.map(b => b.name)
-  const tagList = tags ?? ['v1.0.0', 'v0.9.2']
+  const localList = localBranches ?? []
+  const remoteList = remoteBranches ?? []
+  const tagList = tags ?? []
 
   const filteredLocal = query
     ? localList.filter(b => b.name.toLowerCase().includes(query.toLowerCase()))

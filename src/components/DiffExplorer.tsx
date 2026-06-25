@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { COMMITS, type Commit } from '../data/mockData'
+import { type Commit } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
 import { sideBySide } from '../utils/sideBySide'
 
@@ -46,9 +46,7 @@ export function DiffExplorer({ commit, repoPath, commitFiles }: Props) {
         ? localFiles
         : commit
           ? commit.files
-          : repoPath
-            ? []
-            : COMMITS[0].files
+          : []
 
   const firstPath = files.length > 0 ? getFilePath(files[0]) : ''
   const [selFile, setSelFile] = useState(firstPath)

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import './App.css'
-import { COMMITS, type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
+import { type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
 import { Geuru, type GeuruExpr } from './components/Geuru'
 
 // ──────────────────────────────────────────────
@@ -1047,7 +1047,9 @@ export default function App() {
   }, [loadRepo])
 
   // ── 표시할 커밋 목록 결정 ──
-  const baseCommits = repoPath ? realCommits : COMMITS
+  // repoPath 없으면 빈 목록(가짜 커밋 미표시). 빈 배열 리터럴을 매 렌더 새로 만들지
+  // 않도록 useMemo로 참조를 안정화한다(아래 filteredCommits useMemo deps 안정).
+  const baseCommits = useMemo(() => (repoPath ? realCommits : []), [repoPath, realCommits])
 
   const filteredCommits = useMemo(() => {
     if (!searchQuery.trim()) return baseCommits
@@ -1733,7 +1735,7 @@ export default function App() {
             onClose={handleCloneModalClose}
           />
         )}
-        {showConflict    && <ConflictEditorModal onClose={() => setShowConflict(false)} onComplete={() => notify(...spread(TOASTS.conflictResolved()))} />}
+        {showConflict    && <ConflictEditorModal repoPath={repoPath} onClose={() => setShowConflict(false)} onComplete={() => notify(...spread(TOASTS.conflictResolved()))} />}
         {showOnboarding  && (
           <Onboarding
             onClose={closeOnboarding}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LOCAL_BRANCHES, type Branch } from '../../data/mockData'
+import { type Branch } from '../../data/mockData'
 import { ModalShell, SuccessState } from './ModalShell'
 
 interface Props {
@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function MergeModal({ onClose, onSuccess, branches, repoPath, currentBranch }: Props) {
-  const opts = (branches ?? LOCAL_BRANCHES).filter(b => !b.current)
+  const opts = (branches ?? []).filter(b => !b.current)
   const [from, setFrom] = useState(opts[0]?.name ?? '')
   const [strategy, setStrategy] = useState<'merge' | 'rebase' | 'squash'>('merge')
   const [doing, setDoing] = useState(false)

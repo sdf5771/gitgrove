@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { LOCAL_BRANCHES, type Branch } from '../../data/mockData'
+import { type Branch } from '../../data/mockData'
 import { ModalShell, SuccessState } from './ModalShell'
 
 type Tab = 'create' | 'rename' | 'delete'
@@ -13,7 +13,7 @@ interface Props {
 }
 
 export function BranchModal({ initialTab = 'create', onClose, onSuccess, branches, repoPath }: Props) {
-  const allBranches = branches ?? LOCAL_BRANCHES
+  const allBranches = branches ?? []
   const nonCurrent = allBranches.filter(b => !b.current)
 
   const [tab, setTab] = useState<Tab>(initialTab)
