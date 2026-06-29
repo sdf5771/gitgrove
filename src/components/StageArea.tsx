@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { FileEntry } from '../data/mockData'
 import { FilePath } from './FilePath'
 import { FileContextMenu, type FileMenuAction } from './FileContextMenu'
@@ -16,6 +16,61 @@ interface Props {
   onTreeChanged?: (toast?: { cls: 'success' | 'error' | 'warning'; title: string; msg: string }) => void | Promise<void>
 }
 
+// 한 파일 = 한 행. 같은 path가 unstaged·staged 양쪽에 있으면 부분 스테이지(partial).
+type StageState = 'unstaged' | 'staged' | 'partial'
+
+interface MergedRow {
+  p: string
+  s: 'M' | 'A' | 'D'   // 상태 글리프(부분이면 working 기준)
+  a: number            // 추가 라인(부분이면 working 기준)
+  d: number            // 삭제 라인(부분이면 working 기준)
+  state: StageState
+  /** working-tree 쪽 엔트리 (미스테이지/부분일 때 존재) — diff·stage 대상 */
+  unstagedEntry?: FileEntry
+  /** index 쪽 엔트리 (스테이지/부분일 때 존재) — staged diff·unstage 대상 */
+  stagedEntry?: FileEntry
+}
+
+// unstaged + staged를 path 기준으로 병합해 단일 행 목록을 만든다.
+// - unstaged만 → 'unstaged', staged만 → 'staged', 둘 다 → 'partial'.
+// - 표시용 s/a/d는 working(unstaged) 우선, 없으면 staged.
+// - path 안정 정렬(상태 무관 한 목록).
+function mergeRows(unstaged: FileEntry[], staged: FileEntry[]): MergedRow[] {
+  const byPath = new Map<string, MergedRow>()
+
+  const ensure = (p: string): MergedRow => {
+    let row = byPath.get(p)
+    if (!row) {
+      row = { p, s: 'M', a: 0, d: 0, state: 'unstaged' }
+      byPath.set(p, row)
+    }
+    return row
+  }
+
+  for (const f of staged) {
+    const row = ensure(f.p)
+    row.stagedEntry = f
+    row.s = f.s; row.a = f.a; row.d = f.d
+    row.state = 'staged'
+  }
+  for (const f of unstaged) {
+    const row = ensure(f.p)
+    row.unstagedEntry = f
+    // working 기준 표시를 우선한다.
+    row.s = f.s; row.a = f.a; row.d = f.d
+    row.state = row.stagedEntry ? 'partial' : 'unstaged'
+  }
+
+  return [...byPath.values()].sort((a, b) => a.p.localeCompare(b.p))
+}
+
+// 행 → diff 표시에 쓸 (FileEntry, staged) 계약. App.onSelDiffFile 시그니처 유지.
+// 미스테이지/부분 → 작업트리(staged=false), 스테이지만 → staged(true).
+function diffTargetOf(row: MergedRow): { file: FileEntry; staged: boolean } {
+  if (row.state === 'staged') return { file: row.stagedEntry as FileEntry, staged: true }
+  return { file: (row.unstagedEntry ?? row.stagedEntry) as FileEntry, staged: false }
+}
+
 export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone, onTreeChanged }: Props) {
   // controlled: props(unstaged/staged)를 단일 소스로 소비하되, stage/unstage 클릭은
   // 즉시 반영(낙관적)을 위해 로컬 state에 담는다. 이후 props가 바뀌면(=loadRepo 확정
@@ -23,8 +78,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
   // 포커스 복귀·커밋·머지/리베이스 등 모든 loadRepo 후 prop 변경이 화면에 반영됨.
   const [unstaged, setUnstaged] = useState<FileEntry[]>(unstagedProp ?? [])
   const [staged, setStaged] = useState<FileEntry[]>(stagedProp ?? [])
-  const [selU, setSelU] = useState<number | null>(null)
-  const [selS, setSelS] = useState<number>(0)
+  const [selPath, setSelPath] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
   const [committing, setCommitting] = useState(false)
 
@@ -35,6 +89,19 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
   // prop이 바뀌면(authoritative loadRepo 결과) 로컬 state를 동기화한다.
   useEffect(() => { setUnstaged(unstagedProp ?? []) }, [unstagedProp])
   useEffect(() => { setStaged(stagedProp ?? []) }, [stagedProp])
+
+  const rows = useMemo(() => mergeRows(unstaged, staged), [unstaged, staged])
+
+  // 커밋 카운트 = 스테이지된 파일 수(완전 스테이지 + 부분). 병합 모델 기준.
+  const stagedCount = useMemo(
+    () => rows.filter(r => r.state === 'staged' || r.state === 'partial').length,
+    [rows],
+  )
+  // 전체 토글(master) 상태: 모두 스테이지면 checked, 하나도 없으면 unchecked, 섞이면 indeterminate.
+  const allState: StageState =
+    stagedCount === 0 ? 'unstaged'
+      : stagedCount === rows.length && rows.every(r => r.state === 'staged') ? 'staged'
+        : 'partial'
 
   const openMenu = (e: React.MouseEvent, f: FileEntry) => {
     e.preventDefault()
@@ -98,33 +165,56 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
     } catch (e) { console.error('discardChanges failed:', e) }
   }
 
-  const stageFile = async (f: FileEntry) => {
+  // 한 파일 전체 스테이지(미스테이지·부분 모두 working 변경을 index로 올림).
+  const stageRow = async (row: MergedRow) => {
     if (repoPath) {
       try {
-        await window.gitAPI?.stage(repoPath, [f.p])
+        await window.gitAPI?.stage(repoPath, [row.p])
       } catch (e) {
         console.error('stage failed:', e)
         return
       }
     }
-    setUnstaged(p => p.filter(x => x.p !== f.p))
-    setStaged(p => [...p, f])
-    setSelS(staged.length)
-    onSelDiffFile(f, true)
+    // working 엔트리를 staged로 합치고, 부분이면 기존 staged 엔트리는 그대로 둔다.
+    setUnstaged(p => p.filter(x => x.p !== row.p))
+    setStaged(p => {
+      const next = p.filter(x => x.p !== row.p)
+      const merged = row.unstagedEntry ?? row.stagedEntry
+      if (merged) next.push(merged)
+      return next
+    })
+    const t = row.unstagedEntry ?? row.stagedEntry
+    if (t) onSelDiffFile(t, true)
   }
 
-  const unstageFile = async (f: FileEntry) => {
+  // 한 파일 전체 언스테이지(index 변경을 working으로 내림).
+  const unstageRow = async (row: MergedRow) => {
     if (repoPath) {
       try {
-        await window.gitAPI?.unstage(repoPath, [f.p])
+        await window.gitAPI?.unstage(repoPath, [row.p])
       } catch (e) {
         console.error('unstage failed:', e)
         return
       }
     }
-    setStaged(p => p.filter(x => x.p !== f.p))
-    setUnstaged(p => [...p, f])
-    onSelDiffFile(f, false)
+    setStaged(p => p.filter(x => x.p !== row.p))
+    setUnstaged(p => {
+      const next = p.filter(x => x.p !== row.p)
+      const merged = row.stagedEntry ?? row.unstagedEntry
+      if (merged) next.push(merged)
+      return next
+    })
+    const t = row.stagedEntry ?? row.unstagedEntry
+    if (t) onSelDiffFile(t, false)
+  }
+
+  // 3상태 체크박스 토글:
+  //  - 미스테이지 → stage(전체) → 체크
+  //  - 부분 → stage(나머지까지) → 완전 스테이지(한 행으로 합쳐짐)
+  //  - 스테이지됨 → unstage → 해제
+  const toggleRow = (row: MergedRow) => {
+    if (row.state === 'staged') unstageRow(row)
+    else stageRow(row)
   }
 
   const stageAll = async () => {
@@ -136,7 +226,12 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         return
       }
     }
-    setStaged(p => [...p, ...unstaged])
+    // path 기준 병합: working 변경을 모두 index로 올림(부분 → 완전).
+    setStaged(prev => {
+      const byPath = new Map(prev.map(f => [f.p, f] as const))
+      for (const f of unstaged) byPath.set(f.p, f)
+      return [...byPath.values()]
+    })
     setUnstaged([])
   }
 
@@ -149,12 +244,22 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         return
       }
     }
-    setUnstaged(p => [...p, ...staged])
+    setUnstaged(prev => {
+      const byPath = new Map(prev.map(f => [f.p, f] as const))
+      for (const f of staged) if (!byPath.has(f.p)) byPath.set(f.p, f)
+      return [...byPath.values()]
+    })
     setStaged([])
   }
 
+  // master 토글: 하나라도 스테이지 안 됐으면(미스테이지/부분 존재) 전체 스테이지, 아니면 전체 해제.
+  const toggleAll = () => {
+    if (allState === 'staged') unstageAll()
+    else stageAll()
+  }
+
   const handleCommit = async () => {
-    if (!msg.trim() || staged.length === 0) return
+    if (!msg.trim() || stagedCount === 0) return
     setCommitting(true)
     try {
       if (repoPath) {
@@ -173,73 +278,46 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
 
   return (
     <div className="stage-wrap">
-      <div className="stage-cols">
-        {/* Unstaged */}
-        <div className="scol">
-          <div className="scol-hdr">
-            <span className="scol-ttl">Unstaged</span>
-            <span className="scnt">{unstaged.length}</span>
-            <button className="sallbtn" onClick={stageAll}>
-              Stage All
-            </button>
-          </div>
-          <div className="sfl">
-            {unstaged.map((f, i) => (
-              <div
-                key={f.p}
-                className={`sfi${selU === i ? ' on' : ''}`}
-                onClick={() => { setSelU(i); onSelDiffFile(f, false) }}
-                onContextMenu={e => openMenu(e, f)}
-              >
-                <button className="sact" onClick={e => { e.stopPropagation(); stageFile(f) }} title="올리기">+</button>
-                <span className={`fst fst-${f.s}`}>{f.s}</span>
-                <FilePath path={f.p} />
-                <span className="fstats">
-                  <span className="fadd">+{f.a}</span>
-                  <span className="fdel">−{f.d}</span>
-                </span>
-              </div>
-            ))}
-            {unstaged.length === 0 && (
-              <div style={{ padding:'20px 12px', color:'var(--c-text-faint)', fontSize:12, textAlign:'center' }}>
-                No unstaged changes
-              </div>
-            )}
-          </div>
+      <div className="slist">
+        <div className="slist-hdr">
+          <Checkbox state={allState} onClick={toggleAll} label="전체 스테이지 토글" />
+          <span className="slist-ttl">변경 파일</span>
+          <span className="scnt">{rows.length}</span>
+          <button className="sallbtn" onClick={toggleAll}>
+            {allState === 'staged' ? '전체 해제' : '전체 스테이지'}
+          </button>
         </div>
-
-        {/* Staged */}
-        <div className="scol">
-          <div className="scol-hdr">
-            <span className="scol-ttl">Staged</span>
-            <span className="scnt">{staged.length}</span>
-            <button className="sallbtn" onClick={unstageAll}>
-              Unstage All
-            </button>
-          </div>
-          <div className="sfl">
-            {staged.map((f, i) => (
+        <div className="sfl">
+          {rows.map(row => {
+            const target = diffTargetOf(row)
+            return (
               <div
-                key={f.p}
-                className={`sfi${selS === i ? ' on' : ''}`}
-                onClick={() => { setSelS(i); onSelDiffFile(f, true) }}
-                onContextMenu={e => openMenu(e, f)}
+                key={row.p}
+                className={`sfi${selPath === row.p ? ' on' : ''}${row.state === 'partial' ? ' partial' : ''}`}
+                onClick={() => { setSelPath(row.p); onSelDiffFile(target.file, target.staged) }}
+                onContextMenu={e => openMenu(e, target.file)}
               >
-                <button className="sact" onClick={e => { e.stopPropagation(); unstageFile(f) }} title="내리기">−</button>
-                <span className={`fst fst-${f.s}`}>{f.s}</span>
-                <FilePath path={f.p} />
+                <Checkbox
+                  state={row.state}
+                  onClick={() => toggleRow(row)}
+                  label={`${row.p} 스테이지 토글`}
+                />
+                <span className={`fst fst-${row.s}`}>{row.s}</span>
+                <FilePath path={row.p} />
+                {row.state === 'partial' && <span className="spart" title="부분 스테이지">부분</span>}
                 <span className="fstats">
-                  <span className="fadd">+{f.a}</span>
-                  <span className="fdel">−{f.d}</span>
+                  <span className="fadd">+{row.a}</span>
+                  <span className="fdel">−{row.d}</span>
                 </span>
               </div>
-            ))}
-            {staged.length === 0 && (
-              <div style={{ padding:'20px 12px', color:'var(--c-text-faint)', fontSize:12, textAlign:'center' }}>
-                No staged files
-              </div>
-            )}
-          </div>
+            )
+          })}
+          {rows.length === 0 && (
+            <div className="sfl-empty">
+              <div>변경된 파일이 없어요</div>
+              <div className="sfl-empty-sub">파일을 고쳐 커밋을 심어 보세요</div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -248,7 +326,7 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         <textarea
           className="cmt-input"
           rows={3}
-          placeholder="Commit message (required)…"
+          placeholder="커밋 메시지 (필수)…"
           value={msg}
           onChange={e => setMsg(e.target.value)}
         />
@@ -262,15 +340,15 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
               onCommitDone?.()
             } catch (e) { console.error('amend failed:', e) }
             finally { setCommitting(false) }
-          }}>↩ Amend</button>
+          }}>↩ 수정 커밋</button>
           <button
             className="cmt-btn"
-            disabled={staged.length === 0 || !msg.trim() || committing}
+            disabled={stagedCount === 0 || !msg.trim() || committing}
             onClick={handleCommit}
           >
             {committing
-              ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Committing…</span>
-              : `Commit ${staged.length} ${staged.length === 1 ? 'file' : 'files'} →`}
+              ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>커밋 중…</span>
+              : `${stagedCount}개 파일 커밋 →`}
           </button>
         </div>
       </div>
@@ -297,5 +375,26 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         />
       )}
     </div>
+  )
+}
+
+// 3상태 체크박스: 'staged'=체크, 'unstaged'=해제, 'partial'=indeterminate.
+// 네이티브 input의 indeterminate는 prop으로 못 줘서 ref로 설정한다.
+function Checkbox({ state, onClick, label }: { state: StageState; onClick: () => void; label: string }) {
+  const ref = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = state === 'partial'
+  }, [state])
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="scheck"
+      checked={state === 'staged'}
+      aria-label={label}
+      aria-checked={state === 'partial' ? 'mixed' : state === 'staged'}
+      readOnly
+      onClick={e => { e.stopPropagation(); onClick() }}
+    />
   )
 }

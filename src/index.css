@@ -345,40 +345,64 @@ body { display: flex; align-items: center; justify-content: center; }
 .fstats { display: flex; gap: 3px; font-family: var(--font-mono); font-size: 10px; flex-shrink: 0; }
 .fadd { color: var(--c-success); } .fdel { color: var(--c-danger); }
 
-/* ── Stage view ── */
+/* ── Stage view (단일 목록 + 파일별 스테이지 토글) ── */
 .stage-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.stage-cols { flex: 1; display: flex; overflow: hidden; }
-.scol { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-.scol + .scol { border-left: 1px solid var(--c-border); }
-.scol-hdr {
-  display: flex; align-items: center; justify-content: space-between;
+.slist { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.slist-hdr {
+  display: flex; align-items: center; gap: 8px;
   padding: 7px 12px; background: var(--c-bg-inset); border-bottom: 1px solid var(--c-border); flex-shrink: 0;
 }
-.scol-ttl { font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--c-text-muted); }
+.slist-ttl { font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--c-text-muted); }
 .scnt {
   font-family: var(--font-display); font-size: 10px; color: var(--c-gold-300);
   background: var(--c-gold-bg); border: 1px solid var(--c-gold-border);
   border-radius: var(--rpill); padding: 1px 7px;
 }
 .sallbtn {
+  margin-left: auto;
   font-size: 11px; color: var(--c-text-muted); background: none; border: 1px solid var(--c-border);
   border-radius: var(--r1); padding: 2px 8px; cursor: pointer; font-family: var(--font-body);
   transition: border-color 120ms, color 120ms;
 }
 .sallbtn:hover { border-color: var(--c-gold-border); color: var(--c-gold-300); }
 .sfl { flex: 1; overflow-y: auto; padding: 3px 0; }
+.sfl-empty { padding: 20px 12px; color: var(--c-text-faint); font-size: 12px; text-align: center; }
+.sfl-empty-sub { margin-top: 4px; color: var(--c-text-faint); opacity: .8; }
 .sfi {
   display: flex; align-items: center; gap: 7px; padding: 6px 12px; cursor: pointer; transition: background 80ms;
 }
 .sfi:hover { background: var(--c-gold-bg-soft); }
 .sfi.on { background: var(--c-gold-bg); }
-.sact {
-  width: 18px; height: 18px; border-radius: 2px; background: var(--c-bg-elevated);
-  border: 1px solid var(--c-border); display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; font-size: 12px; cursor: pointer; color: var(--c-text-muted);
-  transition: background 100ms, border-color 100ms, color 100ms;
+
+/* 3상태 스테이지 체크박스: 체크(완전 스테이지)/해제(미스테이지)/indeterminate(부분) */
+.scheck {
+  appearance: none; -webkit-appearance: none; margin: 0;
+  width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; cursor: pointer; position: relative;
+  background: var(--c-bg-elevated); border: 1px solid var(--c-border);
+  transition: background 100ms, border-color 100ms;
 }
-.sact:hover { background: var(--c-gold-bg); border-color: var(--c-gold-border); color: var(--c-gold-300); }
+.scheck:hover { border-color: var(--c-gold-border); }
+.scheck:checked {
+  background: linear-gradient(180deg, var(--c-gold-400), var(--c-gold-500));
+  border-color: var(--c-gold-border);
+}
+.scheck:checked::after {
+  content: ''; position: absolute; left: 4px; top: 1px; width: 4px; height: 8px;
+  border: solid var(--c-text-on-gold); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.scheck:indeterminate {
+  background: var(--c-gold-bg); border-color: var(--c-gold-border);
+}
+.scheck:indeterminate::after {
+  content: ''; position: absolute; left: 3px; top: 6px; width: 8px; height: 2px;
+  background: var(--c-gold-300); border-radius: 1px;
+}
+/* 부분 스테이지 배지 */
+.spart {
+  font-family: var(--font-body); font-size: 9px; color: var(--c-gold-300);
+  background: var(--c-gold-bg); border: 1px solid var(--c-gold-border);
+  border-radius: var(--rpill); padding: 0 6px; line-height: 14px; flex-shrink: 0;
+}
 
 /* ── Commit area ── */
 .cmt-area {
