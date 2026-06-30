@@ -116,6 +116,16 @@ interface GitStashEntry {
   index: number
   message: string
   branch: string
+  files: number
+  additions: number
+  deletions: number
+}
+
+interface GitStashFile {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R'
+  additions: number
+  deletions: number
 }
 
 // ──────────────────────────────────────────────
@@ -1013,33 +1023,110 @@ ipcMain.handle('git:stash-drop', async (_event, repoPath: string, index: number)
   await git.raw(['stash', 'drop', `stash@{${index}}`])
 })
 
-// List: 스태시 목록 조회
+// List: 스태시 목록 조회 (각 스태시별 파일 수·증감 합계 포함)
 ipcMain.handle('git:stash-list', async (_event, repoPath: string): Promise<GitStashEntry[]> => {
   const git = simpleGit(repoPath)
   const raw = await git.raw(['stash', 'list', '--format=%gd|%s|%D|%ar']).catch(() => '')
-  return raw.trim().split('\n').filter(Boolean).map((line, i) => {
+  const lines = raw.trim().split('\n').filter(Boolean)
+  return Promise.all(lines.map(async (line, i) => {
     const parts = line.split('|')
     const msg = parts[1]?.replace(/^WIP on [^:]+: /, '') ?? ''
     const refs = parts[2] ?? ''
     const time = parts[3]?.trim() ?? ''
     const branchMatch = refs.match(/refs\/heads\/([^\s,]+)/) || msg.match(/^WIP on ([^:]+):/)
+
+    // 스태시별 numstat 합계 — 개별 호출 실패는 0으로 폴백.
+    const numstat = await git.raw(['stash', 'show', '--numstat', `stash@{${i}}`]).catch(() => '')
+    let files = 0
+    let additions = 0
+    let deletions = 0
+    numstat.trim().split('\n').filter(Boolean).forEach((l) => {
+      const [add, del] = l.split('\t')
+      files += 1
+      additions += add === '-' ? 0 : parseInt(add, 10) || 0
+      deletions += del === '-' ? 0 : parseInt(del, 10) || 0
+    })
+
     return {
       index: i,
       message: msg || `stash@{${i}}`,
       branch: branchMatch?.[1] ?? 'unknown',
       time,
+      files,
+      additions,
+      deletions,
     }
-  })
+  }))
 })
 
-// Push: 새 스태시 생성
-ipcMain.handle('git:stash-push', async (_event, repoPath: string, message?: string): Promise<void> => {
+// Files: 스태시별 변경 파일 목록 (numstat + name-status 를 path 기준 병합)
+ipcMain.handle('git:stash-files', async (_event, repoPath: string, index: number): Promise<GitStashFile[]> => {
   const git = simpleGit(repoPath)
-  if (message) {
-    await git.raw(['stash', 'push', '-m', message])
-  } else {
-    await git.raw(['stash', 'push'])
-  }
+  const numstatRaw = await git.raw(['stash', 'show', '--numstat', `stash@{${index}}`]).catch(() => '')
+  const nameStatusRaw = await git.raw(['stash', 'show', '--name-status', `stash@{${index}}`]).catch(() => '')
+
+  // numstat: `add\tdel\tpath` (바이너리는 `-`). path → 증감 매핑.
+  const numMap = new Map<string, { additions: number; deletions: number }>()
+  numstatRaw.trim().split('\n').filter(Boolean).forEach((line) => {
+    const cols = line.split('\t')
+    const add = cols[0] ?? ''
+    const del = cols[1] ?? ''
+    const path = cols.slice(2).join('\t')
+    if (!path) return
+    numMap.set(path, {
+      additions: add === '-' ? 0 : parseInt(add, 10) || 0,
+      deletions: del === '-' ? 0 : parseInt(del, 10) || 0,
+    })
+  })
+
+  // name-status: `M\tpath` / `A\tpath` / `D\tpath` / `R100\told\tnew`.
+  // 이 목록을 기준으로 삼고(상태·경로가 정확), 증감은 numMap 에서 끌어온다.
+  const files: GitStashFile[] = []
+  const seen = new Set<string>()
+  nameStatusRaw.trim().split('\n').filter(Boolean).forEach((line) => {
+    const cols = line.split('\t')
+    const code = cols[0] ?? ''
+    const letter = code.charAt(0)
+    const status: 'M' | 'A' | 'D' | 'R' =
+      letter === 'A' ? 'A' :
+      letter === 'D' ? 'D' :
+      letter === 'R' ? 'R' : 'M'
+    // R 은 [R100, old, new] → new 경로 사용. 그 외는 두 번째 컬럼.
+    const path = status === 'R' ? (cols[2] ?? cols[1] ?? '') : (cols[1] ?? '')
+    if (!path) return
+    seen.add(path)
+    const num = numMap.get(path)
+    files.push({ path, status, additions: num?.additions ?? 0, deletions: num?.deletions ?? 0 })
+  })
+
+  // name-status 에 없고 numstat 에만 있는 경로 보강(rename 결합형 `old => new` 는 제외).
+  numMap.forEach((num, path) => {
+    if (seen.has(path) || path.includes(' => ')) return
+    files.push({ path, status: 'M', additions: num.additions, deletions: num.deletions })
+  })
+
+  return files
+})
+
+// Push: 새 스태시 생성 (keepIndex 시 --keep-index)
+ipcMain.handle('git:stash-push', async (_event, repoPath: string, message?: string, keepIndex?: boolean): Promise<void> => {
+  const git = simpleGit(repoPath)
+  const args = ['stash', 'push']
+  if (keepIndex) args.push('--keep-index')
+  if (message) args.push('-m', message)
+  await git.raw(args)
+})
+
+// Branch: 스태시를 새 브랜치로 적용 (성공 시 해당 스태시 자동 drop)
+ipcMain.handle('git:stash-branch', async (_event, repoPath: string, index: number, branchName: string): Promise<void> => {
+  const git = simpleGit(repoPath)
+  await git.raw(['stash', 'branch', branchName, `stash@{${index}}`])
+})
+
+// File diff: 특정 스태시 안의 한 파일에 대한 unified diff (프리뷰에서 파일 클릭 시 사용)
+ipcMain.handle('git:stash-file-diff', async (_event, repoPath: string, index: number, filePath: string): Promise<string> => {
+  const git = simpleGit(repoPath)
+  return git.raw(['stash', 'show', '-p', `stash@{${index}}`, '--', filePath]).catch(() => '')
 })
 
 // ──────────────────────────────────────────────
