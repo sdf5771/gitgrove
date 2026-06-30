@@ -119,6 +119,16 @@ interface GitStashEntry {
   message: string
   branch: string
   time: string
+  files: number       // 변경 파일 수
+  additions: number   // 추가된 라인 합계
+  deletions: number   // 삭제된 라인 합계
+}
+
+interface GitStashFile {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R'
+  additions: number
+  deletions: number
 }
 
 // Repository Management(RM1) — per-repo 최근 N일 활동 (스파크라인·성장단계·그로브현황).
@@ -234,7 +244,10 @@ interface Window {
     stashApply: (repoPath: string, index: number) => Promise<void>
     stashDrop: (repoPath: string, index: number) => Promise<void>
     stashList: (repoPath: string) => Promise<GitStashEntry[]>
-    stashPush: (repoPath: string, message?: string) => Promise<void>
+    stashFiles: (repoPath: string, index: number) => Promise<GitStashFile[]>
+    stashPush: (repoPath: string, message?: string, keepIndex?: boolean) => Promise<void>
+    stashBranch: (repoPath: string, index: number, branchName: string) => Promise<void>
+    stashFileDiff: (repoPath: string, index: number, filePath: string) => Promise<string>
     stashPop: (repoPath: string, index: number) => Promise<void>
     branchCreate: (repoPath: string, name: string, base: string, checkout: boolean) => Promise<void>
     branchRename: (repoPath: string, from: string, to: string) => Promise<void>

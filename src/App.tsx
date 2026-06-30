@@ -1614,13 +1614,15 @@ export default function App() {
                       repoPath={repoPath}
                       onCommitDone={async () => {
                         if (repoPath) {
-                          await loadRepo(repoPath)
+                          // silent: 전체 화면을 로딩 스피너로 교체하지 않고(깜박임 방지)
+                          // StageArea를 마운트한 채 real* props만 재동기화한다.
+                          await loadRepo(repoPath, { silent: true })
                           notify(...spread(TOASTS.committed()))
                         }
                       }}
                       onTreeChanged={async toast => {
                         if (repoPath) {
-                          await loadRepo(repoPath)
+                          await loadRepo(repoPath, { silent: true })
                           if (toast) notify(toast.cls, toast.title, toast.msg)
                         }
                       }}
