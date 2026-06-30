@@ -134,7 +134,7 @@ describe('StashPanel — pop', () => {
     const before = gitAPI.stashList.mock.calls.length
 
     // 첫 항목(index 0) 자동 선택 상태에서 Pop
-    fireEvent.click(screen.getByRole('button', { name: 'Pop' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Pop' }))
 
     await waitFor(() => expect(gitAPI.stashPop).toHaveBeenCalledWith(REPO, 0))
     await waitFor(() => expect(gitAPI.stashList.mock.calls.length).toBeGreaterThan(before))
@@ -147,7 +147,7 @@ describe('StashPanel — apply', () => {
     await screen.findByText('stash@{1}')
     const before = gitAPI.stashList.mock.calls.length
 
-    fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply' }))
 
     await waitFor(() => expect(gitAPI.stashApply).toHaveBeenCalledWith(REPO, 0))
     // 목록은 그대로 — stashList 재호출 없음, 항목 유지
@@ -163,7 +163,7 @@ describe('StashPanel — 브랜치로', () => {
     const before = gitAPI.stashList.mock.calls.length
 
     // 선택된 stash@{0} 메시지 '결제 폼 검증 #1' → 'stash/결제-폼-검증-1'
-    fireEvent.click(screen.getByRole('button', { name: '브랜치로' }))
+    fireEvent.click(await screen.findByRole('button', { name: '브랜치로' }))
 
     await waitFor(() =>
       expect(gitAPI.stashBranch).toHaveBeenCalledWith(REPO, 0, 'stash/결제-폼-검증-1'),
@@ -177,7 +177,7 @@ describe('StashPanel — drop 확인 플로우', () => {
     const { gitAPI } = setup()
     await screen.findByText('stash@{1}')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Drop' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Drop' }))
     expect(screen.getByText('이 스태시를 버릴까요?')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '취소' }))
@@ -190,7 +190,7 @@ describe('StashPanel — drop 확인 플로우', () => {
     await screen.findByText('stash@{1}')
     const before = gitAPI.stashList.mock.calls.length
 
-    fireEvent.click(screen.getByRole('button', { name: 'Drop' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Drop' }))
     fireEvent.click(screen.getByRole('button', { name: '버리기' }))
 
     await waitFor(() => expect(gitAPI.stashDrop).toHaveBeenCalledWith(REPO, 0))
