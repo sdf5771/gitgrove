@@ -126,6 +126,8 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
     fireEvent.mouseDown(screen.getByText('파일 무시 (.gitignore에 추가)'))
     await Promise.resolve(); await Promise.resolve()
     expect(gitAPI.addToGitignore).toHaveBeenCalledWith(REPO, ['secret.env.ts'])
+    // 이미 추적 중인 파일도 status에서 빠지도록 추적 해제까지 호출한다.
+    expect(gitAPI.untrack).toHaveBeenCalledWith(REPO, ['secret.env.ts'])
     expect(onCommitDone).not.toHaveBeenCalled()
     expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
   })
@@ -136,6 +138,8 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
     fireEvent.mouseDown(screen.getByText('이 확장자 무시 · .tsx (.gitignore에 추가)'))
     await Promise.resolve(); await Promise.resolve()
     expect(gitAPI.addToGitignore).toHaveBeenCalledWith(REPO, ['*.tsx'])
+    // 우클릭한 파일이 추적 중이면 함께 추적 해제.
+    expect(gitAPI.untrack).toHaveBeenCalledWith(REPO, ['src/App.tsx'])
     expect(onCommitDone).not.toHaveBeenCalled()
     expect(onTreeChanged).toHaveBeenCalledWith({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
   })

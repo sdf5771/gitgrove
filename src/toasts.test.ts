@@ -40,9 +40,9 @@ describe('TOASTS 팩토리', () => {
     expect(TOASTS.rebased()).toEqual({ type: 'info', title: '리베이스 완료' })
   })
 
-  it('reverted — happy·스테이지 안내 본문', () => {
+  it('reverted — happy·되돌리기 커밋 안내 본문', () => {
     expect(TOASTS.reverted('a1b2c3d')).toEqual({
-      type: 'success', title: '되돌리기 · a1b2c3d', msg: '되돌린 변경을 스테이지에 올렸어요', geuru: 'happy',
+      type: 'success', title: '되돌리기 · a1b2c3d', msg: '되돌리기 커밋을 만들었어요', geuru: 'happy',
     })
   })
 

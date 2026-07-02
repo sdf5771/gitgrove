@@ -248,6 +248,14 @@ export default function App() {
   const [repoPath, setRepoPath] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // ── 초기 부팅 복원 상태 ──
+  // 앱이 완전히 종료되지 않은 상태에서 창을 다시 열면(렌더러 재마운트) 마지막 레포 복원이
+  // silent loadRepo라 isLoading=false인데 repoPath는 아직 null → 빈 상태("레포지토리를
+  // 열어주세요")가 깜박인다. 복원할 lastRepoPath가 있으면 booting=true로 두고 repoPath가
+  // 채워질 때까지 빈 상태 대신 로딩 화면을 보여준다.
+  const [booting, setBooting] = useState(() => {
+    try { return !!localStorage.getItem(STORAGE_KEYS.lastRepoPath) } catch { return false }
+  })
   // ── 전환 로딩 상태 ──
   // 탭 전환은 loadRepo(...,{silent:true})라 setIsLoading을 건너뛴다(이전 화면 유지).
   // 전환 중에도 피드백을 주되 전면 로딩 대신 스켈레톤을 띄우기 위한 별도 플래그.
@@ -734,15 +742,27 @@ export default function App() {
           if (!ok) {
             try { localStorage.removeItem(STORAGE_KEYS.lastRepoPath) } catch { /* ignore */ }
             if (reposRef.current.length === 0) setShowRepoManager(true)
+            setBooting(false) // 복원 실패 → 로딩 화면 해제(빈 상태/매니저로)
           }
         })
       }
       return
     }
     // 복원할 레포가 전혀 없으면(최초 실행/모두 닫힌 상태) 리포지토리 매니저를 랜딩 화면으로.
+    setBooting(false)
     if (list.length === 0) setShowRepoManager(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // 마운트 시 1회만
+
+  // 복원이 끝나 repoPath가 채워지면 부팅 로딩을 푼다(메인 뷰가 그려진다).
+  useEffect(() => { if (repoPath) setBooting(false) }, [repoPath])
+
+  // 안전장치: 복원이 어떤 이유로 끝나지 않아도 로딩 화면에 갇히지 않게 한다.
+  useEffect(() => {
+    if (!booting) return
+    const t = setTimeout(() => setBooting(false), 8000)
+    return () => clearTimeout(t)
+  }, [booting])
 
   // ── 새 버전 알림 + 상시 인디케이터 상태(UP2) ──
   // onUpdateAvailable 페이로드를 앱 레벨 상태로 보관(1회성 토스트로만 소비하지 않음).
@@ -1492,7 +1512,7 @@ export default function App() {
             onOpenGitlabSettings={() => { setSettingsTab('gitlab'); setShowSettings(true) }}
             notify={notify}
           />
-        ) : isLoading ? renderLoading() : !repoPath ? renderEmptyState() : (
+        ) : (isLoading || (booting && !repoPath)) ? renderLoading() : !repoPath ? renderEmptyState() : (
           <>
             <BranchSidebar
               activeBranch={activeBranch}

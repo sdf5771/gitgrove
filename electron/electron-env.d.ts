@@ -268,6 +268,9 @@ interface Window {
     discardChanges: (repoPath: string, files: string[]) => Promise<void>
     // <repoPath>/.gitignore 에 patterns의 각 줄을 중복(trim 비교) 제외하고 append(없으면 생성).
     addToGitignore: (repoPath: string, patterns: string[]) => Promise<void>
+    // 인덱스에서 파일 추적 해제(`git rm --cached`). 워킹트리 파일은 유지. 미추적 파일은 no-op.
+    // .gitignore 추가 후 이미 추적 중인 파일을 status에서 실제로 제거하기 위해 함께 호출.
+    untrack: (repoPath: string, files: string[]) => Promise<void>
     // 머지 충돌 해결 (ConflictEditorModal)
     // 충돌(unmerged) 파일을 읽어 hunk 목록으로 파싱. 바이너리/읽기 실패는 conflicts:[]. 충돌 없으면 [].
     getConflicts: (repoPath: string) => Promise<ConflictFile[]>
