@@ -126,6 +126,17 @@ interface GitStashEntry {
   deletions: number   // 삭제된 라인 합계
 }
 
+interface SshKeyEntry {
+  name: string                 // .pub 제외 파일명(예: id_ed25519)
+  pubPath: string
+  privExists: boolean          // 개인키 짝 존재 여부
+  type: string                 // ED25519 / RSA 4096 / ECDSA …
+  fingerprint: string          // SHA256:…
+  comment: string
+  publicKey: string            // .pub 전체(복사용)
+  hasPassphrase: boolean | null // 패스프레이즈 여부(확인 불가면 null)
+}
+
 interface GitTagEntry {
   name: string
   annotated: boolean          // 주석 태그 vs 경량 태그
@@ -213,6 +224,11 @@ interface Window {
     gitlabGetToken: (host: string) => Promise<string | null>
     gitlabListHosts: () => Promise<string[]>
     gitlabRemoveToken: (host: string) => Promise<boolean>
+    // SSH 키 관리 (인증 관리자) — 모든 파일 접근은 ~/.ssh 하위로 제한, 셸 미경유.
+    sshKeys: () => Promise<SshKeyEntry[]>
+    sshTest: (host: string) => Promise<{ ok: boolean; message: string }>
+    sshGenerate: (name: string, passphrase?: string, comment?: string) => Promise<{ name: string; publicKey: string }>
+    sshDelete: (name: string) => Promise<void>
     // OS 네이티브 알림 / Dock (기능 B). 렌더러가 신규 알림 감지 시 호출.
     // showNotification: title/body 표시, silent로 무음, sound는 macOS 시스템 사운드 이름('Glass' 등).
     //   알림 클릭 시 메인 윈도우를 앞으로 가져옴. 미지원 환경은 graceful no-op.

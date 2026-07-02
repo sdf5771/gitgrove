@@ -40,6 +40,7 @@ import { MergeModal } from './components/modals/MergeModal'
 import { CherryPickModal } from './components/modals/CherryPickModal'
 import { StashPanel } from './components/modals/StashPanel'
 import { TagPanel } from './components/modals/TagPanel'
+import { AuthManagerModal } from './components/modals/AuthManagerModal'
 import { BranchModal } from './components/modals/BranchModal'
 import { InteractiveRebaseModal } from './components/modals/InteractiveRebaseModal'
 import { SettingsPanel, type SettingsTab } from './components/modals/SettingsPanel'
@@ -329,6 +330,7 @@ export default function App() {
   const [showCherryPick, setShowCherryPick] = useState(false)
   const [showStash,      setShowStash]      = useState(false)
   const [showTags,       setShowTags]       = useState(false)
+  const [showAuth,       setShowAuth]       = useState(false)
   const [showBranch,     setShowBranch]     = useState(false)
   const [branchTab,      setBranchTab]      = useState<BranchTab>('create')
   const [showRebase,     setShowRebase]     = useState(false)
@@ -1223,6 +1225,7 @@ export default function App() {
         else if (showCherryPick) setShowCherryPick(false)
         else if (showStash) setShowStash(false)
         else if (showTags) setShowTags(false)
+        else if (showAuth) setShowAuth(false)
         else if (showBranch) setShowBranch(false)
         else if (showRebase) setShowRebase(false)
         else if (showSettings) setShowSettings(false)
@@ -1237,7 +1240,7 @@ export default function App() {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
+  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showAuth, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
 
   // ── 히스토리 뷰: 방향키 위/아래로 커밋 선택, Enter로 해당 커밋 Diff 열기 ──
   useEffect(() => {
@@ -1247,7 +1250,7 @@ export default function App() {
       const t = e.target as HTMLElement | null
       if (t && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showBranch ||
+      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showAuth || showBranch ||
           showRebase || showSettings || showAddRepo || showConflict || showRepoManager) return
       const n = filteredCommits.length
       if (n === 0) return
@@ -1268,7 +1271,7 @@ export default function App() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [view, filteredCommits, selIdx, handleSelectCommit, showCmd, ctxMenu, showMerge,
-      showCherryPick, showStash, showTags, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
+      showCherryPick, showStash, showTags, showAuth, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
 
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
@@ -1278,6 +1281,7 @@ export default function App() {
       'merge':         () => setShowMerge(true),
       'stash':         () => setShowStash(true),
       'tags':          () => setShowTags(true),
+      'auth':          () => setShowAuth(true),
       'cherry':        () => setShowCherryPick(true),
       'rebase':        () => setShowRebase(true),
       'conflict':      () => setShowConflict(true),
@@ -1841,6 +1845,7 @@ export default function App() {
         />}
         {showStash       && <StashPanel onClose={() => setShowStash(false)} repoPath={repoPath} currentBranch={activeBranch} />}
         {showTags        && <TagPanel onClose={() => setShowTags(false)} repoPath={repoPath} commits={baseCommits} onChanged={() => { if (repoPath) loadRepo(repoPath, { silent: true }) }} />}
+        {showAuth        && <AuthManagerModal onClose={() => setShowAuth(false)} />}
         {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} />}
         {showAddRepo     && (
           <AddRepoModal

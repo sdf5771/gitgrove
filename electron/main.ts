@@ -5,6 +5,8 @@ import os from 'node:os'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import https from 'node:https'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import simpleGit, { CheckRepoActions } from 'simple-git'
 import { categorizeGitStatus } from '../src/utils/gitStatus'
 import {
@@ -1118,6 +1120,123 @@ ipcMain.handle('git:tag-push', async (_event, repoPath: string, tagName: string)
   const name = validateTagName(tagName)
   const git = simpleGit(repoPath)
   await git.raw(['push', 'origin', `refs/tags/${name}`])
+})
+
+// ──────────────────────────────────────────────
+// auth:ssh-* — SSH 키 관리(목록·연결 테스트·생성·삭제)
+// 모든 파일 접근은 ~/.ssh 하위로 제한하고, 셸 미경유(execFile 인자 배열)로 실행한다.
+// ──────────────────────────────────────────────
+
+const execFileP = promisify(execFile)
+const SSH_DIR = path.join(os.homedir(), '.ssh')
+
+interface SshKeyEntry {
+  name: string                 // 파일명(.pub 제외, 예: id_ed25519)
+  pubPath: string
+  privExists: boolean          // 짝이 되는 개인키 파일 존재 여부
+  type: string                 // ED25519 / RSA 4096 / ECDSA …
+  fingerprint: string          // SHA256:…
+  comment: string
+  publicKey: string            // .pub 전체 내용(복사용)
+  hasPassphrase: boolean | null // 개인키 패스프레이즈 여부(확인 불가면 null)
+}
+
+// 경로가 ~/.ssh 하위인지 검증(트래버설 방어).
+function assertUnderSshDir(p: string): string {
+  const resolved = path.resolve(p)
+  if (resolved !== SSH_DIR && !resolved.startsWith(SSH_DIR + path.sep)) {
+    throw new Error('허용되지 않은 경로예요')
+  }
+  return resolved
+}
+
+// 키 이름 방어 — 영숫자·._- 만, 선행 dot·경로 구분자 금지.
+function validateKeyName(name: string): string {
+  const n = (name ?? '').trim()
+  if (!n || n.startsWith('.') || !/^[A-Za-z0-9._-]+$/.test(n)) throw new Error('유효하지 않은 키 이름이에요')
+  return n
+}
+
+// List: ~/.ssh/*.pub 를 열거해 지문·종류·패스프레이즈 여부까지.
+ipcMain.handle('auth:ssh-keys', async (): Promise<SshKeyEntry[]> => {
+  let files: string[]
+  try { files = await fsp.readdir(SSH_DIR) } catch { return [] }
+  const pubs = files.filter(f => f.endsWith('.pub'))
+  const out: SshKeyEntry[] = []
+  for (const pub of pubs) {
+    const pubPath = path.join(SSH_DIR, pub)
+    const name = pub.replace(/\.pub$/, '')
+    let publicKey = ''
+    try { publicKey = (await fsp.readFile(pubPath, 'utf8')).trim() } catch { continue }
+    const parts = publicKey.split(/\s+/)
+    const comment = parts.slice(2).join(' ')
+
+    // 지문·종류 — ssh-keygen -lf "256 SHA256:… comment (ED25519)"
+    let fingerprint = ''
+    let type = ''
+    try {
+      const { stdout } = await execFileP('ssh-keygen', ['-lf', pubPath])
+      const m = stdout.trim().match(/^(\d+)\s+(\S+)\s+.*\(([^)]+)\)\s*$/)
+      if (m) { fingerprint = m[2]; type = m[3] === 'RSA' ? `RSA ${m[1]}` : m[3] }
+    } catch { /* 아래 폴백 */ }
+    if (!type) {
+      const algo = parts[0] || ''
+      type = algo.includes('ed25519') ? 'ED25519' : algo.includes('rsa') ? 'RSA' : algo.includes('ecdsa') ? 'ECDSA' : (algo || '알 수 없음')
+    }
+
+    // 개인키 존재 + 패스프레이즈 여부(빈 패스프레이즈로 공개키 유도 시도 → 실패면 패스프레이즈 있음)
+    const privCand = path.join(SSH_DIR, name)
+    let privExists = false
+    let hasPassphrase: boolean | null = null
+    try {
+      await fsp.access(privCand)
+      privExists = true
+      try { await execFileP('ssh-keygen', ['-y', '-P', '', '-f', privCand]); hasPassphrase = false }
+      catch { hasPassphrase = true }
+    } catch { privExists = false }
+
+    out.push({ name, pubPath, privExists, type, fingerprint, comment, publicKey, hasPassphrase })
+  }
+  return out
+})
+
+// Test: ssh -T git@<host> 로 인증 확인. GitHub는 성공해도 exit 1이라 stderr 인사말을 파싱.
+ipcMain.handle('auth:ssh-test', async (_event, host: string): Promise<{ ok: boolean; message: string }> => {
+  const h = (host || '').trim()
+  if (!/^[A-Za-z0-9.-]+$/.test(h)) return { ok: false, message: '호스트 형식이 올바르지 않아요' }
+  const args = ['-T', '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ConnectTimeout=8', `git@${h}`]
+  const parse = (s: string) => /success|welcome|authenticated/i.test(s)
+  try {
+    const { stdout, stderr } = await execFileP('ssh', args, { timeout: 12000 })
+    const out = `${stdout}${stderr}`.trim()
+    return { ok: parse(out), message: out || '응답이 없어요' }
+  } catch (e) {
+    const err = e as { stdout?: string; stderr?: string; message?: string }
+    const out = `${err.stdout ?? ''}${err.stderr ?? ''}`.trim()
+    return { ok: parse(out), message: out || err.message || '연결하지 못했어요' }
+  }
+})
+
+// Generate: 새 ED25519 키 생성(파일 쓰기). 이름 검증·중복 방지·~/.ssh 하위 제한.
+ipcMain.handle('auth:ssh-generate', async (_event, name: string, passphrase?: string, comment?: string): Promise<{ name: string; publicKey: string }> => {
+  const n = validateKeyName(name)
+  const target = assertUnderSshDir(path.join(SSH_DIR, n))
+  await fsp.mkdir(SSH_DIR, { recursive: true, mode: 0o700 })
+  let exists = false
+  try { await fsp.access(target); exists = true } catch { exists = false }
+  if (exists) throw new Error('같은 이름의 키가 이미 있어요')
+  const cmt = (comment || '').replace(/[\r\n]/g, '').slice(0, 200) || `${os.userInfo().username}@gitgrove`
+  await execFileP('ssh-keygen', ['-t', 'ed25519', '-f', target, '-N', passphrase ?? '', '-C', cmt])
+  const publicKey = (await fsp.readFile(`${target}.pub`, 'utf8')).trim()
+  return { name: n, publicKey }
+})
+
+// Delete: 개인키 + 공개키 파일을 삭제(~/.ssh 하위 제한). UI에서 확인 후 호출.
+ipcMain.handle('auth:ssh-delete', async (_event, name: string): Promise<void> => {
+  const n = validateKeyName(name)
+  const base = assertUnderSshDir(path.join(SSH_DIR, n))
+  await fsp.unlink(base).catch(() => {})
+  await fsp.unlink(`${base}.pub`).catch(() => {})
 })
 
 // ──────────────────────────────────────────────
