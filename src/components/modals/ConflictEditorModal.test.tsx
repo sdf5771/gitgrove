@@ -15,13 +15,13 @@ const SAMPLE = [
   {
     path: 'src/auth/session.ts',
     conflicts: [
-      { id: 'src/auth/session.ts#0', ours: ['ours line A'], theirs: ['theirs line A'] },
+      { id: 'src/auth/session.ts#0', ours: ['ours line A'], theirs: ['theirs line A'], startLine: 3 },
     ],
   },
   {
     path: 'package.json',
     conflicts: [
-      { id: 'package.json#0', ours: ['  "version": "1.1.9",'], theirs: ['  "version": "1.2.0",'] },
+      { id: 'package.json#0', ours: ['  "version": "1.1.9",'], theirs: ['  "version": "1.2.0",'], startLine: 5 },
     ],
   },
 ]
@@ -40,9 +40,10 @@ describe('ConflictEditorModal — 실 IPC 배선', () => {
     render(<ConflictEditorModal repoPath={REPO} onClose={vi.fn()} />)
 
     await waitFor(() => expect(api.getConflicts).toHaveBeenCalledWith(REPO))
-    // 첫 파일의 충돌 블록(ours/theirs)이 보인다
-    expect(await screen.findByText('ours line A')).toBeInTheDocument()
-    expect(screen.getByText('theirs line A')).toBeInTheDocument()
+    // 첫 파일(파일 목록 base명)과 충돌 블록 헤더가 보인다. 코드 줄은 구문
+    // 하이라이트로 여러 span에 쪼개지므로 단일 텍스트 노드(파일명·헤더·카운터)로 단언.
+    expect(await screen.findByText('session.ts')).toBeInTheDocument()
+    expect(screen.getByText('충돌 1')).toBeInTheDocument()
     // 진행 카운터 0/2 (총 2 hunk)
     expect(screen.getByText('0/2 해결됨')).toBeInTheDocument()
   })
@@ -60,13 +61,13 @@ describe('ConflictEditorModal — 실 IPC 배선', () => {
     const onClose = vi.fn()
     render(<ConflictEditorModal repoPath={REPO} onClose={onClose} onComplete={onComplete} />)
 
-    await screen.findByText('ours line A')
+    await screen.findByText('session.ts')
 
     // 파일1의 hunk 해결 (내 변경 사용)
-    fireEvent.click(screen.getByText('◀ 내 변경 사용'))
+    fireEvent.click(screen.getByText('이걸 사용 ←'))
     // 파일2로 이동
     fireEvent.click(screen.getByText('package.json'))
-    fireEvent.click(await screen.findByText('▶ 상대 변경 사용'))
+    fireEvent.click(await screen.findByText('이걸 사용 →'))
 
     // 모두 해결 → 머지 완료 버튼 활성
     const completeBtn = await screen.findByText('머지 완료 →')
@@ -87,8 +88,8 @@ describe('ConflictEditorModal — 실 IPC 배선', () => {
     const onComplete = vi.fn()
     render(<ConflictEditorModal repoPath={REPO} onClose={vi.fn()} onComplete={onComplete} />)
 
-    await screen.findByText('ours line A')
-    fireEvent.click(screen.getByText('◀ 내 변경 사용'))
+    await screen.findByText('session.ts')
+    fireEvent.click(screen.getByText('이걸 사용 ←'))
     fireEvent.click(await screen.findByText('머지 완료 →'))
 
     await waitFor(() => expect(api.continueMerge).toHaveBeenCalled())
@@ -104,8 +105,8 @@ describe('ConflictEditorModal — 실 IPC 배선', () => {
     const onComplete = vi.fn()
     render(<ConflictEditorModal repoPath={REPO} onClose={vi.fn()} onComplete={onComplete} />)
 
-    await screen.findByText('ours line A')
-    fireEvent.click(screen.getByText('◀ 내 변경 사용'))
+    await screen.findByText('session.ts')
+    fireEvent.click(screen.getByText('이걸 사용 ←'))
     fireEvent.click(await screen.findByText('머지 완료 →'))
 
     expect(await screen.findByText('nothing to commit')).toBeInTheDocument()

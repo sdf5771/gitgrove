@@ -96,6 +96,8 @@ interface GitBlameLine {
   author: string      // 작성자 이름
   authorColor: string // 작성자별 고정 색상 (hash 기반 생성)
   timeAgo: string     // 상대 시간
+  timestamp: number   // author-time (epoch seconds) — 줄 나이 히트맵용
+  summary: string     // 커밋 제목 첫 줄 — blame 블록 gutter 표시용
   content: string     // 코드 라인 내용
 }
 
@@ -937,6 +939,7 @@ ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): 
   let currentHash = ''
   let currentAuthor = ''
   let currentTime = 0
+  let currentSummary = ''
   let finalLine = 0
 
   for (const line of raw.split('\n')) {
@@ -955,6 +958,11 @@ ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): 
       currentTime = parseInt(line.slice(12))
       continue
     }
+    // --line-porcelain 은 라인마다 summary(커밋 제목 첫 줄)도 반복 출력한다.
+    if (line.startsWith('summary ')) {
+      currentSummary = line.slice(8)
+      continue
+    }
     // 코드 라인: 탭으로 시작
     if (line.startsWith('\t')) {
       lines.push({
@@ -963,6 +971,8 @@ ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): 
         author: currentAuthor,
         authorColor: getAuthorColor(currentAuthor),
         timeAgo: relativeTime(new Date(currentTime * 1000)),
+        timestamp: currentTime,
+        summary: currentSummary,
         content: line.slice(1),
       })
     }

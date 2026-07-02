@@ -50,6 +50,8 @@ describe('parseConflicts', () => {
     expect(hunks[0].id).toBe('a.txt#0')
     expect(hunks[0].ours).toEqual(['mine1', 'mine2'])
     expect(hunks[0].theirs).toEqual(['yours1'])
+    // 'top'(1) · '<<<<<<<'(2) · 'mine1'(3) → ours 첫 줄은 3번째 줄.
+    expect(hunks[0].startLine).toBe(3)
   })
 
   it('한 파일에 여러 충돌 블록 → id 가 #0, #1 …', () => {

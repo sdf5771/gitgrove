@@ -1224,6 +1224,7 @@ export default function App() {
       'stash':         () => setShowStash(true),
       'cherry':        () => setShowCherryPick(true),
       'rebase':        () => setShowRebase(true),
+      'conflict':      () => setShowConflict(true),
       'branch-new':    () => { setBranchTab('create'); setShowBranch(true) },
       'branch-rename': () => { setBranchTab('rename'); setShowBranch(true) },
       'branch-delete': () => { setBranchTab('delete'); setShowBranch(true) },
@@ -1797,7 +1798,8 @@ export default function App() {
         />
       )}
 
-      {showCmd && <CommandPalette onClose={() => setShowCmd(false)} onAction={handleCommand} />}
+      {showCmd && <CommandPalette onClose={() => setShowCmd(false)} onAction={handleCommand}
+        context={{ behind: coachBehind, conflicts: coachConflict ? (syncResultView?.kind === 'conflict' ? (syncResultView.changedFiles ?? 0) : 0) : 0 }} />}
     </div>
   )
 }

@@ -31,7 +31,7 @@ const prog = (stage: string, progress: number, processed?: number, total?: numbe
 // AddRepoModal 진입점을 통해 CloneModal을 연다(저장소 추가 → Clone Remote 탭 → 클론 진입).
 async function openCloneViaAddRepo(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: '저장소 추가' }))
-  await user.click(await screen.findByRole('button', { name: /Clone Remote/ }))
+  await user.click(await screen.findByRole('button', { name: /원격 클론/ }))
   await user.click(await screen.findByRole('button', { name: /원격 저장소 클론/ }))
   // CloneModal(폼) 노출 확인.
   await waitFor(() => expect(screen.getByPlaceholderText(/github.com\/owner\/repo/)).toBeTruthy())
