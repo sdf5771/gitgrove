@@ -9,118 +9,153 @@ interface RealBlameLine {
   author: string
   authorColor: string
   timeAgo: string
+  timestamp: number
+  summary: string
   content: string
 }
 
-interface DisplayLine {
-  lineNum: number
+// 같은 커밋에서 연속으로 온 줄들을 하나의 블록으로 묶는다.
+interface BlameBlock {
   hash: string
   author: string
   ac: string
   timeAgo: string
-  content: string
+  summary: string
+  age: 0 | 1 | 2 | 3
+  startLine: number
+  lines: string[]
 }
 
-function fromRealBlameLine(line: RealBlameLine): DisplayLine {
-  return {
-    lineNum: line.lineNum,
-    hash: line.hash,
-    author: line.author,
-    ac: line.authorColor,
-    timeAgo: line.timeAgo,
-    content: line.content,
+const DAY = 86400
+const AGE_LBL = ['오늘', '이번 주', '이번 달', '오래됨']
+function ageBucket(ts: number): 0 | 1 | 2 | 3 {
+  const age = Date.now() / 1000 - ts
+  if (age < DAY) return 0
+  if (age < 7 * DAY) return 1
+  if (age < 30 * DAY) return 2
+  return 3
+}
+
+function groupBlocks(lines: RealBlameLine[]): BlameBlock[] {
+  const blocks: BlameBlock[] = []
+  for (const l of lines) {
+    const last = blocks[blocks.length - 1]
+    if (last && last.hash === l.hash && last.startLine + last.lines.length === l.lineNum) {
+      last.lines.push(l.content)
+    } else {
+      blocks.push({
+        hash: l.hash, author: l.author, ac: l.authorColor, timeAgo: l.timeAgo,
+        summary: l.summary, age: ageBucket(l.timestamp), startLine: l.lineNum, lines: [l.content],
+      })
+    }
   }
+  return blocks
 }
 
 interface Props {
   onSelectCommit: (i: number) => void
   repoPath?: string | null
   filePath?: string
-  // 클릭 시 hash → index 매핑에 사용하는 실제 커밋 목록 (App의 filteredCommits)
   commits?: Commit[]
 }
 
 export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props) {
-  const [selLine, setSelLine] = useState<number | null>(null)
   const [blameLines, setBlameLines] = useState<RealBlameLine[]>([])
   const [loading, setLoading] = useState(false)
+  const [selHash, setSelHash] = useState<string | null>(null)
+  const [offAuthors, setOffAuthors] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (!repoPath || !filePath) {
-      setBlameLines([])
-      return
-    }
+    if (!repoPath || !filePath) { setBlameLines([]); return }
     setLoading(true)
-    const blamePromise = window.gitAPI?.blame(repoPath, filePath) as Promise<RealBlameLine[]> | undefined
-    blamePromise
-      ?.then(lines => setBlameLines(lines ?? []))
+    setSelHash(null)
+    setOffAuthors(new Set())
+    const p = window.gitAPI?.blame(repoPath, filePath) as Promise<RealBlameLine[]> | undefined
+    p?.then(lines => setBlameLines(lines ?? []))
       .catch(() => setBlameLines([]))
       .finally(() => setLoading(false))
   }, [repoPath, filePath])
 
-  // 실제 데이터만 사용. blame 결과가 없으면 빈 목록(가짜 blame 미표시).
-  const displayLines: DisplayLine[] = useMemo(() => {
-    if (blameLines.length > 0) return blameLines.map(fromRealBlameLine)
-    return []
+  const blocks = useMemo(() => groupBlocks(blameLines), [blameLines])
+
+  // 작성자별 색 + 줄 수(칩 표시용, 최대 6명).
+  const authors = useMemo(() => {
+    const m = new Map<string, { color: string; count: number }>()
+    for (const l of blameLines) {
+      const e = m.get(l.author) ?? { color: l.authorColor, count: 0 }
+      e.count += 1
+      m.set(l.author, e)
+    }
+    return Array.from(m.entries()).slice(0, 6).map(([name, v]) => ({ name, ...v }))
   }, [blameLines])
 
   const displayFilePath = filePath ?? ''
 
-  // 실제 데이터에서 고유 작성자 추출 (최대 4명)
-  const authors = useMemo(() => {
-    const seen = new Map<string, string>()
-    for (const l of displayLines) {
-      if (!seen.has(l.author)) seen.set(l.author, l.ac)
-      if (seen.size >= 4) break
-    }
-    return Array.from(seen.entries()).map(([name, color]) => ({ name, color }))
-  }, [displayLines])
-
-  const handleClick = (lineNum: number, hash: string) => {
-    setSelLine(lineNum)
-    // 현재 표시 중인 커밋 목록(filteredCommits)에서 hash로 인덱스 탐색.
-    // blame hash와 commit.id 모두 7자리 short hash라 정확 매칭된다.
+  const clickBlock = (hash: string) => {
+    setSelHash(prev => prev === hash ? null : hash)
     const ci = commits?.findIndex(c => c.id === hash) ?? -1
     if (ci >= 0) onSelectCommit(ci)
   }
+  const toggleAuthor = (name: string) =>
+    setOffAuthors(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n })
 
   return (
     <div className="blame-wrap">
       <div className="pnl-hdr">
         <h3>Git Blame</h3>
-        <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--c-text-faint)', fontFamily: 'var(--font-mono)' }}>{displayFilePath}</span>
-        {loading && (
-          <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--c-text-faint)' }}>
-            <span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>
-          </span>
-        )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, fontSize: 10, color: 'var(--c-text-faint)' }}>
-          {authors.map(({ name, color }) => (
-            <span key={name} title={name} style={{ background: color + '22', border: `1px solid ${color}44`, borderRadius: 2, padding: '1px 6px', color, fontFamily: 'var(--font-display)' }}>
-              {name.slice(0, 2).toUpperCase()}
-            </span>
+        <span className="fp">{displayFilePath}</span>
+        {loading && <span style={{ fontSize: 10, color: 'var(--c-text-faint)' }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span></span>}
+        <div className="auth-chips">
+          {authors.map(a => (
+            <button key={a.name} className={`auth-chip${offAuthors.has(a.name) ? ' offed' : ''}`}
+              title={a.name} onClick={() => toggleAuthor(a.name)}
+              style={{ color: a.color, background: a.color + '18', borderColor: a.color + '44' }}>
+              {a.name.slice(0, 2).toUpperCase()}<span className="ct">{a.count}</span>
+            </button>
           ))}
         </div>
       </div>
-      <div className="blame-scroll">
-        {!loading && displayLines.length === 0 && (
-          <div style={{ padding: '24px 16px', fontSize: 12, color: 'var(--c-text-faint)', fontFamily: 'var(--font-display)' }}>
-            {filePath ? `No blame data for ${displayFilePath}` : 'Select a file to view blame'}
+
+      {!loading && blocks.length === 0 ? (
+        <div className="code-scroll">
+          <div style={{ padding: '24px 16px', fontSize: 12, color: 'var(--c-text-faint)' }}>
+            {filePath ? `${displayFilePath}의 blame 정보가 없어요` : '파일을 선택하면 blame을 볼 수 있어요'}
           </div>
-        )}
-        {displayLines.map(line => (
-          <div key={line.lineNum} className={`blame-row${selLine === line.lineNum ? ' sel' : ''}`} onClick={() => handleClick(line.lineNum, line.hash)}>
-            <div className="blame-gutter">
-              <div className="blame-av" style={{ background: line.ac + '22', color: line.ac, borderColor: line.ac + '44' }}>
-                {line.author.slice(0, 2).toUpperCase()}
+        </div>
+      ) : (
+        <div className="code-scroll">
+          {blocks.map((b, bi) => {
+            const dim = offAuthors.has(b.author)
+            const sel = selHash === b.hash
+            return (
+              <div key={bi} className={`blame-block${sel ? ' sel' : ''}${dim ? ' dimmed' : ''}`} onClick={() => clickBlock(b.hash)}>
+                <span className={`age age-${b.age}`} title={AGE_LBL[b.age]} />
+                <div className="blame-gutter">
+                  <div className="bg-top">
+                    <span className="blame-av" style={{ background: b.ac + '22', color: b.ac, borderColor: b.ac + '44' }}>{b.author.slice(0, 2).toUpperCase()}</span>
+                    <span className="blame-hash">{b.hash}</span>
+                    <span className="blame-time">{b.timeAgo}</span>
+                  </div>
+                  {b.summary && <div className="bg-msg">{b.summary}</div>}
+                </div>
+                <div className="blame-lines">
+                  {b.lines.map((l, i) => (
+                    <div key={i} className="cl"><span className="lnum">{b.startLine + i}</span><span className="ctext"><HL s={l} /></span></div>
+                  ))}
+                </div>
               </div>
-              <span className="blame-hash">{line.hash}</span>
-              <span className="blame-time">{line.timeAgo}</span>
-            </div>
-            <span className="blame-lnum">{line.lineNum}</span>
-            <span className="blame-code"><HL s={line.content} /></span>
-          </div>
-        ))}
+            )
+          })}
+        </div>
+      )}
+
+      <div className="age-legend">
+        <span>줄 나이</span>
+        <span className="sw age-0" />오늘
+        <span className="sw age-1" />이번 주
+        <span className="sw age-2" />이번 달
+        <span className="sw age-3" />오래됨
+        <span style={{ marginLeft: 'auto' }}>블록을 누르면 같은 커밋 줄이 함께 강조돼요</span>
       </div>
     </div>
   )
