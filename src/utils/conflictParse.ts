@@ -29,6 +29,7 @@ export interface ParsedHunk {
   id: string
   ours: string[]
   theirs: string[]
+  startLine: number // 원본 파일에서 ours 첫 줄의 1-based 줄 번호(에디터 거터·loc 표시용)
 }
 
 export interface ParsedConflictFile {
@@ -95,6 +96,8 @@ export function parseConflicts(content: string, idPrefix: string): ParsedHunk[] 
       continue
     }
     // 시작 마커 발견 — ours 수집(다음 '|||||||' 또는 '=======' 전까지).
+    // 마커 줄은 lines[i](0-based) → 1-based 마커 줄=i+1, ours 첫 줄=i+2.
+    const startLine = i + 2
     i++
     const ours: string[] = []
     while (i < lines.length) {
@@ -124,7 +127,7 @@ export function parseConflicts(content: string, idPrefix: string): ParsedHunk[] 
       break
     }
     i++ // '>>>>>>>' 소비
-    hunks.push({ id: `${idPrefix}#${idx}`, ours, theirs })
+    hunks.push({ id: `${idPrefix}#${idx}`, ours, theirs, startLine })
     idx++
   }
   return hunks

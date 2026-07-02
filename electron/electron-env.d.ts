@@ -148,6 +148,7 @@ interface ConflictHunk {
   id: string        // `${path}#${i}` 형식 (파일 내 블록 순번)
   ours: string[]    // <<<<<<< ~ (||||||| 또는 =======) 사이의 줄
   theirs: string[]  // ======= ~ >>>>>>> 사이의 줄
+  startLine: number // 원본 파일에서 ours 첫 줄의 1-based 줄 번호(거터·loc 표시)
 }
 
 // 충돌 파일 1개. 바이너리/읽기 실패 파일은 conflicts:[] (graceful 스킵).
