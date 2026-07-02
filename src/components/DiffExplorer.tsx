@@ -118,7 +118,6 @@ export function DiffExplorer({ commit, repoPath, commitFiles }: Props) {
       else { if (!segs.length) segs.push({ loc: '', fn: '', rows: [] }); segs[segs.length - 1].rows.push(r) }
     })
     return segs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows])
 
   const colCell = (row: SbsRow, side: 'L' | 'R', i: number): ReactNode => {

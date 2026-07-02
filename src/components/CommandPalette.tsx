@@ -82,7 +82,6 @@ export function CommandPalette({ onClose, onAction, context }: Props) {
     if (recentRows.length) s.push({ title: '최근', rows: recentRows })
     s.push({ title: '전체 명령', rows: COMMANDS.map(cmdRow) })
     return s
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hits, ctxRows, recentRows])
 
   const flat = useMemo(() => sections.flatMap(s => s.rows), [sections])
