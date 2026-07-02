@@ -114,7 +114,8 @@
 | **Cherry-pick** | Apply any commit to current branch, `--no-commit` option, conflict detection |
 | **Stash** | Push with message, Pop / Apply / Drop, stash stack management |
 | **Conflict Editor** | Side-by-side ours/theirs resolver with per-conflict choices and progress tracking |
-| **Tag** | Create lightweight and annotated tags from any commit |
+| **Tag** | Two-pane manager (list · detail · create) — lightweight & annotated tags with a fruit metaphor, push to origin, delete (local + remote), pushed-state indicator; also "Tag here" from any commit |
+| **Authentication** | SSH / HTTPS credential manager — list `~/.ssh` keys with fingerprints & passphrase state, **test connection** (`ssh -T`), **generate** ED25519 keys, delete; HTTPS token store (GitHub / GitLab) with verify · add · remove |
 | **Config** | Read / write git config (user.name, user.email, etc.) |
 
 ### UX
@@ -123,13 +124,14 @@
 - **⌘K Command Palette** — search and run any action from the keyboard
 - **Live Commit Search** — real-time filter by message, author, hash, or file path
 - **Multi-repo Tabs** — open multiple repos in one window, with dirty-state indicator
-- **Right-click Context Menu** — Cherry-pick · Revert · Reset (soft / mixed / hard) · Branch here · Tag here
-- **Branch Context Menu** — right-click any branch to Checkout / Merge / Rebase / Rename / Delete / Push / Pull
-- **Stage File Context Menu** — right-click a changed file to Discard changes (with confirm) · add to `.gitignore` (file / extension) · copy path · reveal in Finder · open with default app
+- **Unified Context Menus** — one `.ctx-*` family across commit · branch · file, with a **target header** (what you right-clicked), grouped actions, and destructive actions **always last**:
+  - *Commit* — Copy hash / message · Cherry-pick · Revert · Reset (soft / mixed / hard submenu) · Branch here · Tag here · Interactive Rebase
+  - *Branch* — Checkout · Merge · Rebase · Rename · Copy name · Delete (danger)
+  - *File* — copy path · reveal in Finder · open with default app · add to `.gitignore` (file / extension) · Discard changes (danger, with confirm)
 - **In-app Auto-update** — checks for new releases while running (periodic + on focus), then downloads and opens the `.dmg` in-app with a corner update indicator — no manual re-download
 - **Confirm Dialogs** — every destructive operation (delete, reset --hard, drop, etc.) requires confirmation
 - **Settings Panel** — Git config · Appearance · notification sound · **GitHub & GitLab integration**: PAT / token setup guide with one-click token pages, in-place token **verify** (scopes + rate limit), and **secure token storage** via OS keychain (Electron `safeStorage`)
-- **GitHub Profile Card** — click the status-bar profile to preview account info (name, bio, followers / following, repos, location) and your **permission role** on the current repo, then jump to GitHub
+- **Account Chips & Profile Cards** — the status bar shows a chip per connected provider (**GitHub** gold · **GitLab** orange); click one to open a provider-tinted profile card (name · bio · stats · company · location · join year) with your **permission role** on the current repo (admin / Maintainer …), then jump to the service
 - **Focus Auto-refresh** — repository state refreshes when the app regains focus
 
 ---
@@ -316,7 +318,10 @@ gitgrove/
 - [x] Global GitHub notifications — background polling + native macOS alerts (Dock badge / bounce)
 - [x] In-app auto-update — periodic / on-focus checks, in-app `.dmg` download
 - [x] Stage file right-click context menu — discard · `.gitignore` · copy path · reveal / open
-- [ ] SSH / HTTPS authentication manager
+- [x] Unified context-menu family (commit · branch · file) with target headers & danger-last ordering
+- [x] Account chips + provider profile cards (GitHub · GitLab)
+- [x] Tag manager — list · detail · create (lightweight / annotated) · push · delete
+- [x] SSH / HTTPS authentication manager
 - [ ] Commit graph virtualization (large repos)
 - [ ] Split-diff editor with inline editing
 - [ ] Windows / Linux support

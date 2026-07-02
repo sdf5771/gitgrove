@@ -1846,7 +1846,7 @@ export default function App() {
         {showStash       && <StashPanel onClose={() => setShowStash(false)} repoPath={repoPath} currentBranch={activeBranch} />}
         {showTags        && <TagPanel onClose={() => setShowTags(false)} repoPath={repoPath} commits={baseCommits} onChanged={() => { if (repoPath) loadRepo(repoPath, { silent: true }) }} />}
         {showAuth        && <AuthManagerModal onClose={() => setShowAuth(false)} />}
-        {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} />}
+        {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} onOpenAuth={() => { setShowSettings(false); setSettingsTab(undefined); setShowAuth(true) }} />}
         {showAddRepo     && (
           <AddRepoModal
             onClose={() => setShowAddRepo(false)}

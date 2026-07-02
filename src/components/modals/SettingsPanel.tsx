@@ -178,9 +178,11 @@ interface Props {
   repoPath?: string | null
   /** 처음 표시할 탭 (예: GitLab 미연결 유도 시 'gitlab') */
   initialTab?: SettingsTab
+  /** 인증 관리자(SSH·HTTPS) 열기 — 서비스 연결 탭 진입점 */
+  onOpenAuth?: () => void
 }
 
-export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
+export function SettingsPanel({ onClose, repoPath, initialTab, onOpenAuth }: Props) {
   // 좌측 nav 활성 항목. 외부 initialTab을 내부 nav id로 매핑.
   const [nav, setNav] = useState<NavId>(() => navIdForTab(initialTab ?? 'git'))
   // 서비스 연결 탭에서 인라인 연결 흐름이 열린 provider (null | 'github' | 'gitlab').
@@ -1023,6 +1025,22 @@ export function SettingsPanel({ onClose, repoPath, initialTab }: Props) {
                             </div>
                           )}
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {onOpenAuth && (
+                    <div className="set2-group">
+                      <div className="set2-group-ttl">자격증명</div>
+                      <div className="set2-conn">
+                        <div className="set2-conn-mark">
+                          <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>
+                        </div>
+                        <div className="set2-conn-info">
+                          <b>인증 관리</b>
+                          <span>SSH 키 · HTTPS 자격증명을 등록 · 테스트 · 삭제해요</span>
+                        </div>
+                        <button className="set2-conn-btn ghost" onClick={onOpenAuth}>열기</button>
                       </div>
                     </div>
                   )}
