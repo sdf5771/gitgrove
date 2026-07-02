@@ -54,6 +54,8 @@ interface GitBlameLine {
   author: string      // 작성자 이름
   authorColor: string // 작성자별 고정 색상 (hash 기반 생성)
   timeAgo: string     // 상대 시간
+  timestamp: number   // author-time (epoch seconds) — 줄 나이 히트맵용
+  summary: string     // 커밋 제목 첫 줄 — blame 블록 gutter 표시용
   content: string     // 코드 라인 내용
 }
 
@@ -148,6 +150,7 @@ interface ConflictHunk {
   id: string        // `${path}#${i}` 형식 (파일 내 블록 순번)
   ours: string[]    // <<<<<<< ~ (||||||| 또는 =======) 사이의 줄
   theirs: string[]  // ======= ~ >>>>>>> 사이의 줄
+  startLine: number // 원본 파일에서 ours 첫 줄의 1-based 줄 번호(거터·loc 표시)
 }
 
 // 충돌 파일 1개. 바이너리/읽기 실패 파일은 conflicts:[] (graceful 스킵).

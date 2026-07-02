@@ -34,22 +34,23 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths, onCloneR
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
 
   return (
-    <ModalShell title="Add Repository" width={460} onClose={onClose} icon={icon}>
+    <ModalShell title="저장소 추가" width={460} onClose={onClose} icon={icon}>
       <div className="btabs">
-        <button className={`btab${tab === 'local' ? ' on' : ''}`} onClick={() => setTab('local')}>Open Local</button>
-        <button className={`btab${tab === 'clone' ? ' on' : ''}`} onClick={() => setTab('clone')}>Clone Remote</button>
+        <button className={`btab${tab === 'local' ? ' on' : ''}`} onClick={() => setTab('local')}>로컬 열기</button>
+        <button className={`btab${tab === 'clone' ? ' on' : ''}`} onClick={() => setTab('clone')}>원격 클론</button>
       </div>
       {tab === 'local' && (
         <div className="modal-body">
           <div className="mfield">
-            <label>Repository path</label>
+            <label>폴더 경로</label>
             <div className="repo-browse-row">
               <input className="mselect" style={{ flex: 1 }} placeholder="~/dev/my-project" value={localPath} onChange={e => setLocalPath(e.target.value)} />
-              <button className="repo-browse-btn" onClick={handleBrowse}>Browse…</button>
+              <button className="repo-browse-btn" onClick={handleBrowse}>찾아보기</button>
             </div>
+            <div className="mhint"><b>.git</b> 폴더가 있는 로컬 저장소를 열어요.</div>
           </div>
           <div className="mfield">
-            <label>Recent repositories</label>
+            <label>최근 저장소</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {(recentPaths && recentPaths.length > 0
                 ? recentPaths.map(r => ({ name: r.name, path: r.path, lastOpened: '' }))
@@ -67,8 +68,8 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths, onCloneR
             </div>
           </div>
           <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
-            <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
-            <button className="mbtn-ok" onClick={() => openLocal(localPath)} disabled={!localPath}>Open Repository →</button>
+            <button className="mbtn-cancel" onClick={onClose}>취소</button>
+            <button className="mbtn-ok" onClick={() => openLocal(localPath)} disabled={!localPath}>{localPath ? '열기 →' : '경로를 골라주세요'}</button>
           </div>
         </div>
       )}
@@ -80,7 +81,7 @@ export function AddRepoModal({ onClose, onAdd, onOpenPath, recentPaths, onCloneR
             <div className="addrepo-clone-redirect-txt">원격 저장소를 클론하면 진행 상황과 함께 새 나무가 자라요.</div>
           </div>
           <div className="modal-footer" style={{ padding: 0, background: 'none', border: 'none', marginTop: 4 }}>
-            <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
+            <button className="mbtn-cancel" onClick={onClose}>취소</button>
             <button className="mbtn-ok" onClick={() => onCloneRemote?.()}>원격 저장소 클론 →</button>
           </div>
         </div>

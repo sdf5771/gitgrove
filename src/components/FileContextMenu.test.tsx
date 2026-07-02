@@ -115,7 +115,7 @@ describe('StageArea 우클릭 컨텍스트 메뉴', () => {
     renderStage([{ p: 'src/App.tsx', s: 'M', a: 1, d: 0 }])
     openMenuFor('App.tsx')
     fireEvent.mouseDown(screen.getByText('변경 되돌리기…'))
-    fireEvent.click(screen.getByText('Cancel'))
+    fireEvent.click(screen.getByText('취소'))
     await Promise.resolve()
     expect(gitAPI.discardChanges).not.toHaveBeenCalled()
   })

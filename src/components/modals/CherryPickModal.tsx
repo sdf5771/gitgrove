@@ -42,25 +42,25 @@ export function CherryPickModal({ commit, onClose, onSuccess, repoPath, currentB
     }
   }
 
-  const branch = currentBranch ?? 'current'
+  const branch = currentBranch ?? '현재 브랜치'
   const icon = <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--c-gold-300)" strokeWidth="2.2"><polyline points="9,11 12,14 22,4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
 
   return (
-    <ModalShell title="Cherry-pick" width={420} onClose={onClose} icon={icon}>
+    <ModalShell title="체리픽" width={420} onClose={onClose} icon={icon}>
       {conflict ? (
         <div style={{ padding: '20px 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'rgba(255,107,107,.1)', border: '1px solid rgba(255,107,107,.35)', borderRadius: 'var(--r2)' }}>
-            <span style={{ fontSize: 18, color: 'var(--c-danger)' }}>⚡</span>
-            <div><div style={{ fontSize: 13, color: 'var(--c-danger)', fontWeight: 600 }}>Merge conflict</div><div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginTop: 2 }}>1 file needs manual resolution</div></div>
+          <div className="warn-strip" style={{ background: 'rgba(255,107,107,.1)', borderColor: 'rgba(255,107,107,.35)' }}>
+            <span style={{ fontSize: 16, color: 'var(--c-danger)', lineHeight: 1 }}>⚡</span>
+            <div><div style={{ fontSize: 13, color: 'var(--c-danger)' }}>충돌이 났어요</div><div style={{ fontSize: 11, color: 'var(--c-text-muted)', marginTop: 2 }}>파일을 직접 해결해야 해요.</div></div>
           </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            <button className="mbtn-cancel" onClick={onClose} style={{ flex: 1 }}>Abort</button>
-            <button className="mbtn-ok" onClick={onClose} style={{ flex: 1 }}>Open Conflict Editor</button>
+            <button className="mbtn-cancel" onClick={onClose} style={{ flex: 1 }}>중단</button>
+            <button className="mbtn-ok" onClick={onClose} style={{ flex: 1 }}>충돌 해결 열기</button>
           </div>
         </div>
       ) : isDone ? (
-        <SuccessState msg="Cherry-pick applied"
-          sub={<>Commit <strong style={{ color: 'var(--c-gold-300)', fontFamily: 'var(--font-mono)' }}>{commit.id}</strong> → {branch}</>} />
+        <SuccessState msg="체리픽 완료"
+          sub={<>커밋 <strong style={{ color: 'var(--c-gold-300)', fontFamily: 'var(--font-mono)' }}>{commit.id}</strong> → {branch}</>} />
       ) : (
         <>
           <div className="modal-body">
@@ -70,36 +70,33 @@ export function CherryPickModal({ commit, onClose, onSuccess, repoPath, currentB
               </div>
             )}
             <div className="mfield">
-              <label>Commit to apply</label>
-              <div className="cp-commit-card">
-                <div className="cp-hash">{commit.id}…</div>
-                <div className="cp-msg">{commit.msg}</div>
-                <div className="cp-meta">{commit.author} · {commit.time}</div>
+              <label>가져올 커밋</label>
+              <div className="commit-card">
+                <span className="dot" />
+                <span className="msg">{commit.msg}</span>
+                <span className="hash">{commit.id}</span>
               </div>
             </div>
             <div className="mfield">
-              <label>Apply onto</label>
-              <div className="mval"><span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e6a536', flexShrink: 0, display: 'inline-block' }} />{branch} (current)</div>
+              <label>적용 위치</label>
+              <div className="mrow"><span style={{ color: 'var(--c-text-faint)' }}>적용 위치</span><span className="mchip chip-gold">{branch} · 현재</span></div>
             </div>
             <div className="mfield">
-              <label>Options</label>
+              <label>옵션</label>
               <div className={`mcheckrow${noCommit ? ' on' : ''}`} onClick={() => setNoCommit(v => !v)}>
                 <div className="mcheckbox">{noCommit ? '✓' : ''}</div>
                 <div>
-                  <div className="mcheck-lbl">Apply without committing</div>
-                  <div className="mcheck-sub"><code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>--no-commit</code> — stages changes only</div>
+                  <div className="mcheck-lbl">커밋 없이 적용</div>
+                  <div className="mcheck-sub"><code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>--no-commit</code> · 변경만 스테이지에 올려요</div>
                 </div>
               </div>
             </div>
-            <div className="minfo" style={{ background: 'rgba(95,184,230,.07)', border: '1px solid rgba(95,184,230,.22)' }}>
-              <span style={{ color: 'var(--c-info)', fontSize: 15 }}>ℹ</span>
-              <span style={{ fontSize: 11 }}><strong style={{ color: 'var(--c-text-strong)' }}>{commit.stats.f} files</strong> will be applied. Conflicts prompt resolution.</span>
-            </div>
+            <div className="mhint">이 커밋 하나만 복사해 <b>{branch}</b> 위에 새로 심어요 · 충돌이 나면 해결 창이 열려요.</div>
           </div>
           <div className="modal-footer">
-            <button className="mbtn-cancel" onClick={onClose}>Cancel</button>
+            <button className="mbtn-cancel" onClick={onClose}>취소</button>
             <button className={`mbtn-ok${doing ? ' doing' : ''}`} onClick={execute} disabled={doing}>
-              {doing ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>Applying…</span> : 'Apply →'}
+              {doing ? <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span>적용 중…</span> : '체리픽 →'}
             </button>
           </div>
         </>
