@@ -480,6 +480,60 @@ body { display: flex; align-items: center; justify-content: center; }
 .sahead { color: var(--c-success); } .sbehind { color: var(--c-warning); }
 .send { margin-left: auto; }
 
+/* ── 계정 칩(프로바이더별) + 프로필 카드 ── */
+.sb-accts { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.acct-chip { display: flex; align-items: center; gap: 5px; background: var(--c-bg-elevated); border: 1px solid var(--c-border); padding: 2px 9px 2px 4px; border-radius: var(--rpill); cursor: pointer; position: relative; }
+.acct-chip:hover { background: #263050; }
+.acct-chip.active { border-color: var(--c-gold-border); }
+.acct-chip.gl.active { border-color: var(--c-gitlab-border); }
+.acct-chip .av { width: 17px; height: 17px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 8px; flex-shrink: 0; overflow: hidden; }
+.acct-chip .av img { width: 100%; height: 100%; object-fit: cover; }
+.acct-chip.gh .av { background: linear-gradient(135deg, var(--c-gold-300), var(--c-gold-500)); color: var(--c-text-on-gold); }
+.acct-chip.gl .av { background: linear-gradient(135deg, var(--c-gitlab-3), var(--c-gitlab)); color: #fff; }
+.acct-chip .pm { display: flex; } .acct-chip .pm svg { width: 11px; height: 11px; display: block; }
+.acct-chip .lg { font-size: 11px; color: var(--c-text-muted); font-family: var(--font-mono); }
+
+.pcard { position: absolute; bottom: calc(100% + 8px); right: 0; width: 300px; background: var(--c-bg-elevated); border: 1px solid var(--c-border-strong); border-radius: 10px; overflow: hidden; z-index: 1000; cursor: default; box-shadow: 0 18px 48px rgba(0,0,0,.6), inset 0 1px 0 rgba(244,236,210,.06); animation: cardIn .18s cubic-bezier(.2,.8,.2,1); }
+@keyframes cardIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.pc-banner { height: 56px; position: relative; overflow: hidden; background: linear-gradient(180deg, rgba(230,165,54,.16), transparent), var(--c-bg-surface); border-bottom: 1px solid var(--c-divider); }
+.pcard.gl .pc-banner { background: linear-gradient(180deg, rgba(252,109,38,.16), transparent), var(--c-bg-surface); }
+.pc-banner::after { content: ''; position: absolute; inset: 0; background-image: radial-gradient(rgba(230,165,54,.22) 1px, transparent 1px); background-size: 14px 14px; -webkit-mask-image: linear-gradient(180deg, #000, transparent); mask-image: linear-gradient(180deg, #000, transparent); }
+.pcard.gl .pc-banner::after { background-image: radial-gradient(rgba(252,109,38,.22) 1px, transparent 1px); }
+.pc-provider { position: absolute; top: 9px; right: 10px; display: flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 9.5px; color: var(--c-text-muted); background: rgba(13,18,32,.6); border: 1px solid var(--c-border); border-radius: var(--rpill); padding: 2px 8px; z-index: 2; }
+.pc-provider svg { width: 11px; height: 11px; }
+.pc-geuru { position: absolute; left: 14px; bottom: -2px; z-index: 2; }
+.pc-head { display: flex; gap: 12px; padding: 12px 15px 0; margin-top: -20px; position: relative; z-index: 3; }
+.pc-avatar { width: 52px; height: 52px; border-radius: 12px; border: 2px solid var(--c-bg-elevated); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 22px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+.pc-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.pcard.gh .pc-avatar { background: linear-gradient(135deg, var(--c-gold-300), var(--c-gold-500)); color: var(--c-text-on-gold); }
+.pcard.gl .pc-avatar { background: linear-gradient(135deg, var(--c-gitlab-3), var(--c-gitlab)); color: #fff; }
+.pc-id { flex: 1; min-width: 0; padding-top: 22px; }
+.pc-name { font-size: 15px; font-weight: 600; color: var(--c-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-login { font-family: var(--font-mono); font-size: 12px; color: var(--c-text-muted); }
+.pc-body { padding: 11px 15px 14px; display: flex; flex-direction: column; gap: 11px; }
+.pc-role { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; font-size: 10px; font-weight: 600; border-radius: var(--r2); padding: 2px 8px; font-family: var(--font-display); letter-spacing: .02em; border: 1px solid; }
+.pcard.gh .pc-role { color: var(--c-gold-300); background: var(--c-gold-bg); border-color: var(--c-gold-border); }
+.pcard.gl .pc-role { color: var(--c-gitlab-3); background: var(--c-gitlab-bg); border-color: var(--c-gitlab-border); }
+.pc-role svg { width: 11px; height: 11px; }
+.pc-bio { font-size: 12px; color: var(--c-text); line-height: 1.5; }
+.pc-stats { display: flex; gap: 0; background: var(--c-bg-inset); border: 1px solid var(--c-divider); border-radius: var(--r3); overflow: hidden; }
+.pc-stat { flex: 1; padding: 8px 4px; text-align: center; border-right: 1px solid var(--c-divider); }
+.pc-stat:last-child { border-right: none; }
+.pc-stat b { display: block; font-family: var(--font-mono); font-size: 14px; color: var(--c-text-strong); }
+.pc-stat span { font-size: 9.5px; color: var(--c-text-faint); text-transform: uppercase; letter-spacing: .04em; }
+.pc-meta { display: flex; flex-direction: column; gap: 6px; }
+.pc-mrow { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--c-text-muted); white-space: nowrap; overflow: hidden; }
+.pc-mrow svg { width: 13px; height: 13px; opacity: .65; flex-shrink: 0; }
+.pc-mrow .v { overflow: hidden; text-overflow: ellipsis; }
+.pc-mrow a { text-decoration: none; }
+.pcard.gh .pc-mrow a { color: var(--c-gold-300); }
+.pcard.gl .pc-mrow a { color: var(--c-gitlab-3); }
+.pc-visit { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 0; background: var(--c-bg-surface); border: 1px solid var(--c-border); border-radius: var(--r2); color: var(--c-text); font-size: 12px; font-family: var(--font-display); letter-spacing: .2px; cursor: pointer; }
+.pcard.gh .pc-visit:hover { border-color: var(--c-gold-border); color: var(--c-gold-200); }
+.pcard.gl .pc-visit:hover { border-color: var(--c-gitlab-border); color: var(--c-gitlab-3); }
+.pc-visit svg { width: 14px; height: 14px; }
+.pc-visit .ext { width: 11px; height: 11px; opacity: .6; }
+
 /* ── Empty state ── */
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
