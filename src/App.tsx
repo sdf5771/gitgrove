@@ -39,6 +39,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { MergeModal } from './components/modals/MergeModal'
 import { CherryPickModal } from './components/modals/CherryPickModal'
 import { StashPanel } from './components/modals/StashPanel'
+import { TagPanel } from './components/modals/TagPanel'
 import { BranchModal } from './components/modals/BranchModal'
 import { InteractiveRebaseModal } from './components/modals/InteractiveRebaseModal'
 import { SettingsPanel, type SettingsTab } from './components/modals/SettingsPanel'
@@ -327,6 +328,7 @@ export default function App() {
   const [showMerge,      setShowMerge]      = useState(false)
   const [showCherryPick, setShowCherryPick] = useState(false)
   const [showStash,      setShowStash]      = useState(false)
+  const [showTags,       setShowTags]       = useState(false)
   const [showBranch,     setShowBranch]     = useState(false)
   const [branchTab,      setBranchTab]      = useState<BranchTab>('create')
   const [showRebase,     setShowRebase]     = useState(false)
@@ -1220,6 +1222,7 @@ export default function App() {
         else if (showMerge) setShowMerge(false)
         else if (showCherryPick) setShowCherryPick(false)
         else if (showStash) setShowStash(false)
+        else if (showTags) setShowTags(false)
         else if (showBranch) setShowBranch(false)
         else if (showRebase) setShowRebase(false)
         else if (showSettings) setShowSettings(false)
@@ -1234,7 +1237,7 @@ export default function App() {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
+  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
 
   // ── 히스토리 뷰: 방향키 위/아래로 커밋 선택, Enter로 해당 커밋 Diff 열기 ──
   useEffect(() => {
@@ -1244,7 +1247,7 @@ export default function App() {
       const t = e.target as HTMLElement | null
       if (t && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showBranch ||
+      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showBranch ||
           showRebase || showSettings || showAddRepo || showConflict || showRepoManager) return
       const n = filteredCommits.length
       if (n === 0) return
@@ -1265,7 +1268,7 @@ export default function App() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [view, filteredCommits, selIdx, handleSelectCommit, showCmd, ctxMenu, showMerge,
-      showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
+      showCherryPick, showStash, showTags, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
 
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
@@ -1274,6 +1277,7 @@ export default function App() {
       'fetch':         () => void handleFetch(),
       'merge':         () => setShowMerge(true),
       'stash':         () => setShowStash(true),
+      'tags':          () => setShowTags(true),
       'cherry':        () => setShowCherryPick(true),
       'rebase':        () => setShowRebase(true),
       'conflict':      () => setShowConflict(true),
@@ -1537,6 +1541,9 @@ export default function App() {
         </button>
         <button className="abt" onClick={() => setShowStash(true)}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="8,17 3,12 8,7"/><polyline points="16,17 21,12 16,7"/></svg>Stash
+        </button>
+        <button className="abt" onClick={() => setShowTags(true)}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Tags
         </button>
         <button className="abt" onClick={() => setShowConflict(true)} style={{ color: 'var(--c-warning)', borderColor: 'rgba(255,206,90,.3)' }}>
           <span style={{ fontSize: 12 }}>⚡</span>Conflicts
@@ -1833,6 +1840,7 @@ export default function App() {
           currentBranch={activeBranch}
         />}
         {showStash       && <StashPanel onClose={() => setShowStash(false)} repoPath={repoPath} currentBranch={activeBranch} />}
+        {showTags        && <TagPanel onClose={() => setShowTags(false)} repoPath={repoPath} commits={baseCommits} onChanged={() => { if (repoPath) loadRepo(repoPath, { silent: true }) }} />}
         {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} />}
         {showAddRepo     && (
           <AddRepoModal

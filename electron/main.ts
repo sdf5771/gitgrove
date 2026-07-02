@@ -1009,12 +1009,115 @@ ipcMain.handle('git:config-set', async (_event, repoPath: string, cfg: Partial<G
 })
 
 // ──────────────────────────────────────────────
-// git:tag-create — 태그 생성 (ContextMenu "Create tag here")
+// git:tag-* — 태그 관리(목록·생성·삭제·푸시)
 // ──────────────────────────────────────────────
 
-ipcMain.handle('git:tag-create', async (_event, repoPath: string, tagName: string, commitHash: string): Promise<void> => {
+interface GitTagEntry {
+  name: string
+  annotated: boolean          // 주석 태그(tag 객체) vs 경량 태그(commit 직접 가리킴)
+  commit: string              // 가리키는 커밋(주석이면 역참조된 커밋), short sha
+  date: string                // creatordate:short (YYYY-MM-DD)
+  tagger?: string             // 주석 태그의 작성자
+  message?: string            // 주석 태그 메시지(subject)
+  subject?: string            // 가리키는 커밋의 메시지(subject)
+  pushed: boolean | null      // origin에 있음/없음. null=원격 확인 불가(오프라인·원격 없음)
+}
+
+// 태그 이름 방어 — 앞의 '-'(플래그 오인)·공백·git이 금지하는 문자를 막는다.
+function validateTagName(name: string): string {
+  const n = (name ?? '').trim()
+  if (!n || n.startsWith('-') || n.includes('..') || /[\s~^:?*[\\]/.test(n) || n.endsWith('/') || n.endsWith('.lock')) {
+    throw new Error('유효하지 않은 태그 이름')
+  }
+  return n
+}
+
+const TAG_US = '\x1f'  // unit separator
+
+// List: 모든 태그를 메타데이터와 함께. pushed는 ls-remote로 best-effort(타임아웃 시 null).
+ipcMain.handle('git:tags', async (_event, repoPath: string): Promise<GitTagEntry[]> => {
   const git = simpleGit(repoPath)
-  await git.tag([tagName, commitHash])
+  const fmt = ['%(refname:short)', '%(objecttype)', '%(objectname:short)', '%(*objectname:short)', '%(creatordate:short)', '%(taggername)', '%(contents:subject)'].join(TAG_US)
+  const raw = await git.raw(['for-each-ref', 'refs/tags', '--sort=-creatordate', `--format=${fmt}`]).catch(() => '')
+  const rows: GitTagEntry[] = raw.split('\n').filter(Boolean).map((line) => {
+    const [name, objtype, objname, derefName, date, tagger, subject] = line.split(TAG_US)
+    const annotated = objtype === 'tag'
+    return {
+      name: name ?? '',
+      annotated,
+      commit: (derefName || objname || '').trim(),
+      date: date ?? '',
+      tagger: annotated && tagger ? tagger : undefined,
+      message: annotated && subject ? subject : undefined,
+      subject: undefined,
+      pushed: null,
+    }
+  })
+
+  // 가리키는 커밋들의 메시지(subject)를 한 번에 조회 → commit-card 표시용.
+  const shas = [...new Set(rows.map(r => r.commit).filter(Boolean))]
+  if (shas.length > 0) {
+    const subjRaw = await git.raw(['log', '--no-walk', `--format=%h${TAG_US}%s`, ...shas]).catch(() => '')
+    const subjMap = new Map<string, string>()
+    subjRaw.split('\n').filter(Boolean).forEach((l) => {
+      const [h, s] = l.split(TAG_US)
+      if (h) subjMap.set(h, s ?? '')
+    })
+    rows.forEach((r) => { r.subject = subjMap.get(r.commit) })
+  }
+
+  // pushed 판정 — origin ls-remote(4초 타임아웃, 실패/오프라인이면 null 유지).
+  try {
+    const remotes = await git.getRemotes()
+    if (remotes.length > 0) {
+      const remoteName = remotes.find(r => r.name === 'origin')?.name ?? remotes[0].name
+      const lsGit = simpleGit(repoPath).env({ ...process.env, GIT_TERMINAL_PROMPT: '0' })
+      const ls = lsGit.raw(['ls-remote', '--tags', '--refs', remoteName]).then(v => v).catch(() => null)
+      const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 4000))
+      const lsRaw = await Promise.race([ls, timeout])
+      if (lsRaw !== null) {
+        const remoteTags = new Set<string>()
+        lsRaw.split('\n').filter(Boolean).forEach((l) => {
+          const m = l.match(/refs\/tags\/(.+)$/)
+          if (m) remoteTags.add(m[1])
+        })
+        rows.forEach((r) => { r.pushed = remoteTags.has(r.name) })
+      }
+    }
+  } catch { /* pushed는 null 유지 */ }
+
+  return rows
+})
+
+// Create: 경량/주석 태그 생성 + 선택적 origin 푸시. opts 없으면 기존 동작(경량, 무푸시).
+ipcMain.handle('git:tag-create', async (_event, repoPath: string, tagName: string, commitHash: string, opts?: { annotated?: boolean; message?: string; push?: boolean }): Promise<void> => {
+  const name = validateTagName(tagName)
+  const git = simpleGit(repoPath)
+  if (opts?.annotated) {
+    await git.raw(['tag', '-a', '-m', opts.message?.trim() || name, name, commitHash])
+  } else {
+    await git.raw(['tag', name, commitHash])
+  }
+  if (opts?.push) {
+    await git.raw(['push', 'origin', `refs/tags/${name}`])
+  }
+})
+
+// Delete: 로컬 태그 삭제 + 선택적 원격 삭제(alsoRemote).
+ipcMain.handle('git:tag-delete', async (_event, repoPath: string, tagName: string, alsoRemote?: boolean): Promise<void> => {
+  const name = validateTagName(tagName)
+  const git = simpleGit(repoPath)
+  await git.raw(['tag', '-d', name])
+  if (alsoRemote) {
+    await git.raw(['push', 'origin', `:refs/tags/${name}`])
+  }
+})
+
+// Push: 단일 태그를 origin에 푸시.
+ipcMain.handle('git:tag-push', async (_event, repoPath: string, tagName: string): Promise<void> => {
+  const name = validateTagName(tagName)
+  const git = simpleGit(repoPath)
+  await git.raw(['push', 'origin', `refs/tags/${name}`])
 })
 
 // ──────────────────────────────────────────────
