@@ -121,6 +121,8 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         if (!repoPath) return
         try {
           await window.gitAPI?.addToGitignore(repoPath, [f.p])
+          // 이미 추적 중인 파일은 .gitignore만으로 status에서 사라지지 않으므로 추적 해제까지 한다.
+          await window.gitAPI?.untrack(repoPath, [f.p])
           await onTreeChanged?.({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
         } catch (e) { console.error('addToGitignore failed:', e) }
         break
@@ -130,6 +132,8 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
         if (!ext) return
         try {
           await window.gitAPI?.addToGitignore(repoPath, ['*.' + ext])
+          // 우클릭한 파일이 추적 중이면 추적 해제해 status에서 실제로 빠지게 한다.
+          await window.gitAPI?.untrack(repoPath, [f.p])
           await onTreeChanged?.({ cls: 'success', title: '무시 추가', msg: '.gitignore에 추가했어요' })
         } catch (e) { console.error('addToGitignore failed:', e) }
         break

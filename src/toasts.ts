@@ -55,7 +55,7 @@ export const TOASTS = {
   conflictResolved: (): Toast => ({ type: 'success', title: '충돌 해결됨', msg: '이제 머지할 수 있어요' }),
 
   // ── 히스토리 ──
-  reverted: (hash: string): Toast => ({ type: 'success', title: `되돌리기 · ${hash}`, msg: '되돌린 변경을 스테이지에 올렸어요', geuru: 'happy' }),
+  reverted: (hash: string): Toast => ({ type: 'success', title: `되돌리기 · ${hash}`, msg: '되돌리기 커밋을 만들었어요', geuru: 'happy' }),
   revertFailed: (e: string): Toast => ({ type: 'error', title: '되돌리기 실패', msg: e, geuru: 'conflict' }),
   resetDone: (mode: string, hash: string): Toast => ({ type: 'warning', title: `리셋 · ${mode}`, msg: `HEAD를 ${hash}로 옮겼어요` }),
   resetFailed: (e: string): Toast => ({ type: 'error', title: '리셋 실패', msg: e, geuru: 'conflict' }),

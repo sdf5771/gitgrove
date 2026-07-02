@@ -1203,12 +1203,16 @@ ipcMain.handle('git:commit-amend', async (_event, repoPath: string, message?: st
 })
 
 // ──────────────────────────────────────────────
-// git:revert — 커밋 되돌리기 (no-commit 스테이지)
+// git:revert — 커밋 되돌리기 (되돌리기 커밋 생성)
 // ──────────────────────────────────────────────
+//
+// --no-edit: 되돌리기 커밋을 즉시 생성한다(에디터 안 띄움). 커밋 리스트 맨 위에
+// "Revert ..." 커밋이 추가되고, 예전 --no-commit이 남기던 REVERT_HEAD(진행중 상태)도
+// 남지 않는다.
 
 ipcMain.handle('git:revert', async (_event, repoPath: string, hash: string): Promise<void> => {
   const git = simpleGit(repoPath)
-  await git.raw(['revert', '--no-commit', hash])
+  await git.raw(['revert', '--no-edit', hash])
 })
 
 // ──────────────────────────────────────────────
@@ -1348,6 +1352,28 @@ ipcMain.handle('git:add-to-gitignore', async (_event, repoPath: string, patterns
   next += toAppend.join('\n') + '\n'
 
   await fsp.writeFile(gitignorePath, next, 'utf8')
+})
+
+// git:untrack — 인덱스에서 파일 추적 해제 (`git rm --cached`).
+//   이미 추적 중인 파일은 .gitignore에 추가만 해서는 status에서 사라지지 않는다.
+//   워킹트리 파일은 그대로 두고 인덱스에서만 제거해 이후 .gitignore가 실제로 먹히게 한다.
+//   - --ignore-unmatch: 미추적 파일이 섞여 있어도 에러 없이 no-op.
+//   - -r: 디렉토리도 허용.
+//   - 경로 트래버설 방어: repoRoot 하위 경로만 대상.
+ipcMain.handle('git:untrack', async (_event, repoPath: string, files: string[]): Promise<void> => {
+  const git = simpleGit(repoPath)
+  const repoRoot = path.resolve(repoPath)
+
+  const isInsideRepo = (rel: string): boolean => {
+    const abs = path.resolve(repoRoot, rel)
+    const relFromRoot = path.relative(repoRoot, abs)
+    return relFromRoot !== '' && !relFromRoot.startsWith('..') && !path.isAbsolute(relFromRoot)
+  }
+
+  const targets = files.filter(isInsideRepo)
+  if (targets.length === 0) return
+
+  await git.raw(['rm', '-r', '--cached', '--ignore-unmatch', '--', ...targets])
 })
 
 // ──────────────────────────────────────────────

@@ -148,6 +148,7 @@ export function installGitApiMock() {
     openPath: vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true })),
     discardChanges: vi.fn(async () => {}),
     addToGitignore: vi.fn(async () => {}),
+    untrack: vi.fn(async () => {}),
     // 머지 충돌 해결 (ConflictEditorModal) — 테스트에서 override 가능하도록 vi.fn. 기본 무충돌/성공.
     getConflicts: vi.fn(async (): Promise<ConflictFile[]> => []),
     resolveConflict: vi.fn(async (): Promise<void> => undefined),
