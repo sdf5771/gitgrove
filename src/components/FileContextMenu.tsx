@@ -62,6 +62,10 @@ export function FileContextMenu({
 
   const sep = () => <div className="ctx-sep" />
 
+  // 대상 헤더: 상태 글자(M/A/D) · 파일명 — 무엇을 우클릭했는지 먼저 보여줌
+  const fileName = file.p.split('/').pop() || file.p
+  const stColor = file.s === 'A' ? 'var(--c-success)' : file.s === 'D' ? 'var(--c-danger)' : 'var(--c-warning)'
+
   return (
     <>
       {/* backdrop — 클릭 시 닫기 */}
@@ -76,24 +80,10 @@ export function FileContextMenu({
         onMouseDown={e => e.stopPropagation()}
       >
         <div className="ctx-menu">
-          {item(
-            sv(<><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>),
-            '변경 되돌리기…',
-            'discard',
-            true,
-          )}
-          {sep()}
-          {item(
-            sv(<><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></>),
-            '파일 무시 (.gitignore에 추가)',
-            'ignore-file',
-          )}
-          {ext && item(
-            sv(<><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></>),
-            `이 확장자 무시 · .${ext} (.gitignore에 추가)`,
-            'ignore-ext',
-          )}
-          {sep()}
+          <div className="ctx-head">
+            <span className="st" style={{ color: stColor }}>{file.s}</span>
+            <span className="nm">{fileName}</span>
+          </div>
           {item(
             sv(<><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></>),
             '파일 경로 복사',
@@ -114,6 +104,25 @@ export function FileContextMenu({
             sv(<><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></>),
             '기본 앱으로 열기',
             'open-default',
+          )}
+          {sep()}
+          <div className="ctx-group-lbl">.gitignore에 추가</div>
+          {item(
+            sv(<><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></>),
+            '파일 무시 (.gitignore에 추가)',
+            'ignore-file',
+          )}
+          {ext && item(
+            sv(<><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></>),
+            `이 확장자 무시 · .${ext} (.gitignore에 추가)`,
+            'ignore-ext',
+          )}
+          {sep()}
+          {item(
+            sv(<><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/></>),
+            '변경 되돌리기…',
+            'discard',
+            true,
           )}
         </div>
       </div>

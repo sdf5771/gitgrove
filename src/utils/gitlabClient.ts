@@ -156,6 +156,10 @@ export interface GitlabUser {
   web_url: string
   state?: string
   bio?: string | null
+  // GET /user가 함께 주는 프로필 필드(프로필 카드용, 없을 수 있음)
+  organization?: string | null
+  location?: string | null
+  created_at?: string
 }
 
 /** GET /user — 프로필/토큰 검증용 */

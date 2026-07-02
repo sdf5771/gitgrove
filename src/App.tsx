@@ -24,13 +24,14 @@ import { DiffExplorer } from './components/DiffExplorer'
 import { BlameView } from './components/BlameView'
 import { PRView } from './components/PRView'
 import { MRView } from './components/MRView'
-import { StatusBar, type GithubUser } from './components/StatusBar'
+import { StatusBar, type GithubUser, type AccountProfile } from './components/StatusBar'
 import { parseGitHubRepo, permissionToRole } from './utils/github'
-import { parseGitLabRepo, matchGitlabHost } from './utils/gitlab'
+import { parseGitLabRepo, matchGitlabHost, accessLevelToRole } from './utils/gitlab'
 import type { RepoPermissions } from './utils/github'
 import { getGithubToken } from './utils/githubToken'
 import { useGitlabConns } from './utils/useGitlabConns'
 import { getUser, getRepo } from './utils/githubClient'
+import { getCurrentUser as getGitlabUser, getProjects as getGitlabProjects, type GitlabUser } from './utils/gitlabClient'
 import { NotificationStack } from './components/NotificationStack'
 import { ContextMenu } from './components/ContextMenu'
 import { BranchContextMenu, type BranchMenuAction } from './components/BranchContextMenu'
@@ -38,6 +39,8 @@ import { CommandPalette } from './components/CommandPalette'
 import { MergeModal } from './components/modals/MergeModal'
 import { CherryPickModal } from './components/modals/CherryPickModal'
 import { StashPanel } from './components/modals/StashPanel'
+import { TagPanel } from './components/modals/TagPanel'
+import { AuthManagerModal } from './components/modals/AuthManagerModal'
 import { BranchModal } from './components/modals/BranchModal'
 import { InteractiveRebaseModal } from './components/modals/InteractiveRebaseModal'
 import { SettingsPanel, type SettingsTab } from './components/modals/SettingsPanel'
@@ -326,6 +329,8 @@ export default function App() {
   const [showMerge,      setShowMerge]      = useState(false)
   const [showCherryPick, setShowCherryPick] = useState(false)
   const [showStash,      setShowStash]      = useState(false)
+  const [showTags,       setShowTags]       = useState(false)
+  const [showAuth,       setShowAuth]       = useState(false)
   const [showBranch,     setShowBranch]     = useState(false)
   const [branchTab,      setBranchTab]      = useState<BranchTab>('create')
   const [showRebase,     setShowRebase]     = useState(false)
@@ -920,6 +925,57 @@ export default function App() {
     return () => { cancelled = true }
   }, [repoPath, githubToken])
 
+  // ── GitLab 사용자 정보 (연결된 첫 호스트 기준) ──
+  const [gitlabUser, setGitlabUser] = useState<GitlabUser | null>(null)
+  const [gitlabHost, setGitlabHost] = useState<string | null>(null)
+  const [gitlabProjectsCount, setGitlabProjectsCount] = useState<number | null>(null)
+
+  const fetchGitlabUser = useCallback(async () => {
+    const hosts = await window.appAPI?.gitlabListHosts() ?? []
+    if (hosts.length === 0) { setGitlabUser(null); setGitlabHost(null); setGitlabProjectsCount(null); return }
+    const host = hosts[0]
+    const token = await window.appAPI?.gitlabGetToken(host)
+    if (!token) { setGitlabUser(null); setGitlabHost(null); setGitlabProjectsCount(null); return }
+    try {
+      const user = await getGitlabUser(host, token)
+      setGitlabUser(user); setGitlabHost(host)
+    } catch { setGitlabUser(null); setGitlabHost(null) }
+    try {
+      const projects = await getGitlabProjects(host, token, { membership: true, perPage: 100 })
+      setGitlabProjectsCount(projects.length)
+    } catch { setGitlabProjectsCount(null) }
+  }, [])
+
+  useEffect(() => { void fetchGitlabUser() }, [fetchGitlabUser])
+  useEffect(() => {
+    const handler = () => { void fetchGitlabUser() }
+    window.addEventListener('gitgrove:settings-changed', handler)
+    return () => window.removeEventListener('gitgrove:settings-changed', handler)
+  }, [fetchGitlabUser])
+
+  // ── 현재 레포가 GitLab이면 그 프로젝트에서 본인 역할(Maintainer 등) ──
+  const [gitlabRole, setGitlabRole] = useState<string | null>(null)
+  useEffect(() => {
+    if (!repoPath || !gitlabHost) { setGitlabRole(null); return }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const token = await window.appAPI?.gitlabGetToken(gitlabHost)
+        if (!token) { if (!cancelled) setGitlabRole(null); return }
+        const remotes = await window.gitAPI?.getRemotes(repoPath) ?? []
+        const origin = remotes.find(r => r.name === 'origin') ?? remotes[0]
+        const info = origin && parseGitLabRepo(origin.url)
+        if (!info) { if (!cancelled) setGitlabRole(null); return }
+        const projects = await getGitlabProjects(gitlabHost, token, { membership: true, search: info.project, perPage: 20 })
+        const full = info.fullPath.toLowerCase()
+        const match = projects.find(p => p.path_with_namespace.toLowerCase() === full)
+        const lvl = match?.permissions?.project_access?.access_level ?? match?.permissions?.group_access?.access_level
+        if (!cancelled) setGitlabRole(accessLevelToRole(lvl))
+      } catch { if (!cancelled) setGitlabRole(null) }
+    })()
+    return () => { cancelled = true }
+  }, [repoPath, gitlabHost])
+
   // ── 활성 레포의 provider 감지 (PR 탭에서 GitHub PRView ↔ GitLab MRView 분기) ──
   // origin이 GitLab이고 그 host가 연결돼 있으면 'gitlab', 아니면 'github'(기존 동작).
   const [repoProvider, setRepoProvider] = useState<'github' | 'gitlab'>('github')
@@ -1168,6 +1224,8 @@ export default function App() {
         else if (showMerge) setShowMerge(false)
         else if (showCherryPick) setShowCherryPick(false)
         else if (showStash) setShowStash(false)
+        else if (showTags) setShowTags(false)
+        else if (showAuth) setShowAuth(false)
         else if (showBranch) setShowBranch(false)
         else if (showRebase) setShowRebase(false)
         else if (showSettings) setShowSettings(false)
@@ -1182,7 +1240,7 @@ export default function App() {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
+  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showAuth, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
 
   // ── 히스토리 뷰: 방향키 위/아래로 커밋 선택, Enter로 해당 커밋 Diff 열기 ──
   useEffect(() => {
@@ -1192,7 +1250,7 @@ export default function App() {
       const t = e.target as HTMLElement | null
       if (t && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showBranch ||
+      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showAuth || showBranch ||
           showRebase || showSettings || showAddRepo || showConflict || showRepoManager) return
       const n = filteredCommits.length
       if (n === 0) return
@@ -1213,7 +1271,7 @@ export default function App() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [view, filteredCommits, selIdx, handleSelectCommit, showCmd, ctxMenu, showMerge,
-      showCherryPick, showStash, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
+      showCherryPick, showStash, showTags, showAuth, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
 
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
@@ -1222,6 +1280,8 @@ export default function App() {
       'fetch':         () => void handleFetch(),
       'merge':         () => setShowMerge(true),
       'stash':         () => setShowStash(true),
+      'tags':          () => setShowTags(true),
+      'auth':          () => setShowAuth(true),
       'cherry':        () => setShowCherryPick(true),
       'rebase':        () => setShowRebase(true),
       'conflict':      () => setShowConflict(true),
@@ -1298,6 +1358,50 @@ export default function App() {
 
   const repo = repos[activeRepo] || null
   const displayBranch = repo?.branch || activeBranch
+
+  // 하단바 계정 칩 — 연결된 프로바이더별로 정규화한 프로필. GitHub 골드 · GitLab 주황.
+  const accounts = useMemo<AccountProfile[]>(() => {
+    const list: AccountProfile[] = []
+    if (githubUser) {
+      const joinYear = githubUser.created_at ? new Date(githubUser.created_at).getFullYear() : null
+      list.push({
+        provider: 'github',
+        login: githubUser.login,
+        name: githubUser.name,
+        avatarUrl: githubUser.avatar_url,
+        bio: githubUser.bio,
+        role: repoRole ? `이 저장소 · ${repoRole}` : null,
+        stats: [
+          { value: String(githubUser.followers ?? 0), label: 'followers' },
+          { value: String(githubUser.following ?? 0), label: 'following' },
+          ...(githubUser.public_repos !== undefined ? [{ value: String(githubUser.public_repos), label: 'repos' }] : []),
+        ],
+        company: githubUser.company,
+        location: githubUser.location,
+        blog: githubUser.blog,
+        joined: joinYear ? `Joined ${joinYear}` : null,
+        profileUrl: `https://github.com/${githubUser.login}`,
+      })
+    }
+    if (gitlabUser) {
+      const joinYear = gitlabUser.created_at ? new Date(gitlabUser.created_at).getFullYear() : null
+      list.push({
+        provider: 'gitlab',
+        login: gitlabUser.username,
+        name: gitlabUser.name,
+        avatarUrl: gitlabUser.avatar_url,
+        bio: gitlabUser.bio,
+        role: gitlabRole ? `이 프로젝트 · ${gitlabRole}` : null,
+        stats: gitlabProjectsCount !== null ? [{ value: String(gitlabProjectsCount), label: 'projects' }] : [],
+        company: gitlabUser.organization,
+        location: gitlabUser.location,
+        blog: null,
+        joined: joinYear ? `가입 ${joinYear}` : null,
+        profileUrl: gitlabUser.web_url,
+      })
+    }
+    return list
+  }, [githubUser, repoRole, gitlabUser, gitlabRole, gitlabProjectsCount])
 
   // M1: HUD/상태바 신호등은 op 대상 repo가 현재 표시 중인 repo와 같을 때만 반영한다.
   // (탭/repo 전환으로 repoPath가 바뀌면 이전 repo의 진행/결과가 새 repo에 남지 않게 가린다.)
@@ -1441,6 +1545,9 @@ export default function App() {
         </button>
         <button className="abt" onClick={() => setShowStash(true)}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="8,17 3,12 8,7"/><polyline points="16,17 21,12 16,7"/></svg>Stash
+        </button>
+        <button className="abt" onClick={() => setShowTags(true)}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Tags
         </button>
         <button className="abt" onClick={() => setShowConflict(true)} style={{ color: 'var(--c-warning)', borderColor: 'rgba(255,206,90,.3)' }}>
           <span style={{ fontSize: 12 }}>⚡</span>Conflicts
@@ -1737,7 +1844,9 @@ export default function App() {
           currentBranch={activeBranch}
         />}
         {showStash       && <StashPanel onClose={() => setShowStash(false)} repoPath={repoPath} currentBranch={activeBranch} />}
-        {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} />}
+        {showTags        && <TagPanel onClose={() => setShowTags(false)} repoPath={repoPath} commits={baseCommits} onChanged={() => { if (repoPath) loadRepo(repoPath, { silent: true }) }} />}
+        {showAuth        && <AuthManagerModal onClose={() => setShowAuth(false)} />}
+        {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} onOpenAuth={() => { setShowSettings(false); setSettingsTab(undefined); setShowAuth(true) }} />}
         {showAddRepo     && (
           <AddRepoModal
             onClose={() => setShowAddRepo(false)}
@@ -1776,8 +1885,7 @@ export default function App() {
         behind={repo?.behind}
         remote={repo ? `origin/${repo.branch}` : undefined}
         onSettings={() => setShowSettings(true)}
-        githubUser={githubUser}
-        repoRole={repoRole}
+        accounts={accounts}
         repoSummary={showRepoManager ? { total: repos.length, dirty: repos.filter(r => r.dirty).length } : null}
         geuruState={showRepoManager ? 'idle' : geuruState}
         syncState={showRepoManager ? 'idle' : syncState}

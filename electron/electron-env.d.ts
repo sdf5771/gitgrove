@@ -126,6 +126,28 @@ interface GitStashEntry {
   deletions: number   // 삭제된 라인 합계
 }
 
+interface SshKeyEntry {
+  name: string                 // .pub 제외 파일명(예: id_ed25519)
+  pubPath: string
+  privExists: boolean          // 개인키 짝 존재 여부
+  type: string                 // ED25519 / RSA 4096 / ECDSA …
+  fingerprint: string          // SHA256:…
+  comment: string
+  publicKey: string            // .pub 전체(복사용)
+  hasPassphrase: boolean | null // 패스프레이즈 여부(확인 불가면 null)
+}
+
+interface GitTagEntry {
+  name: string
+  annotated: boolean          // 주석 태그 vs 경량 태그
+  commit: string              // 가리키는 커밋 short sha
+  date: string                // YYYY-MM-DD
+  tagger?: string             // 주석 태그 작성자
+  message?: string            // 주석 태그 메시지(subject)
+  subject?: string            // 가리키는 커밋 메시지(subject)
+  pushed: boolean | null      // origin 존재 여부. null=확인 불가
+}
+
 interface GitStashFile {
   path: string
   status: 'M' | 'A' | 'D' | 'R'
@@ -202,6 +224,11 @@ interface Window {
     gitlabGetToken: (host: string) => Promise<string | null>
     gitlabListHosts: () => Promise<string[]>
     gitlabRemoveToken: (host: string) => Promise<boolean>
+    // SSH 키 관리 (인증 관리자) — 모든 파일 접근은 ~/.ssh 하위로 제한, 셸 미경유.
+    sshKeys: () => Promise<SshKeyEntry[]>
+    sshTest: (host: string) => Promise<{ ok: boolean; message: string }>
+    sshGenerate: (name: string, passphrase?: string, comment?: string) => Promise<{ name: string; publicKey: string }>
+    sshDelete: (name: string) => Promise<void>
     // OS 네이티브 알림 / Dock (기능 B). 렌더러가 신규 알림 감지 시 호출.
     // showNotification: title/body 표시, silent로 무음, sound는 macOS 시스템 사운드 이름('Glass' 등).
     //   알림 클릭 시 메인 윈도우를 앞으로 가져옴. 미지원 환경은 graceful no-op.
@@ -243,7 +270,10 @@ interface Window {
     getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>
     getConfig: (repoPath: string) => Promise<GitConfigResult>
     setConfig: (repoPath: string, cfg: Partial<GitConfigResult>) => Promise<void>
-    createTag: (repoPath: string, tagName: string, commitHash: string) => Promise<void>
+    createTag: (repoPath: string, tagName: string, commitHash: string, opts?: { annotated?: boolean; message?: string; push?: boolean }) => Promise<void>
+    listTags: (repoPath: string) => Promise<GitTagEntry[]>
+    deleteTag: (repoPath: string, tagName: string, alsoRemote?: boolean) => Promise<void>
+    pushTag: (repoPath: string, tagName: string) => Promise<void>
     stashApply: (repoPath: string, index: number) => Promise<void>
     stashDrop: (repoPath: string, index: number) => Promise<void>
     stashList: (repoPath: string) => Promise<GitStashEntry[]>

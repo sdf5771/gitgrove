@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld('appAPI', {
   gitlabListHosts: () => ipcRenderer.invoke('gitlab:listHosts') as Promise<string[]>,
   gitlabRemoveToken: (host: string) => ipcRenderer.invoke('gitlab:removeToken', host) as Promise<boolean>,
 
+  // SSH 키 관리 (인증 관리자)
+  sshKeys: () => ipcRenderer.invoke('auth:ssh-keys') as Promise<SshKeyEntry[]>,
+  sshTest: (host: string) => ipcRenderer.invoke('auth:ssh-test', host) as Promise<{ ok: boolean; message: string }>,
+  sshGenerate: (name: string, passphrase?: string, comment?: string) => ipcRenderer.invoke('auth:ssh-generate', name, passphrase, comment) as Promise<{ name: string; publicKey: string }>,
+  sshDelete: (name: string) => ipcRenderer.invoke('auth:ssh-delete', name) as Promise<void>,
+
   // OS 네이티브 알림 / Dock (기능 B). 렌더러가 신규 알림 감지 시 호출.
   // 미지원/비-macOS 환경은 메인에서 graceful no-op.
   showNotification: (opts: { title: string; body: string; silent?: boolean; sound?: string }) =>
@@ -107,7 +113,10 @@ contextBridge.exposeInMainWorld('gitAPI', {
   getRemotes: (repoPath: string) => ipcRenderer.invoke('git:remotes', repoPath),
   getConfig: (repoPath: string) => ipcRenderer.invoke('git:config-get', repoPath),
   setConfig: (repoPath: string, cfg: Partial<GitConfigResult>) => ipcRenderer.invoke('git:config-set', repoPath, cfg),
-  createTag: (repoPath: string, tagName: string, commitHash: string) => ipcRenderer.invoke('git:tag-create', repoPath, tagName, commitHash),
+  createTag: (repoPath: string, tagName: string, commitHash: string, opts?: { annotated?: boolean; message?: string; push?: boolean }) => ipcRenderer.invoke('git:tag-create', repoPath, tagName, commitHash, opts),
+  listTags: (repoPath: string) => ipcRenderer.invoke('git:tags', repoPath),
+  deleteTag: (repoPath: string, tagName: string, alsoRemote?: boolean) => ipcRenderer.invoke('git:tag-delete', repoPath, tagName, alsoRemote),
+  pushTag: (repoPath: string, tagName: string) => ipcRenderer.invoke('git:tag-push', repoPath, tagName),
   stashApply: (repoPath: string, index: number) => ipcRenderer.invoke('git:stash-apply', repoPath, index),
   stashDrop: (repoPath: string, index: number) => ipcRenderer.invoke('git:stash-drop', repoPath, index),
   stashList: (repoPath: string) => ipcRenderer.invoke('git:stash-list', repoPath),

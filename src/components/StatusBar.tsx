@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Geuru, type GeuruExpr } from './Geuru'
+import { GhMark, GlMark } from './ProviderMark'
 
 export interface GithubUser {
   login: string
@@ -17,14 +18,30 @@ export interface GithubUser {
   created_at?: string
 }
 
+// 프로바이더 공통으로 정규화한 계정 프로필 — 하단바 칩 + 프로필 카드가 함께 쓴다.
+export interface AccountProfile {
+  provider: 'github' | 'gitlab'
+  login: string                 // @seobisback / @s.kim (앞의 @ 제외한 값)
+  name?: string | null
+  avatarUrl?: string | null     // 없으면 이니셜로 대체
+  bio?: string | null
+  role?: string | null          // 현재 저장소/프로젝트 권한 (예: 이 저장소 · admin)
+  stats?: Array<{ value: string; label: string }>
+  company?: string | null
+  location?: string | null
+  blog?: string | null          // 링크(외부 열기)
+  joined?: string | null        // 가입 표기 (예: Joined 2019 / 가입 2021)
+  profileUrl: string            // "…에서 보기"로 열 웹 URL
+}
+
 interface Props {
   branch: string
   ahead?: number
   behind?: number
   remote?: string
   onSettings: () => void
-  githubUser?: GithubUser | null
-  repoRole?: string | null
+  // 연결된 프로바이더별 계정 — 있는 것만 칩으로 나란히 뜬다(GitHub 골드 · GitLab 주황).
+  accounts?: AccountProfile[]
   // Repository Manager 표시 중에는 브랜치 대신 레포 요약을 보여준다(자체 상태바 통합).
   repoSummary?: { total: number; dirty: number } | null
   // 좌측 끝 그루 표정 — 저장소 상태에 1:1 매핑. clean→sleepy, syncing→think, conflict→conflict.
@@ -49,7 +66,7 @@ const GEURU_TITLE: Partial<Record<GeuruExpr, string>> = {
   conflict: '그루 — 충돌 해결 필요',
 }
 
-export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUser, repoRole, repoSummary, geuruState = 'idle', syncState = 'idle', loading = false }: Props) {
+export function StatusBar({ branch, ahead, behind, remote, onSettings, accounts, repoSummary, geuruState = 'idle', syncState = 'idle', loading = false }: Props) {
   // 전환 로딩 중에는 그루 think + sync dot으로 통일(상태 신호등은 로딩이 우선).
   const effGeuru: GeuruExpr = loading ? 'think' : geuruState
   // 신호등 dot 수식어 — 로딩/running=골드 펄스, err=빨강, 그 외(done/idle)=녹색 기본.
@@ -125,8 +142,8 @@ export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUse
           </span>
         </>
       )}
-      {githubUser && <GithubProfileButton user={githubUser} repoRole={repoRole} />}
-      <button onClick={onSettings} style={{ marginLeft: githubUser ? undefined : 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: '11px', padding: '0 4px', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4, transition: 'color 120ms', fontFamily: 'var(--font-mono)' }}
+      {accounts && accounts.length > 0 && <AccountChips accounts={accounts} />}
+      <button onClick={onSettings} style={{ marginLeft: (accounts && accounts.length > 0) ? undefined : 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--c-text-faint)', fontSize: '11px', padding: '0 4px', borderRadius: 3, display: 'flex', alignItems: 'center', gap: 4, transition: 'color 120ms', fontFamily: 'var(--font-mono)' }}
         onMouseOver={e => (e.currentTarget.style.color = 'var(--c-text)')}
         onMouseOut={e => (e.currentTarget.style.color = 'var(--c-text-faint)')}>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -136,16 +153,18 @@ export function StatusBar({ branch, ahead, behind, remote, onSettings, githubUse
   )
 }
 
-function GithubProfileButton({ user, repoRole }: { user: GithubUser; repoRole?: string | null }) {
-  const [open, setOpen] = useState(false)
+// 하단바 계정 칩 — 연결된 프로바이더별로 나란히. 하나를 누르면 그 프로필 카드가 열리고,
+// 다른 칩을 누르면 그 칩 카드로 전환된다. 바깥 클릭·Escape로 닫힘.
+function AccountChips({ accounts }: { accounts: AccountProfile[] }) {
+  const [open, setOpen] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(null)
     }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(null) }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
     return () => {
@@ -154,81 +173,85 @@ function GithubProfileButton({ user, repoRole }: { user: GithubUser; repoRole?: 
     }
   }, [open])
 
-  const joinYear = user.created_at ? new Date(user.created_at).getFullYear() : null
-
   return (
-    <div ref={ref} style={{ marginLeft: 'auto', position: 'relative', marginRight: 6 }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{ display: 'flex', alignItems: 'center', gap: 5, background: open ? 'var(--c-bg-elevated)' : 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', borderRadius: 4, transition: 'background 120ms' }}
-        onMouseOver={e => (e.currentTarget.style.background = 'var(--c-bg-elevated)')}
-        onMouseOut={e => (e.currentTarget.style.background = open ? 'var(--c-bg-elevated)' : 'none')}
-        title={`@${user.login}`}
-      >
-        <img src={user.avatar_url} style={{ width: 18, height: 18, borderRadius: '50%', border: '1px solid var(--c-border)' }} />
-        <span style={{ fontSize: 11, color: 'var(--c-text-muted)', fontFamily: 'var(--font-mono)' }}>@{user.login}</span>
-      </button>
-      {open && (
-        <div
-          style={{
-            position: 'absolute', bottom: 'calc(100% + 8px)', right: 0, width: 280,
-            background: 'var(--c-bg-elevated)', border: '1px solid var(--c-border)', borderRadius: 8,
-            boxShadow: '0 8px 28px rgba(0,0,0,0.4)', padding: 14, zIndex: 1000,
-            display: 'flex', flexDirection: 'column', gap: 10, cursor: 'default',
-          }}
-        >
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            <img src={user.avatar_url} style={{ width: 48, height: 48, borderRadius: '50%', border: '1px solid var(--c-border)', flexShrink: 0 }} />
-            <div style={{ minWidth: 0 }}>
-              {user.name && <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--c-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>}
-              <div style={{ fontSize: 12, color: 'var(--c-text-muted)', fontFamily: 'var(--font-mono)' }}>@{user.login}</div>
-              {repoRole && (
-                <span title="현재 저장소에서의 권한" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 10, fontWeight: 600, color: 'var(--c-gold-300)', background: 'var(--c-gold-bg)', border: '1px solid var(--c-gold-border)', borderRadius: 4, padding: '1px 6px', lineHeight: 1.5 }}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
-                  {repoRole}
-                </span>
-              )}
-            </div>
+    <div className="sb-accts" ref={ref}>
+      {accounts.map(a => {
+        const cls = a.provider === 'gitlab' ? 'gl' : 'gh'
+        const isOpen = open === a.provider
+        const initial = (a.name || a.login || '?').trim().charAt(0).toUpperCase()
+        return (
+          <div key={a.provider} style={{ position: 'relative' }}>
+            <button
+              className={`acct-chip ${cls}${isOpen ? ' active' : ''}`}
+              onClick={() => setOpen(o => (o === a.provider ? null : a.provider))}
+              title={`@${a.login}`}
+            >
+              <span className="av">{a.avatarUrl ? <img src={a.avatarUrl} alt="" /> : initial}</span>
+              <span className="pm">{a.provider === 'gitlab' ? <GlMark size={11} /> : <GhMark size={11} />}</span>
+              <span className="lg">@{a.login}</span>
+            </button>
+            {isOpen && <ProfileCard account={a} onClose={() => setOpen(null)} />}
           </div>
+        )
+      })}
+    </div>
+  )
+}
 
-          {user.bio && <div style={{ fontSize: 12, color: 'var(--c-text)', lineHeight: 1.4 }}>{user.bio}</div>}
+function roleIcon(provider: 'github' | 'gitlab') {
+  return provider === 'gitlab'
+    ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z"/></svg>
+    : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+}
 
-          <div style={{ display: 'flex', gap: 14, fontSize: 12, color: 'var(--c-text-muted)' }}>
-            <span><b style={{ color: 'var(--c-text)' }}>{user.followers ?? 0}</b> followers</span>
-            <span><b style={{ color: 'var(--c-text)' }}>{user.following ?? 0}</b> following</span>
-            {user.public_repos !== undefined && <span><b style={{ color: 'var(--c-text)' }}>{user.public_repos}</b> repos</span>}
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 12, color: 'var(--c-text-muted)' }}>
-            {user.company && <MetaRow icon="building">{user.company}</MetaRow>}
-            {user.location && <MetaRow icon="pin">{user.location}</MetaRow>}
-            {user.blog && <MetaRow icon="link"><a href={user.blog} onClick={e => { e.preventDefault(); window.appAPI?.openReleaseUrl(normalizeUrl(user.blog!)) }} style={{ color: 'var(--c-gold-300)', textDecoration: 'none' }}>{user.blog}</a></MetaRow>}
-            {user.twitter_username && <MetaRow icon="twitter">@{user.twitter_username}</MetaRow>}
-            {user.email && <MetaRow icon="mail">{user.email}</MetaRow>}
-            {joinYear && <MetaRow icon="calendar">Joined {joinYear}</MetaRow>}
-          </div>
-
-          <button
-            onClick={() => { window.appAPI?.openReleaseUrl(`https://github.com/${user.login}`); setOpen(false) }}
-            style={{ marginTop: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'var(--c-bg)', border: '1px solid var(--c-border)', borderRadius: 6, color: 'var(--c-text)', fontSize: 12, padding: '7px 0', cursor: 'pointer', transition: 'background 120ms' }}
-            onMouseOver={e => (e.currentTarget.style.background = 'var(--c-bg-hover, var(--c-border))')}
-            onMouseOut={e => (e.currentTarget.style.background = 'var(--c-bg)')}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.5 2.87 8.32 6.84 9.67.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.55-1.14-4.55-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.27 2.75 1.05A9.4 9.4 0 0112 6.84c.85 0 1.71.12 2.51.34 1.91-1.32 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.59.69.49A10.02 10.02 0 0022 12.26C22 6.58 17.52 2 12 2z"/></svg>
-            GitHub에서 보기
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .6 }}><path d="M7 17L17 7M17 7H8M17 7v9"/></svg>
-          </button>
+function ProfileCard({ account: a, onClose }: { account: AccountProfile; onClose: () => void }) {
+  const cls = a.provider === 'gitlab' ? 'gl' : 'gh'
+  const providerName = a.provider === 'gitlab' ? 'GitLab' : 'GitHub'
+  const initial = (a.name || a.login || '?').trim().charAt(0).toUpperCase()
+  return (
+    <div className={`pcard ${cls}`} onMouseDown={e => e.stopPropagation()}>
+      <div className="pc-banner">
+        <span className="pc-provider">{a.provider === 'gitlab' ? <GlMark size={11} /> : <GhMark size={11} />}{providerName}</span>
+        <span className="pc-geuru"><Geuru expr="happy" scale={1.7} /></span>
+      </div>
+      <div className="pc-head">
+        <div className="pc-avatar">{a.avatarUrl ? <img src={a.avatarUrl} alt="" /> : initial}</div>
+        <div className="pc-id">
+          {a.name && <div className="pc-name">{a.name}</div>}
+          <div className="pc-login">@{a.login}</div>
         </div>
-      )}
+      </div>
+      <div className="pc-body">
+        {a.role && <span className="pc-role" title="현재 저장소·프로젝트에서의 권한">{roleIcon(a.provider)}{a.role}</span>}
+        {a.bio && <div className="pc-bio">{a.bio}</div>}
+        {a.stats && a.stats.length > 0 && (
+          <div className="pc-stats">
+            {a.stats.map(s => (
+              <div key={s.label} className="pc-stat"><b>{s.value}</b><span>{s.label}</span></div>
+            ))}
+          </div>
+        )}
+        <div className="pc-meta">
+          {a.company && <MetaRow icon="building">{a.company}</MetaRow>}
+          {a.location && <MetaRow icon="pin">{a.location}</MetaRow>}
+          {a.blog && <MetaRow icon="link"><a href={a.blog} onClick={e => { e.preventDefault(); window.appAPI?.openReleaseUrl(normalizeUrl(a.blog!)) }}>{a.blog}</a></MetaRow>}
+          {a.joined && <MetaRow icon="calendar">{a.joined}</MetaRow>}
+        </div>
+        <button className="pc-visit" onClick={() => { window.appAPI?.openReleaseUrl(a.profileUrl); onClose() }}>
+          {a.provider === 'gitlab' ? <GlMark size={14} /> : <GhMark size={14} />}
+          {providerName}에서 보기
+          <svg className="ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M17 7H8M17 7v9"/></svg>
+        </button>
+      </div>
     </div>
   )
 }
 
 function MetaRow({ icon, children }: { icon: string; children: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-      <span style={{ opacity: .65, flexShrink: 0, display: 'flex' }}>{metaIcon(icon)}</span>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{children}</span>
+    <div className="pc-mrow">
+      {metaIcon(icon)}
+      <span className="v">{children}</span>
     </div>
   )
 }

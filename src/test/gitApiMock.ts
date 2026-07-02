@@ -126,6 +126,9 @@ export function installGitApiMock() {
     getConfig: vi.fn(async () => ({ name: '', email: '', defaultBranch: 'main' })),
     setConfig: vi.fn(async () => {}),
     createTag: vi.fn(async () => {}),
+    listTags: vi.fn(async () => [] as GitTagEntry[]),
+    deleteTag: vi.fn(async () => {}),
+    pushTag: vi.fn(async () => {}),
     stashApply: vi.fn(async () => {}),
     stashDrop: vi.fn(async () => {}),
     stashList: vi.fn(async () => []),
@@ -173,6 +176,11 @@ export function installGitApiMock() {
     gitlabGetToken: vi.fn(async (): Promise<string | null> => null),
     gitlabListHosts: vi.fn(async () => [] as string[]),
     gitlabRemoveToken: vi.fn(async () => true),
+    // SSH 키 관리(인증 관리자) — 테스트에서 override 가능.
+    sshKeys: vi.fn(async () => [] as SshKeyEntry[]),
+    sshTest: vi.fn(async () => ({ ok: true, message: 'Hi seobisback! You have successfully authenticated' })),
+    sshGenerate: vi.fn(async (name: string) => ({ name, publicKey: 'ssh-ed25519 AAAAC3Nz test@gitgrove' })),
+    sshDelete: vi.fn(async () => {}),
     // OS 네이티브 알림 / Dock (기능 B) — 테스트에서 호출 검증 가능하도록 vi.fn.
     showNotification: vi.fn(async () => {}) as Mock<(opts: { title: string; body: string; silent?: boolean; sound?: string }) => Promise<void>>,
     setBadgeCount: vi.fn(async () => {}) as Mock<(count: number) => Promise<void>>,
