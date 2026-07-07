@@ -25,6 +25,7 @@ import {
   type CloneResult,
 } from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
+import { parseRemoteUrl, isGithubHost } from '../src/utils/remoteAuth'
 import {
   parseConflicts,
   reconstruct,
@@ -790,16 +791,116 @@ ipcMain.handle('git:apply-hunk', async (_event, repoPath: string, filePath: stri
 // (vitest 단위테스트 대상). 핸들러는 simpleGit progress 핸들러를 통해 진행률을
 // 'git:remote-progress' 채널로 스트리밍하고, 결과를 best-effort로 보강한다.
 
-// 진행률 핸들러가 달린 simpleGit 인스턴스 생성. ev → RemoteProgress 매핑 후 전송.
-function remoteGit(repoPath: string, op: RemoteOp, event: Electron.IpcMainInvokeEvent) {
+// ── GIT_ASKPASS 기반 HTTPS 인증 주입 ───────────────────────────────────────
+// push/pull/fetch 는 provider(GitHub/GitLab) 구분 없이 그 저장소의 origin 으로 그대로
+// 실행되고, 인증은 git 에 위임된다. HTTPS 원격에서 OS 키체인에 자격증명이 없으면
+// (대표적으로 GitLab) 인증이 막혀 "GitLab 만 푸시가 안 되는" 증상이 났다 → 앱이 저장한
+// host 별 토큰을 GIT_ASKPASS 헬퍼로 git 에 건네준다. 토큰은 원격 URL·.git/config 에
+// 남기지 않고(평문 유출 방지) 자식 프로세스 env 로만 전달한다.
+// (simple-git 은 env 의 GIT_ASKPASS 를 기본 차단하므로 unsafe.allowUnsafeAskPass 로 허용.)
+
+let askpassScriptPath: string | null = null
+
+// askpass 헬퍼 스크립트를 tmp(공백 없는 경로)에 1회 생성. git 이 프롬프트 문자열을 argv[1]
+// 로 넘기면 Username* 이면 사용자명, 그 외(Password*)면 토큰을 stdout 으로 출력한다. 값은
+// env(GG_ASKPASS_USER/PASS)로 전달 — git 이 askpass 자식 프로세스에 env 를 상속시킨다.
+function ensureAskpassScript(): string | null {
+  try {
+    if (askpassScriptPath && fs.existsSync(askpassScriptPath)) return askpassScriptPath
+    const p = path.join(os.tmpdir(), 'gitgrove-askpass.sh')
+    const script = [
+      '#!/bin/sh',
+      'case "$1" in',
+      "  *[Uu]sername*) printf '%s' \"$GG_ASKPASS_USER\" ;;",
+      "  *) printf '%s' \"$GG_ASKPASS_PASS\" ;;",
+      'esac',
+      '',
+    ].join('\n')
+    fs.writeFileSync(p, script, { mode: 0o700 })
+    fs.chmodSync(p, 0o700)
+    askpassScriptPath = p
+    return p
+  } catch {
+    return null
+  }
+}
+
+// 원격 host 에 대응하는 저장 토큰 조회. github.com → github 토큰 파일, 그 외 → gitlab host 맵.
+function tokenForRemoteHost(host: string): string | null {
+  try {
+    if (isGithubHost(host)) {
+      if (!safeStorage.isEncryptionAvailable()) return null
+      const file = githubTokenFilePath()
+      if (!fs.existsSync(file)) return null
+      return safeStorage.decryptString(fs.readFileSync(file)) || null
+    }
+    const key = normalizeGitlabHost(host)
+    if (!key) return null
+    return readGitlabTokenMap()[key] ?? null
+  } catch {
+    return null
+  }
+}
+
+// push 대상 원격 URL 판정: 현재 브랜치의 tracking remote(없으면 origin, 없으면 첫 원격).
+async function resolvePushRemoteUrl(repoPath: string): Promise<string | null> {
+  try {
+    const g = simpleGit(repoPath)
+    const remotes = await g.getRemotes(true)
+    if (remotes.length === 0) return null
+    let remoteName = 'origin'
+    try {
+      const branch = (await g.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+      if (branch && branch !== 'HEAD') {
+        const r = (await g.raw(['config', '--get', `branch.${branch}.remote`])).trim()
+        if (r) remoteName = r
+      }
+    } catch { /* tracking 설정 없음 → origin */ }
+    const chosen = remotes.find(r => r.name === remoteName)
+      ?? remotes.find(r => r.name === 'origin')
+      ?? remotes[0]
+    return chosen?.refs?.push || chosen?.refs?.fetch || null
+  } catch {
+    return null
+  }
+}
+
+// 진행률 + (가능하면) HTTPS 토큰 인증까지 배선한 simpleGit 인스턴스.
+// HTTPS 원격 + 저장 토큰이 있으면 GIT_ASKPASS 로 자격증명을 주입한다. SSH·토큰 없음이면
+// 진행률만. 인증 실패 시 무한 대기(HUD 무한 스핀) 방지를 위해 GIT_TERMINAL_PROMPT=0 을 항상 건다.
+async function remoteGit(repoPath: string, op: RemoteOp, event: Electron.IpcMainInvokeEvent) {
+  // 상속된 위험 키 제거 + 프롬프트 비활성(tty 없는 프로세스에서 대기 hang 방지).
+  const env: NodeJS.ProcessEnv = { ...process.env }
+  for (const key of UNSAFE_INHERITED_ENV_KEYS) delete env[key]
+  env.GIT_TERMINAL_PROMPT = '0'
+
+  // HTTPS 원격이면 host 토큰을 askpass 로 주입 시도(best-effort — 실패해도 키체인/SSH 로 진행).
+  try {
+    const url = await resolvePushRemoteUrl(repoPath)
+    if (url) {
+      const info = parseRemoteUrl(url)
+      if (info.scheme === 'https' || info.scheme === 'http') {
+        const token = tokenForRemoteHost(info.host)
+        const script = token ? ensureAskpassScript() : null
+        if (token && script) {
+          env.GIT_ASKPASS = script
+          // GitHub·GitLab 모두 PAT 를 password 로 받으면 사용자명은 임의값이어도 통과한다.
+          env.GG_ASKPASS_USER = 'oauth2'
+          env.GG_ASKPASS_PASS = token
+        }
+      }
+    }
+  } catch { /* 인증 주입 실패해도 기존 동작(키체인/SSH)으로 진행 */ }
+
   return simpleGit({
     baseDir: repoPath,
+    unsafe: { allowUnsafeAskPass: true },
     progress(ev) {
       // 렌더러가 파괴된 경우 send 예외 방지
       if (event.sender.isDestroyed()) return
       event.sender.send('git:remote-progress', mapProgress(op, ev))
     },
-  })
+  }).env(env)
 }
 
 // upstream(@{u}) 기준 ahead/behind 카운트(best-effort). 실패 시 undefined.
@@ -815,7 +916,7 @@ async function revCount(git: ReturnType<typeof simpleGit>, range: string): Promi
 
 // git:pull — 원격에서 pull (진행률 스트리밍 + 결과 보강)
 ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteResult> => {
-  const git = remoteGit(repoPath, 'pull', event)
+  const git = await remoteGit(repoPath, 'pull', event)
   const behindBefore = await revCount(git, 'HEAD..@{u}')  // pull 전 받을 커밋 수
   try {
     const result = await git.pull()
@@ -855,7 +956,7 @@ ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteRes
 
 // git:push — 원격으로 push (진행률 스트리밍 + pushedCommits 보강)
 ipcMain.handle('git:push', async (event, repoPath: string): Promise<GitRemoteResult> => {
-  const git = remoteGit(repoPath, 'push', event)
+  const git = await remoteGit(repoPath, 'push', event)
   const pushedCommits = await revCount(git, '@{u}..HEAD')  // push 전 올릴 커밋 수
   try {
     await git.push()
@@ -872,7 +973,7 @@ ipcMain.handle('git:push', async (event, repoPath: string): Promise<GitRemoteRes
 
 // git:fetch — 원격에서 fetch (진행률 스트리밍 + newCommits 보강)
 ipcMain.handle('git:fetch', async (event, repoPath: string): Promise<GitRemoteResult> => {
-  const git = remoteGit(repoPath, 'fetch', event)
+  const git = await remoteGit(repoPath, 'fetch', event)
   const behindBefore = await revCount(git, 'HEAD..@{u}')  // fetch 전 behind
   try {
     await git.fetch()
