@@ -716,10 +716,11 @@ export default function App() {
   const handleBranchSwitch = useCallback(async (name: string) => {
     if (!repoPath || name === activeBranch) return
     try {
-      await window.gitAPI?.checkout(repoPath, name)
-      setActiveBranch(name)
+      // 원격 브랜치는 백엔드가 로컬 추적 브랜치를 만들어 전환하고 실제 로컬명을 돌려준다.
+      const landed = (await window.gitAPI?.checkout(repoPath, name)) || name
+      setActiveBranch(landed)
       await loadRepo(repoPath)
-      notify(...spread(TOASTS.branchSwitched(name)))
+      notify(...spread(TOASTS.branchSwitched(landed)))
     } catch (err) {
       notify(...spread(TOASTS.branchSwitchFailed(err instanceof Error ? err.message : String(err))))
     }

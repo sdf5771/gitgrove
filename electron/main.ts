@@ -26,6 +26,7 @@ import {
 } from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
 import { parseRemoteUrl, isGithubHost } from '../src/utils/remoteAuth'
+import { planCheckout } from '../src/utils/checkoutTarget'
 import {
   parseConflicts,
   reconstruct,
@@ -990,10 +991,19 @@ ipcMain.handle('git:fetch', async (event, repoPath: string): Promise<GitRemoteRe
   }
 })
 
-// git:checkout — 브랜치 체크아웃
-ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string): Promise<void> => {
+// git:checkout — 브랜치 체크아웃. 원격 추적 ref('origin/foo')를 그대로 체크아웃하면
+// detached HEAD 가 되므로, planCheckout 으로 로컬 추적 브랜치를 만들어 전환한다.
+// 전환된(또는 전환 시도한) 로컬 브랜치명을 반환한다.
+ipcMain.handle('git:checkout', async (_event, repoPath: string, branch: string): Promise<string> => {
   const git = simpleGit(repoPath)
-  await git.checkout(branch)
+  // 로컬/원격 목록을 근거로 체크아웃 계획 산출(실패해도 원래 이름 그대로 폴백).
+  let localBranches: string[] = []
+  let remotes: string[] = []
+  try { localBranches = (await git.branchLocal()).all } catch { localBranches = [] }
+  try { remotes = (await git.getRemotes()).map(r => r.name) } catch { remotes = [] }
+  const plan = planCheckout(branch, { localBranches, remotes })
+  await git.checkout(plan.args)
+  return plan.branch
 })
 
 // git:remotes — 원격 목록 조회

@@ -120,7 +120,7 @@ export function installGitApiMock() {
     push: vi.fn(async (): Promise<GitRemoteResult> => ({ success: true, op: 'push', summary: '' })),
     fetch: vi.fn(async (): Promise<GitRemoteResult> => ({ success: true, op: 'fetch', summary: '' })),
     onRemoteProgress,
-    checkout: vi.fn(async () => {}),
+    checkout: vi.fn(async (_repoPath: string, branch: string) => branch),
     blame: vi.fn(async () => []),
     getRemotes,
     getConfig: vi.fn(async () => ({ name: '', email: '', defaultBranch: 'main' })),
