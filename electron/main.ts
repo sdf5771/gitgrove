@@ -27,6 +27,7 @@ import {
 import { normalizeGitlabHost } from '../src/utils/gitlab'
 import { parseRemoteUrl, isGithubHost } from '../src/utils/remoteAuth'
 import { planCheckout } from '../src/utils/checkoutTarget'
+import { buildStashPreview, type StashPreview } from '../src/utils/stashPreview'
 import {
   parseConflicts,
   reconstruct,
@@ -1452,12 +1453,26 @@ ipcMain.handle('git:stash-files', async (_event, repoPath: string, index: number
 })
 
 // Push: 새 스태시 생성 (keepIndex 시 --keep-index)
-ipcMain.handle('git:stash-push', async (_event, repoPath: string, message?: string, keepIndex?: boolean): Promise<void> => {
+// Preview: 보관 전 현재 워킹트리 변경(tracked/untracked)을 보여준다.
+ipcMain.handle('git:stash-preview', async (_event, repoPath: string): Promise<StashPreview> => {
   const git = simpleGit(repoPath)
+  const status = await git.status()
+  return buildStashPreview(status.files)
+})
+
+// Push: 워킹트리 변경을 보관. includeUntracked면 새 파일(-u)도 담는다.
+// 실제로 새 스태시가 생겼는지(보관할 변경이 있었는지)를 보관 전후 개수로 판정해 반환한다.
+ipcMain.handle('git:stash-push', async (_event, repoPath: string, message?: string, keepIndex?: boolean, includeUntracked?: boolean): Promise<boolean> => {
+  const git = simpleGit(repoPath)
+  const countStashes = async (): Promise<number> =>
+    (await git.raw(['stash', 'list']).catch(() => '')).split('\n').filter(l => l.trim()).length
+  const before = await countStashes()
   const args = ['stash', 'push']
   if (keepIndex) args.push('--keep-index')
+  if (includeUntracked) args.push('-u')
   if (message) args.push('-m', message)
   await git.raw(args)
+  return (await countStashes()) > before
 })
 
 // Branch: 스태시를 새 브랜치로 적용 (성공 시 해당 스태시 자동 drop)

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Geuru } from '../Geuru'
 import { HL } from '../../utils/syntaxHighlight'
+import { hasStashableChanges } from '../../utils/stashPreview'
 
 // 스태시 파일 1개의 unified diff를 색칠해 렌더(헤더 라인 제거, @@/+/− 구분).
 function StashDiffView({ path, raw, loading, onBack }: { path: string; raw: string; loading: boolean; onBack: () => void }) {
@@ -43,6 +44,17 @@ const MOCK_FILES: GitStashFile[] = [
   { path: 'src/checkout/validate.ts', status: 'A', additions: 18, deletions: 0 },
   { path: 'src/old/legacy.ts', status: 'D', additions: 0, deletions: 4 },
 ]
+const EMPTY_PREVIEW: StashPreviewResult = { tracked: [], untracked: [] }
+const MOCK_PREVIEW: StashPreviewResult = {
+  tracked: [
+    { path: 'src/checkout/Form.tsx', status: 'M', staged: false },
+    { path: 'src/checkout/validate.ts', status: 'A', staged: true },
+  ],
+  untracked: [{ path: 'src/checkout/notes.md', status: 'A', staged: false }],
+}
+
+// 상태 문자 → 한 글자 배지 라벨.
+const STATUS_LABEL: Record<string, string> = { M: '수정', A: '추가', D: '삭제', R: '이름', C: '복사' }
 
 const reindex = (arr: GitStashEntry[]): GitStashEntry[] => arr.map((x, i) => ({ ...x, index: i }))
 const errText = (e: unknown, fallback: string): string =>
@@ -77,6 +89,9 @@ export function StashPanel({ onClose, repoPath }: Props) {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
   const [keepIndex, setKeepIndex] = useState(false)
+  const [includeUntracked, setIncludeUntracked] = useState(false)
+  // 보관 전 현재 워킹트리 변경 프리뷰.
+  const [preview, setPreview] = useState<StashPreviewResult>(() => (repoPath ? EMPTY_PREVIEW : MOCK_PREVIEW))
   const [toast, setToast] = useState<ToastState | null>(null)
   const [dropConfirm, setDropConfirm] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
@@ -108,6 +123,15 @@ export function StashPanel({ onClose, repoPath }: Props) {
   }, [repoPath])
 
   useEffect(() => { reload() }, [reload])
+
+  // 현재 워킹트리 변경 프리뷰 로드(보관/적용 후에도 갱신).
+  const loadPreview = useCallback(async () => {
+    if (!repoPath) { setPreview(MOCK_PREVIEW); return }
+    try { setPreview(await window.gitAPI.stashPreview(repoPath)) }
+    catch { setPreview(EMPTY_PREVIEW) }
+  }, [repoPath])
+
+  useEffect(() => { loadPreview() }, [loadPreview])
 
   // 목록이 바뀌면 선택을 유지하되, 사라진 선택은 첫 항목으로 보정.
   useEffect(() => {
@@ -147,21 +171,33 @@ export function StashPanel({ onClose, repoPath }: Props) {
       .finally(() => setDiffLoading(false))
   }, [sel, repoPath])
 
+  const canStash = hasStashableChanges(preview, includeUntracked)
+
   const push = async () => {
     if (busy) return
+    // 보관할 변경이 없으면 즉시 안내(버튼도 비활성이지만 방어).
+    if (!canStash) { showToast('보관할 변경이 없어요', 'warning'); return }
     setBusy(true)
     try {
+      let stashed = true
       if (repoPath) {
-        await window.gitAPI.stashPush(repoPath, msg || undefined, keepIndex)
+        stashed = await window.gitAPI.stashPush(repoPath, msg || undefined, keepIndex, includeUntracked)
         await reload()
+        await loadPreview()
       } else {
         setStashes(prev => reindex([
           { index: 0, message: msg || '보관한 작업', branch: 'local', time: '방금', files: 1, additions: 0, deletions: 0 },
           ...prev,
         ]))
+        setPreview(EMPTY_PREVIEW)
       }
-      setMsg('')
-      showToast('작업을 보관했어요')
+      if (stashed) {
+        setMsg('')
+        showToast('작업을 보관했어요')
+      } else {
+        // 프리뷰 이후 변경이 사라진 레이스 등 — 정직하게 알린다.
+        showToast('보관할 변경이 없어요', 'warning')
+      }
     } catch (e) {
       showToast(errText(e, '보관하지 못했어요'), 'warning')
     } finally {
@@ -176,6 +212,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
       if (repoPath) {
         await window.gitAPI.stashPop(repoPath, index)
         await reload()
+        await loadPreview()
       } else {
         setStashes(prev => reindex(prev.filter(s => s.index !== index)))
       }
@@ -191,7 +228,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
     if (busy) return
     setBusy(true)
     try {
-      if (repoPath) await window.gitAPI.stashApply(repoPath, index)
+      if (repoPath) { await window.gitAPI.stashApply(repoPath, index); await loadPreview() }
       showToast('적용했어요 · 보관은 그대로 둬요')
     } catch (e) {
       showToast(errText(e, '적용하지 못했어요'), 'warning')
@@ -209,6 +246,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
         // stashBranch 는 호출 후 해당 스태시를 자동 drop 하므로 목록 새로고침이 필요하다.
         await window.gitAPI.stashBranch(repoPath, stash.index, name)
         await reload()
+        await loadPreview()
       } else {
         setStashes(prev => reindex(prev.filter(s => s.index !== stash.index)))
       }
@@ -257,11 +295,48 @@ export function StashPanel({ onClose, repoPath }: Props) {
             onChange={e => setMsg(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') push() }}
           />
-          <label className="stash-keep">
+          <label className="stash-keep" title="보관해도 스테이지에 올린 변경은 그대로 둬요">
             <input type="checkbox" checked={keepIndex} onChange={e => setKeepIndex(e.target.checked)} />
             <span>스테이지 유지</span>
           </label>
-          <button className="stash-pushbtn" onClick={push} disabled={busy}>보관</button>
+          <label className="stash-keep" title="추적 안 하는 새 파일까지 함께 보관해요">
+            <input type="checkbox" checked={includeUntracked} onChange={e => setIncludeUntracked(e.target.checked)} />
+            <span>새 파일 포함</span>
+          </label>
+          <button className="stash-pushbtn" onClick={push} disabled={busy || !canStash}>보관</button>
+        </div>
+
+        {/* 보관 전 현재 워킹트리 변경 프리뷰 — 무엇이 보관될지 미리 보여준다. */}
+        <div className="stash-preview">
+          {canStash ? (
+            <>
+              <div className="stash-preview-hd">
+                보관될 변경 {preview.tracked.length}개
+                {preview.untracked.length > 0 && (includeUntracked
+                  ? <> · 새 파일 {preview.untracked.length}개 포함</>
+                  : <> · 새 파일 {preview.untracked.length}개는 빼요</>)}
+              </div>
+              <div className="stash-preview-list">
+                {preview.tracked.map(fp => (
+                  <span key={fp.path} className="stash-pv-file" title={fp.path}>
+                    <i className={`stash-pv-badge s-${fp.status}`}>{STATUS_LABEL[fp.status] ?? fp.status}</i>
+                    <span className="stash-pv-path">{fp.path}</span>
+                    {fp.staged && <i className="stash-pv-staged">스테이지</i>}
+                  </span>
+                ))}
+                {includeUntracked && preview.untracked.map(fp => (
+                  <span key={fp.path} className="stash-pv-file" title={fp.path}>
+                    <i className="stash-pv-badge s-U">새 파일</i>
+                    <span className="stash-pv-path">{fp.path}</span>
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : preview.untracked.length > 0 ? (
+            <div className="stash-preview-empty">새 파일 {preview.untracked.length}개만 있어요 · &lsquo;새 파일 포함&rsquo;을 켜면 보관할 수 있어요</div>
+          ) : (
+            <div className="stash-preview-empty">보관할 변경이 없어요 · 파일을 고치면 여기서 보관할 수 있어요</div>
+          )}
         </div>
 
         {stashes.length === 0 && !loading ? (
