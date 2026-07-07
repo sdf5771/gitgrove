@@ -265,7 +265,7 @@ interface Window {
     fetch: (repoPath: string) => Promise<GitRemoteResult>
     // pull/push/fetch 진행률 구독. 반환된 함수를 호출해 구독 해제(effect cleanup).
     onRemoteProgress: (cb: (p: RemoteProgress) => void) => () => void
-    checkout: (repoPath: string, branch: string) => Promise<void>
+    checkout: (repoPath: string, branch: string) => Promise<string>
     blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
     getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>
     getConfig: (repoPath: string) => Promise<GitConfigResult>
