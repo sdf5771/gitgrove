@@ -922,7 +922,10 @@ ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteRes
   const git = await remoteGit(repoPath, 'pull', event)
   const behindBefore = await revCount(git, 'HEAD..@{u}')  // pull 전 받을 커밋 수
   try {
-    const result = await git.pull()
+    // 로컬·원격이 갈라지면(diverged) git 2.27+는 병합 전략을 요구해 맨 pull이
+    // "Need to specify how to reconcile divergent branches"로 실패한다. GUI 관례대로
+    // 병합(--no-rebase)을 기본 전략으로 명시한다(충돌은 아래 conflict 경로가 처리).
+    const result = await git.pull(undefined, undefined, ['--no-rebase'])
     const stat = extractDiffStat(result)
     // newCommits: pull 전 behind(받을 커밋 수)를 best-effort로 사용
     const newCommits = behindBefore
