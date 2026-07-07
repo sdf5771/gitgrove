@@ -26,6 +26,7 @@ import {
 } from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
 import { parseRemoteUrl, isGithubHost } from '../src/utils/remoteAuth'
+import { planPush } from '../src/utils/pushPlan'
 import { planCheckout } from '../src/utils/checkoutTarget'
 import { buildStashPreview, type StashPreview } from '../src/utils/stashPreview'
 import {
@@ -956,12 +957,44 @@ ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteRes
   }
 })
 
+// 현재 브랜치의 upstream(remote·merge)·기본 원격을 조회해 푸시 refspec 계획을 세운다.
+// upstream 브랜치명이 로컬과 달라도(push.default=simple 거부) 명시 refspec으로 우회한다.
+async function resolvePushPlan(repoPath: string): Promise<ReturnType<typeof planPush>> {
+  const g = simpleGit(repoPath)
+  let currentBranch: string | null = null
+  try {
+    const b = (await g.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+    currentBranch = b && b !== 'HEAD' ? b : null
+  } catch { currentBranch = null }
+  let upstreamRemote: string | null = null
+  let upstreamBranch: string | null = null
+  if (currentBranch) {
+    try { upstreamRemote = (await g.raw(['config', '--get', `branch.${currentBranch}.remote`])).trim() || null } catch { upstreamRemote = null }
+    try {
+      const merge = (await g.raw(['config', '--get', `branch.${currentBranch}.merge`])).trim()
+      upstreamBranch = merge ? merge.replace(/^refs\/heads\//, '') : null
+    } catch { upstreamBranch = null }
+  }
+  let defaultRemote: string | null = null
+  try {
+    const remotes = await g.getRemotes()
+    defaultRemote = remotes.find(r => r.name === 'origin')?.name ?? remotes[0]?.name ?? null
+  } catch { defaultRemote = null }
+  return planPush({ currentBranch, upstreamRemote, upstreamBranch, defaultRemote })
+}
+
 // git:push — 원격으로 push (진행률 스트리밍 + pushedCommits 보강)
 ipcMain.handle('git:push', async (event, repoPath: string): Promise<GitRemoteResult> => {
   const git = await remoteGit(repoPath, 'push', event)
   const pushedCommits = await revCount(git, '@{u}..HEAD')  // push 전 올릴 커밋 수
   try {
-    await git.push()
+    // upstream 브랜치명이 로컬과 다르면 맨 push가 거부되므로 명시 refspec으로 푸시.
+    const plan = await resolvePushPlan(repoPath)
+    if (plan.remote && plan.refspec) {
+      await git.push(plan.remote, plan.refspec, plan.setUpstream ? ['-u'] : undefined)
+    } else {
+      await git.push()  // detached·원격 없음 등 폴백
+    }
     return {
       success: true,
       op: 'push',
