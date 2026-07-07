@@ -6,6 +6,7 @@ import { readNotifSoundSettings } from '../utils/notifSettings'
 import { Geuru } from './Geuru'
 import { ProviderBadge, ProviderFilterChips, type ProviderFilter } from './ProviderMark'
 import { isUnreachableError } from '../utils/netError'
+import { notifFooterLinks } from '../utils/notifFooterLinks'
 
 // 포커스 복귀 시 refetch 최소 간격(rate-limit 보호).
 const MIN_REFETCH_MS = 60_000
@@ -396,10 +397,13 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
     setOpen(false)
   }
 
-  const footUrl = provFilter === 'gitlab' && gitlabInstances[0]
-    ? `${gitlabInstances[0].host}/dashboard/todos`
-    : 'https://github.com/notifications'
-  const footLabel = provFilter === 'github' ? 'GitHub 알림' : provFilter === 'gitlab' ? 'GitLab Todos' : '전체 알림'
+  // 하단 '전체 알림 보기'는 provider별 페이지가 달라(GitHub notifications · GitLab todos)
+  // 연결된 provider·현재 필터에 맞춰 각자의 링크로 나눈다.
+  const footLinks = notifFooterLinks({
+    filter: provFilter,
+    hasGithub,
+    gitlabHost: gitlabInstances[0]?.host ?? null,
+  })
 
   // 헤더 그루: 안 읽은 게 없으면 반가운 얼굴, 있으면 기본.
   const headExpr = list.length > 0 && unreadCount === 0 ? 'happy' : 'idle'
@@ -507,15 +511,20 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
               <div className="nb-soft-hint">일부 인스턴스에 연결하지 못했어요</div>
             )}
 
-            <div className="nb-foot">
-              <button
-                className="nb-foot-btn"
-                onClick={() => { onOpenUrl(footUrl); setOpen(false) }}
-              >
-                {footLabel} 보기
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 11L11 5M11 5H6M11 5v5" /></svg>
-              </button>
-            </div>
+            {footLinks.length > 0 && (
+              <div className="nb-foot">
+                {footLinks.map(link => (
+                  <button
+                    key={link.provider}
+                    className="nb-foot-btn"
+                    onClick={() => { onOpenUrl(link.url); setOpen(false) }}
+                  >
+                    {link.label} 보기
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M5 11L11 5M11 5H6M11 5v5" /></svg>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </>
       )}
