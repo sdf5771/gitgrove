@@ -25,13 +25,23 @@ const FILES_BY_INDEX: Record<number, GitStashFile[]> = {
   2: [{ path: 'src/old/legacy.ts', status: 'D', additions: 0, deletions: 60 }],
 }
 
-function setup(opts: { stashes?: GitStashEntry[] } = {}) {
+// 기본 프리뷰: tracked 변경 1개 + untracked 1개 → 보관 버튼 활성.
+const PREVIEW_DEFAULT: StashPreviewResult = {
+  tracked: [{ path: 'src/work/current.ts', status: 'M', staged: false }],
+  untracked: [{ path: 'src/work/new.ts', status: 'A', staged: false }],
+}
+
+function setup(opts: { stashes?: GitStashEntry[]; preview?: StashPreviewResult; stashed?: boolean } = {}) {
   const { gitAPI } = installGitApiMock()
   // 공용 mock의 stash* 는 빈 결과로 타입 추론되므로, 픽스처 주입 시 시그니처를 명시한다.
   ;(gitAPI.stashList as unknown as Mock<(p: string) => Promise<GitStashEntry[]>>)
     .mockResolvedValue(opts.stashes ?? STASHES)
   ;(gitAPI.stashFiles as unknown as Mock<(p: string, i: number) => Promise<GitStashFile[]>>)
     .mockImplementation(async (_p: string, i: number) => FILES_BY_INDEX[i] ?? [])
+  ;(gitAPI.stashPreview as unknown as Mock<(p: string) => Promise<StashPreviewResult>>)
+    .mockResolvedValue(opts.preview ?? PREVIEW_DEFAULT)
+  ;(gitAPI.stashPush as unknown as Mock<(p: string, m?: string, k?: boolean, u?: boolean) => Promise<boolean>>)
+    .mockResolvedValue(opts.stashed ?? true)
   const onClose = vi.fn()
   const utils = render(<StashPanel onClose={onClose} repoPath={REPO} />)
   return { gitAPI, onClose, ...utils }
@@ -102,28 +112,67 @@ describe('StashPanel — 파일 클릭 → diff 보기', () => {
 })
 
 describe('StashPanel — push + keepIndex', () => {
-  it('메시지 입력 후 보관 버튼 → stashPush(repoPath, msg, false) [기본]', async () => {
+  it('메시지 입력 후 보관 버튼 → stashPush(repoPath, msg, false, false) [기본]', async () => {
     const { gitAPI } = setup()
     await screen.findByText('stash@{1}')
+    // 프리뷰 로드 완료(보관 대상 존재) 후 버튼 활성.
+    await screen.findByText(/보관될 변경/)
 
     fireEvent.change(screen.getByPlaceholderText('메시지를 적어 두면 나중에 찾기 쉬워요'), {
       target: { value: '새 작업 보관' },
     })
     fireEvent.click(screen.getByRole('button', { name: '보관' }))
 
-    await waitFor(() => expect(gitAPI.stashPush).toHaveBeenCalledWith(REPO, '새 작업 보관', false))
+    await waitFor(() => expect(gitAPI.stashPush).toHaveBeenCalledWith(REPO, '새 작업 보관', false, false))
   })
 
-  it('스테이지 유지 체크 + Enter → stashPush(repoPath, msg, true)', async () => {
+  it('스테이지 유지 체크 + Enter → stashPush(repoPath, msg, true, false)', async () => {
     const { gitAPI } = setup()
     await screen.findByText('stash@{1}')
+    await screen.findByText(/보관될 변경/)
 
     const input = screen.getByPlaceholderText('메시지를 적어 두면 나중에 찾기 쉬워요')
     fireEvent.change(input, { target: { value: '인덱스 유지 보관' } })
-    fireEvent.click(screen.getByRole('checkbox')) // '스테이지 유지'
+    fireEvent.click(screen.getByLabelText('스테이지 유지'))
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    await waitFor(() => expect(gitAPI.stashPush).toHaveBeenCalledWith(REPO, '인덱스 유지 보관', true))
+    await waitFor(() => expect(gitAPI.stashPush).toHaveBeenCalledWith(REPO, '인덱스 유지 보관', true, false))
+  })
+
+  it("'새 파일 포함' 체크 → stashPush 4번째 인자 true (untracked 포함)", async () => {
+    const { gitAPI } = setup()
+    await screen.findByText('stash@{1}')
+    await screen.findByText(/보관될 변경/)
+
+    fireEvent.change(screen.getByPlaceholderText('메시지를 적어 두면 나중에 찾기 쉬워요'), {
+      target: { value: '새 파일까지' },
+    })
+    fireEvent.click(screen.getByLabelText('새 파일 포함'))
+    fireEvent.click(screen.getByRole('button', { name: '보관' }))
+
+    await waitFor(() => expect(gitAPI.stashPush).toHaveBeenCalledWith(REPO, '새 파일까지', false, true))
+  })
+
+  it('보관할 변경이 없으면 보관 버튼 비활성 · stashPush 미호출', async () => {
+    const { gitAPI } = setup({ preview: { tracked: [], untracked: [] } })
+    await screen.findByText('stash@{1}')
+    expect(await screen.findByText(/보관할 변경이 없어요/)).toBeTruthy()
+
+    const btn = screen.getByRole('button', { name: '보관' }) as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    fireEvent.click(btn)
+    expect(gitAPI.stashPush).not.toHaveBeenCalled()
+  })
+
+  it('untracked만 있을 때 → 안내 문구 · 기본 비활성, 새 파일 포함 켜면 활성', async () => {
+    setup({ preview: { tracked: [], untracked: [{ path: 'a.txt', status: 'A', staged: false }] } })
+    await screen.findByText('stash@{1}')
+    expect(await screen.findByText(/새 파일 1개만 있어요/)).toBeTruthy()
+
+    const btn = screen.getByRole('button', { name: '보관' }) as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    fireEvent.click(screen.getByLabelText('새 파일 포함'))
+    expect(btn.disabled).toBe(false)
   })
 })
 

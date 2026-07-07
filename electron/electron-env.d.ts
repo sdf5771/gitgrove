@@ -155,6 +155,17 @@ interface GitStashFile {
   deletions: number
 }
 
+// 보관 전 현재 워킹트리 변경 프리뷰. tracked=항상 보관, untracked=−u 일 때만.
+interface StashPreviewFile {
+  path: string
+  status: 'M' | 'A' | 'D' | 'R' | 'C'
+  staged: boolean
+}
+interface StashPreviewResult {
+  tracked: StashPreviewFile[]
+  untracked: StashPreviewFile[]
+}
+
 // Repository Management(RM1) — per-repo 최근 N일 활동 (스파크라인·성장단계·그로브현황).
 // 형태는 src/utils/repoActivity.ts 의 RepoActivity 와 동일하게 유지한다.
 interface RepoActivity {
@@ -278,7 +289,8 @@ interface Window {
     stashDrop: (repoPath: string, index: number) => Promise<void>
     stashList: (repoPath: string) => Promise<GitStashEntry[]>
     stashFiles: (repoPath: string, index: number) => Promise<GitStashFile[]>
-    stashPush: (repoPath: string, message?: string, keepIndex?: boolean) => Promise<void>
+    stashPreview: (repoPath: string) => Promise<StashPreviewResult>
+    stashPush: (repoPath: string, message?: string, keepIndex?: boolean, includeUntracked?: boolean) => Promise<boolean>
     stashBranch: (repoPath: string, index: number, branchName: string) => Promise<void>
     stashFileDiff: (repoPath: string, index: number, filePath: string) => Promise<string>
     stashPop: (repoPath: string, index: number) => Promise<void>

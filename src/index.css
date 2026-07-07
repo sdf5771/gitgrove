@@ -1161,6 +1161,19 @@ body { display: flex; align-items: center; justify-content: center; }
 .stash-pushbtn:hover:not(:disabled){filter:brightness(1.08);}
 .stash-pushbtn:disabled{opacity:.5;cursor:default;}
 
+/* 보관 전 현재 변경 프리뷰 */
+.stash-preview{padding:9px 16px;border-bottom:1px solid var(--c-border);background:var(--c-bg);flex-shrink:0;max-height:132px;overflow-y:auto;}
+.stash-preview-hd{font-size:11px;color:var(--c-text-muted);margin-bottom:7px;}
+.stash-preview-list{display:flex;flex-direction:column;gap:3px;}
+.stash-pv-file{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--c-text);min-width:0;}
+.stash-pv-badge{flex-shrink:0;font-size:9.5px;font-style:normal;padding:1px 5px;border-radius:var(--r1);line-height:1.5;letter-spacing:.02em;background:var(--c-bg-inset);border:1px solid var(--c-border);color:var(--c-text-muted);}
+.stash-pv-badge.s-M{color:var(--c-gold-300);border-color:var(--c-gold-border);}
+.stash-pv-badge.s-A,.stash-pv-badge.s-U{color:var(--c-success);border-color:color-mix(in srgb,var(--c-success) 40%,transparent);}
+.stash-pv-badge.s-D{color:var(--c-danger);border-color:color-mix(in srgb,var(--c-danger) 40%,transparent);}
+.stash-pv-path{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--font-mono);}
+.stash-pv-staged{flex-shrink:0;font-style:normal;font-size:9px;padding:1px 5px;border-radius:var(--r1);background:color-mix(in srgb,var(--c-gold-400) 18%,transparent);color:var(--c-gold-300);}
+.stash-preview-empty{font-size:11.5px;color:var(--c-text-muted);}
+
 .stash-body{display:flex;min-height:0;flex:1;}
 .stash-listpane{width:286px;flex-shrink:0;border-right:1px solid var(--c-border);overflow-y:auto;padding:4px;display:flex;flex-direction:column;gap:2px;min-height:260px;max-height:460px;}
 .stash-list-load{display:flex;align-items:center;justify-content:center;padding:24px;color:var(--c-text-faint);}
