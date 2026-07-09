@@ -28,6 +28,9 @@ interface Props {
   onClose: () => void
   repoPath?: string | null
   currentBranch?: string
+  // 보관/적용/pop/브랜치 등 워킹트리를 바꾸는 작업 후 부모(App)가 저장소 뷰를 갱신하도록 알린다.
+  // (이게 없으면 stash로 파일이 치워져도 뒤 화면의 변경 목록이 스테일로 남았다.)
+  onChanged?: () => void
 }
 
 type ToastVariant = 'success' | 'warning'
@@ -81,7 +84,7 @@ function diffBars(add: number, del: number) {
   return cells
 }
 
-export function StashPanel({ onClose, repoPath }: Props) {
+export function StashPanel({ onClose, repoPath, onChanged }: Props) {
   const [stashes, setStashes] = useState<GitStashEntry[]>(() => (repoPath ? [] : MOCK_STASHES))
   const [sel, setSel] = useState<number | null>(null)
   const [files, setFiles] = useState<GitStashFile[]>([])
@@ -194,6 +197,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
       if (stashed) {
         setMsg('')
         showToast('작업을 보관했어요')
+        onChanged?.()  // 워킹트리에서 변경이 치워졌으니 뒤 화면(변경 목록·상태)을 갱신.
       } else {
         // 프리뷰 이후 변경이 사라진 레이스 등 — 정직하게 알린다.
         showToast('보관할 변경이 없어요', 'warning')
@@ -216,6 +220,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
       } else {
         setStashes(prev => reindex(prev.filter(s => s.index !== index)))
       }
+      onChanged?.()  // pop은 워킹트리에 변경을 되살리므로 뒤 화면 갱신.
       showToast('적용하고 보관함에서 비웠어요')
     } catch (e) {
       showToast(errText(e, '적용하지 못했어요'), 'warning')
@@ -229,6 +234,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
     setBusy(true)
     try {
       if (repoPath) { await window.gitAPI.stashApply(repoPath, index); await loadPreview() }
+      onChanged?.()  // apply는 워킹트리에 변경을 되살리므로 뒤 화면 갱신.
       showToast('적용했어요 · 보관은 그대로 둬요')
     } catch (e) {
       showToast(errText(e, '적용하지 못했어요'), 'warning')
@@ -250,6 +256,7 @@ export function StashPanel({ onClose, repoPath }: Props) {
       } else {
         setStashes(prev => reindex(prev.filter(s => s.index !== stash.index)))
       }
+      onChanged?.()  // 새 브랜치로 꺼내면 워킹트리·브랜치가 바뀌므로 뒤 화면 갱신.
       showToast(`${name} 브랜치로 꺼냈어요`)
     } catch (e) {
       showToast(errText(e, '브랜치를 만들지 못했어요'), 'warning')
@@ -306,8 +313,9 @@ export function StashPanel({ onClose, repoPath }: Props) {
           <button className="stash-pushbtn" onClick={push} disabled={busy || !canStash}>보관</button>
         </div>
 
-        {/* 보관 전 현재 워킹트리 변경 프리뷰 — 무엇이 보관될지 미리 보여준다. */}
-        <div className="stash-preview">
+        {/* 보관 전 현재 워킹트리 변경 프리뷰 — 무엇이 보관될지 미리 보여준다.
+            (우측 2-pane의 .stash-preview 와 클래스가 겹치지 않게 .stash-precommit 사용) */}
+        <div className="stash-precommit">
           {canStash ? (
             <>
               <div className="stash-preview-hd">

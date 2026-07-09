@@ -43,8 +43,9 @@ function setup(opts: { stashes?: GitStashEntry[]; preview?: StashPreviewResult; 
   ;(gitAPI.stashPush as unknown as Mock<(p: string, m?: string, k?: boolean, u?: boolean) => Promise<boolean>>)
     .mockResolvedValue(opts.stashed ?? true)
   const onClose = vi.fn()
-  const utils = render(<StashPanel onClose={onClose} repoPath={REPO} />)
-  return { gitAPI, onClose, ...utils }
+  const onChanged = vi.fn()
+  const utils = render(<StashPanel onClose={onClose} repoPath={REPO} onChanged={onChanged} />)
+  return { gitAPI, onClose, onChanged, ...utils }
 }
 
 afterEach(cleanup)
@@ -173,6 +174,32 @@ describe('StashPanel — push + keepIndex', () => {
     expect(btn.disabled).toBe(true)
     fireEvent.click(screen.getByLabelText('새 파일 포함'))
     expect(btn.disabled).toBe(false)
+  })
+})
+
+describe('StashPanel — onChanged (부모 저장소 뷰 갱신)', () => {
+  it('보관 성공 시 onChanged 호출(뒤 화면 갱신)', async () => {
+    const { onChanged } = setup()
+    await screen.findByText('stash@{1}')
+    await screen.findByText(/보관될 변경/)
+    fireEvent.click(screen.getByRole('button', { name: '보관' }))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+  })
+
+  it('보관할 변경이 없으면 onChanged 미호출', async () => {
+    const { onChanged } = setup({ preview: { tracked: [], untracked: [] } })
+    await screen.findByText('stash@{1}')
+    await screen.findByText(/보관할 변경이 없어요/)
+    // 버튼 비활성 → 클릭해도 아무 일 없음
+    fireEvent.click(screen.getByRole('button', { name: '보관' }))
+    expect(onChanged).not.toHaveBeenCalled()
+  })
+
+  it('pop 시 onChanged 호출', async () => {
+    const { onChanged } = setup()
+    await screen.findByText('stash@{1}')
+    fireEvent.click(screen.getByRole('button', { name: 'Pop' }))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 })
 
