@@ -917,10 +917,39 @@ async function revCount(git: ReturnType<typeof simpleGit>, range: string): Promi
   }
 }
 
+// 현재 브랜치의 upstream(remote·branch명). 설정 없거나 detached면 null.
+async function resolveUpstream(repoPath: string): Promise<{ remote: string; branch: string } | null> {
+  const g = simpleGit(repoPath)
+  let cur = ''
+  try { cur = (await g.raw(['rev-parse', '--abbrev-ref', 'HEAD'])).trim() } catch { return null }
+  if (!cur || cur === 'HEAD') return null
+  let remote = ''
+  let merge = ''
+  try { remote = (await g.raw(['config', '--get', `branch.${cur}.remote`])).trim() } catch { /* upstream 없음 */ }
+  try { merge = (await g.raw(['config', '--get', `branch.${cur}.merge`])).trim() } catch { /* upstream 없음 */ }
+  if (!remote || !merge) return null
+  return { remote, branch: merge.replace(/^refs\/heads\//, '') }
+}
+
 // git:pull — 원격에서 pull (진행률 스트리밍 + 결과 보강)
 ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteResult> => {
   const git = await remoteGit(repoPath, 'pull', event)
   const behindBefore = await revCount(git, 'HEAD..@{u}')  // pull 전 받을 커밋 수
+
+  // upstream 브랜치가 원격에 실제로 없으면 git이 "no such ref was fetched" 같은 난해한
+  // 에러를 낸다(브랜치를 아직 push 안 한 흔한 상황). 명확한 안내로 바꾼다.
+  const up = await resolveUpstream(repoPath)
+  if (up) {
+    let branchAbsent = false
+    try {
+      const out = await git.listRemote(['--heads', up.remote, `refs/heads/${up.branch}`])
+      branchAbsent = !(out && out.trim())
+    } catch { branchAbsent = false }  // ls-remote 실패(네트워크·인증)는 무시하고 일반 pull로 진행
+    if (branchAbsent) {
+      throw new Error(`원격에 '${up.branch}' 브랜치가 아직 없어요 · 먼저 Push로 올리면 받아올 수 있어요`)
+    }
+  }
+
   try {
     // 로컬·원격이 갈라지면(diverged) git 2.27+는 병합 전략을 요구해 맨 pull이
     // "Need to specify how to reconcile divergent branches"로 실패한다. GUI 관례대로
