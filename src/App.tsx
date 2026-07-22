@@ -1586,9 +1586,9 @@ export default function App() {
             비-mac(Windows/Linux)은 기존 커스텀 신호등 + win-* IPC 유지. */}
         {!isMac && (
           <div className="tl">
-            <div className="td td-r" onClick={() => window.ipcRenderer?.send('win-close')} />
-            <div className="td td-y" onClick={() => window.ipcRenderer?.send('win-minimize')} />
-            <div className="td td-g" onClick={() => window.ipcRenderer?.send('win-maximize')} />
+            <div className="td td-r" onClick={() => window.appAPI?.windowControls.close()} />
+            <div className="td td-y" onClick={() => window.appAPI?.windowControls.minimize()} />
+            <div className="td td-g" onClick={() => window.appAPI?.windowControls.maximize()} />
           </div>
         )}
         <span className="app-name" style={{ marginRight: 10, display: 'flex', alignItems: 'center', gap: 7 }}><span className="mark-slot"><Geuru expr="happy" scale={1} title="GitGrove" /></span>GitGrove</span>

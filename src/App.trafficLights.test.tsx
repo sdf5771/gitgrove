@@ -56,9 +56,9 @@ describe('신호등 조건부 렌더 (플랫폼 분기)', () => {
     expect(titleBar?.classList.contains('mac')).toBe(true)
   })
 
-  it('비-mac(win32): 커스텀 신호등을 렌더하고 클릭 시 win-* IPC를 보낸다', async () => {
+  it('비-mac(win32): 커스텀 신호등을 렌더하고 클릭 시 windowControls IPC를 호출한다', async () => {
     window.appAPI.platform = 'win32'
-    const sendMock = window.ipcRenderer.send as ReturnType<typeof vi.fn>
+    const wc = window.appAPI.windowControls
     const { container } = render(<App />)
 
     await waitFor(() => {
@@ -75,8 +75,8 @@ describe('신호등 조건부 렌더 (플랫폼 분기)', () => {
     await user.click(container.querySelector('.td-y')!)
     await user.click(container.querySelector('.td-g')!)
 
-    expect(sendMock).toHaveBeenCalledWith('win-close')
-    expect(sendMock).toHaveBeenCalledWith('win-minimize')
-    expect(sendMock).toHaveBeenCalledWith('win-maximize')
+    expect(wc.close).toHaveBeenCalled()
+    expect(wc.minimize).toHaveBeenCalled()
+    expect(wc.maximize).toHaveBeenCalled()
   })
 })

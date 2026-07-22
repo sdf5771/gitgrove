@@ -241,6 +241,14 @@ interface Window {
     // 'app:update-available' 구독. 반환 함수 호출로 구독 해제(effect cleanup). dmgUrl 없으면 frontend는 openReleaseUrl 브라우저 폴백.
     onUpdateAvailable: (cb: (info: { version: string; url: string; dmgUrl?: string; notes?: string }) => void) => () => void
     openReleaseUrl: (url: string) => void
+    // 메인 프로세스 콘솔 메시지 구독(디버그). 반환 함수 호출로 구독 해제. (generic ipcRenderer 브리지 대체)
+    onMainMessage: (cb: (message: string) => void) => () => void
+    // 비-macOS 커스텀 신호등 창 제어(win-* IPC 래핑). macOS 는 네이티브 신호등을 쓰므로 미사용.
+    windowControls: {
+      minimize: () => void
+      maximize: () => void
+      close: () => void
+    }
     // 현재 앱 버전 조회(About 탭 표시용). 메인 app.getVersion() 반환.
     getVersion: () => Promise<string>
     // 수동 업데이트 확인(About 탭). 새 버전이 있으면 updateAvailable:true + version/dmgUrl, 없거나 네트워크 실패 시 updateAvailable:false. current는 항상 현재 버전.
@@ -281,7 +289,13 @@ interface Window {
     // ⚠️ 마운트 시 이 리스너를 setTrayState보다 먼저 등록할 것(메인의 큐 flush가 리스너 존재를 전제).
     onTrayAction: (cb: (a: TrayAction) => void) => () => void
   }
-  ipcRenderer: import('electron').IpcRenderer
+  // 스플래시 윈도우 전용 수신 API(스코프 한정). generic ipcRenderer 브리지 제거에 따른 대체.
+  // splash.html(plain HTML)이 소비 — 렌더러 React 앱에서는 사용하지 않는다.
+  splashAPI: {
+    onVersion: (cb: (version: string) => void) => () => void
+    onBootProgress: (cb: (payload: { pct?: number; done?: boolean }) => void) => () => void
+    onDone: (cb: () => void) => () => void
+  }
   gitAPI: {
     openDialog: () => Promise<string | null>
     pickDirectory: (title?: string) => Promise<string | null>

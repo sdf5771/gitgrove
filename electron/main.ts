@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification, Tray, Menu, nativeImage, session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -45,9 +45,12 @@ import {
 } from '../src/utils/appUpdate'
 import { decideMaximizeAction } from './winMaximize'
 
-// macOS GPU 프로세스 크래시 억제
+// macOS GPU 프로세스 크래시 억제 — GPU 프로세스 샌드박스만 국소적으로 해제한다
+// (제거 시 크래시 재발 위험이 있어 유지).
 app.commandLine.appendSwitch('disable-gpu-sandbox')
-app.commandLine.appendSwitch('no-sandbox')
+// [보안 하드닝] 전역 no-sandbox 스위치 제거: 모든 자식 프로세스(렌더러·유틸리티·네트워크)의
+// OS 샌드박스를 통째로 꺼버려 방어선이 무너졌다. 제거하여 렌더러/유틸리티/네트워크 프로세스의
+// OS 샌드박스를 복구한다. (GPU 크래시 억제는 위 disable-gpu-sandbox 로만 한정.)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -193,6 +196,63 @@ const UPDATE_FOCUS_THROTTLE_MS = 30 * 60 * 1000      // 포커스 체크 최소 
 const SPLASH_MIN_MS = 1200
 const SPLASH_FADE_MS = 180
 
+// ──────────────────────────────────────────────
+// Content-Security-Policy (보안 하드닝)
+// ──────────────────────────────────────────────
+// 모든 문서 응답 헤더에 CSP 를 주입한다(index.html 메타 태그보다 env 분기가 쉽고 유연).
+// dev(VITE_DEV_SERVER_URL 존재)는 Vite HMR 때문에 인라인/eval 스크립트와 ws 연결이 필요하고,
+// prod 는 조인다. 각 지시문 허용 근거:
+//   - default-src 'self'            : 기본은 앱 자산(자기 출처)만 허용.
+//   - script-src 'self'(prod)       : 번들 스크립트만 실행. 빌드된 dist/index.html 은 인라인
+//                                     스크립트가 없어(외부 모듈 1개뿐) 'self' 로 충분.
+//       · dev: 'unsafe-inline' 'unsafe-eval' — Vite HMR/React Refresh 가 인라인·eval 사용.
+//       · splash.html(prod): 'unsafe-inline' 추가 — 스플래시는 첫자산(신뢰) 정적 HTML 로
+//         인라인 <script> 를 쓰며, 원격/비신뢰 콘텐츠를 전혀 로드하지 않고 네트워크 egress 도
+//         없어 인라인 스크립트 허용의 위험이 없다. (실제 공격면인 메인 창은 strict 유지.)
+//   - style-src 'self' 'unsafe-inline' : React 인라인 style 속성·스플래시 인라인 <style> 다수.
+//   - img-src 'self' https: data:   : GitHub/GitLab 아바타 등 원격 https 이미지 + data URI(스프라이트).
+//   - connect-src 'self' https:     : GitHub API·멀티호스트(self-hosted) GitLab API(광범위 https 불가피).
+//       · dev: ws:/wss: 추가 — Vite HMR 소켓.
+//   - font-src 'self' data:         : self-host woff2 + data URI 폴백.
+//   - frame-src 'none' / object-src 'none' : iframe·플러그인(무엇도 임베드 안 함) 차단.
+//   - base-uri 'self'               : <base> 태그 하이재킹 차단.
+function buildCsp(isSplash: boolean): string {
+  const dev = !!VITE_DEV_SERVER_URL
+  const scriptSrc = dev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : isSplash
+      ? "script-src 'self' 'unsafe-inline'"
+      : "script-src 'self'"
+  const connectSrc = dev
+    ? "connect-src 'self' https: ws: wss:"
+    : "connect-src 'self' https:"
+  return [
+    "default-src 'self'",
+    scriptSrc,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' https: data:",
+    connectSrc,
+    "font-src 'self' data:",
+    "frame-src 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+  ].join('; ')
+}
+
+// 세션의 모든 응답 헤더에 CSP 주입. 스플래시 문서(splash.html)만 인라인 스크립트 때문에
+// script-src 를 완화(prod)하고, 그 외(메인 앱)는 strict. 문서 판별은 요청 URL 로 한다.
+function installCsp() {
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const isSplash = /splash\.html/i.test(details.url)
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [buildCsp(isSplash)],
+      },
+    })
+  })
+}
+
 // 별도 frameless·투명 스플래시 윈도우 (방식 A)
 function createSplashWindow() {
   splash = new BrowserWindow({
@@ -207,6 +267,11 @@ function createSplashWindow() {
     // backgroundColor 지정 금지(투명)
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      // [보안 하드닝] 메인 창과 동일 원칙(아래 createWindow 의 webPreferences 주석 참조).
+      // sandbox:true — 번들 preload 는 실제 CJS 라 샌드박스(CJS 로더) 하에서 정상 로드된다.
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
     },
   })
   splashCreatedAt = Date.now()
@@ -275,6 +340,17 @@ function createWindow() {
     icon: path.join(process.env.VITE_PUBLIC, 'gitgrove-icon.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
+      // [보안 하드닝] 렌더러 격리를 기본값 의존에서 명시로 전환 + OS 샌드박스 완전 복구.
+      contextIsolation: true,   // preload 컨텍스트와 페이지 컨텍스트 분리(브리지 오염 방지)
+      nodeIntegration: false,   // 페이지 JS 에서 Node(require/fs 등) 직접 접근 차단
+      // sandbox:true 로 렌더러 OS 샌드박스를 켠다(no-sandbox 전역 제거와 함께 방어선 완전 복구).
+      // ⚠️ 번들 산출물 preload.mjs 는 확장자만 .mjs 일 뿐 실제 내용은 CJS(require('electron'))다.
+      // Electron 은 샌드박스 preload 를 CJS 컨텍스트로 로드하므로 require 가 정상 동작한다(출하된
+      // 프로덕션 빌드가 사실상 이 경로로 preload 를 정상 로드해 온 이유). 반대로 sandbox:false 로
+      // 두면 Electron 이 .mjs 를 진짜 ESM 으로 로드해 "require is not defined"로 preload 가 깨진다
+      // (CDP 라이브 검증으로 확인). preload 는 contextBridge/ipcRenderer/process.platform 만 써서
+      // 샌드박스에서 안전하다.
+      sandbox: true,
     },
     // 타이틀바 높이 40px 기준 신호등 클러스터 수직 중앙 근사값(시각 미세조정은 QA 단계).
     ...(isMac
@@ -2444,7 +2520,17 @@ function isNewer(latest: string, current: string): boolean {
 }
 
 ipcMain.on('app:open-release-url', (_e, url: string) => {
-  shell.openExternal(url)
+  // [보안 하드닝] shell.openExternal 은 OS 핸들러로 임의 스킴을 넘길 수 있는 sink 다.
+  // 렌더러(Markdown)에서 1차 화이트리스트를 하지만, 렌더러가 침해될 수 있으므로 메인에서도
+  // http/https/mailto 만 허용해 방어한다(javascript:/file: 등 위험 스킴 차단).
+  try {
+    const scheme = new URL(url).protocol.toLowerCase()
+    if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
+      shell.openExternal(url)
+    }
+  } catch {
+    /* URL 파싱 불가(상대경로 등) → 무시 */
+  }
 })
 
 // app:get-version — 현재 앱 버전 반환(About 탭 표시용). 단순 동기 조회.
@@ -2719,6 +2805,8 @@ ipcMain.handle('app:download-update', async (event, dmgUrl: string): Promise<{ p
 })
 
 app.whenReady().then(() => {
+  // [보안 하드닝] 창을 만들기 전에 CSP 헤더 필터를 먼저 등록해야 첫 로드부터 적용된다.
+  installCsp()
   // 스플래시를 먼저 띄워 메인 윈도우 빌드 동안 빈 화면 깜빡임 제거
   createSplashWindow()
   createWindow()

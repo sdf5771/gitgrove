@@ -192,11 +192,17 @@ export function installGitApiMock() {
     // 메뉴바 Tray — 테스트에서 호출 검증 가능하도록 vi.fn. onTrayAction은 no-op 구독해제 반환.
     setTrayState: vi.fn() as Mock<(s: TrayState) => void>,
     onTrayAction: vi.fn(() => () => {}) as Mock<(cb: (a: TrayAction) => void) => () => void>,
+    // generic ipcRenderer 브리지 제거에 따른 스코프 API 대체(호출 검증 가능하도록 vi.fn).
+    onMainMessage: vi.fn(() => () => {}) as Mock<(cb: (message: string) => void) => () => void>,
+    windowControls: {
+      minimize: vi.fn() as Mock<() => void>,
+      maximize: vi.fn() as Mock<() => void>,
+      close: vi.fn() as Mock<() => void>,
+    },
   }
 
   window.gitAPI = gitAPI
   window.appAPI = appAPI
-  window.ipcRenderer = { send: vi.fn(), on: vi.fn(), off: vi.fn(), invoke: vi.fn() } as unknown as Window['ipcRenderer']
 
   return { gitAPI, appAPI, emitRemoteProgress, remoteProgressStats }
 }
