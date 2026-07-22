@@ -41,6 +41,8 @@ import { CherryPickModal } from './components/modals/CherryPickModal'
 import { StashPanel } from './components/modals/StashPanel'
 import { TagPanel } from './components/modals/TagPanel'
 import { AuthManagerModal } from './components/modals/AuthManagerModal'
+import { RemoteManagerModal } from './components/modals/RemoteManagerModal'
+import { ForcePushModal } from './components/modals/ForcePushModal'
 import { BranchModal } from './components/modals/BranchModal'
 import { InteractiveRebaseModal } from './components/modals/InteractiveRebaseModal'
 import { SettingsPanel, type SettingsTab } from './components/modals/SettingsPanel'
@@ -55,6 +57,7 @@ import { loadFavorites, saveFavorites, loadRecents, saveRecents, pushRecent, loa
 import { useNotifications } from './hooks/useNotifications'
 import { TOASTS, spread } from './toasts'
 import { SyncHud } from './components/SyncHud'
+import { type PullStrategy, PULL_STRATEGY_LABEL, PULL_STRATEGY_DESC, loadPullStrategy, savePullStrategy, isNonFastForwardPush } from './utils/remoteWorkflow'
 import { UpdateIndicator } from './components/UpdateIndicator'
 import {
   type UpdateState,
@@ -331,6 +334,7 @@ export default function App() {
   const [showStash,      setShowStash]      = useState(false)
   const [showTags,       setShowTags]       = useState(false)
   const [showAuth,       setShowAuth]       = useState(false)
+  const [showRemotes,    setShowRemotes]    = useState(false)
   const [showBranch,     setShowBranch]     = useState(false)
   const [branchTab,      setBranchTab]      = useState<BranchTab>('create')
   const [showRebase,     setShowRebase]     = useState(false)
@@ -344,6 +348,11 @@ export default function App() {
   // CL2 — 클론 인터랙션 모달. null=닫힘. url 프리필(브라우저 Clone 진입 시).
   const [cloneModal,     setCloneModal]     = useState<{ url: string } | null>(null)
   const [showConflict,   setShowConflict]   = useState(false)
+  // Pull 전략(merge/rebase/ff-only) — localStorage에 마지막 선택 기억. 스플릿 버튼 드롭다운 상태.
+  const [pullStrategy,   setPullStrategy]   = useState<PullStrategy>(() => loadPullStrategy())
+  const [showPullMenu,   setShowPullMenu]   = useState(false)
+  // 강제 푸시 확인 모달 — push가 non-fast-forward로 거부됐을 때 노출.
+  const [forcePushOpen,  setForcePushOpen]  = useState(false)
   // 코치 배너 닫기(세션 상태). `${repoPath}|${coachKind}` 토큰을 기억해, 레포 전환·상태 변화 시
   // 다시 평가되도록 한다(같은 레포의 같은 상태에서만 숨김 유지).
   const [coachDismissed, setCoachDismissed] = useState<string | null>(null)
@@ -700,7 +709,8 @@ export default function App() {
   // 진행 HUD를 켜고(setSyncModel) op를 실행한 뒤, 결과를 HUD 푸터·토스트로 매핑한다.
   // 충돌(conflict===true)은 throw가 아니라 정상 반환 — 별도 분기로 처리한다(SY1 계약).
   // 기존 notify/loadRepo 흐름·키보드 단축키 동작은 그대로 보존(인터랙션만 얹음).
-  const handleRemoteOp = useCallback(async (op: 'pull' | 'push' | 'fetch') => {
+  // opts: pull=전략(merge/rebase/ff-only), push=force('lease'면 강제 푸시). 미전달=기존 동작.
+  const handleRemoteOp = useCallback(async (op: 'pull' | 'push' | 'fetch', opts?: { strategy?: PullStrategy; force?: 'lease' }) => {
     if (!repoPath || remoteOpRef.current) return
     setRemoteOp(op)
     setSyncOpPath(repoPath)
@@ -708,7 +718,11 @@ export default function App() {
     setSyncResultView(null)
     setSyncPct(0)
     try {
-      const result = await window.gitAPI?.[op](repoPath)
+      const result = op === 'pull'
+        ? await window.gitAPI?.pull(repoPath, opts?.strategy)
+        : op === 'push'
+          ? await window.gitAPI?.push(repoPath, opts?.force ? { force: opts.force } : undefined)
+          : await window.gitAPI?.fetch(repoPath)
       if (!result) { closeSyncHud(); return }
       const view = mapResult(result)
       setSyncResultView(view)
@@ -721,6 +735,8 @@ export default function App() {
       // 진짜 에러(네트워크/인증 등) — HUD를 닫고 기존 에러 토스트.
       closeSyncHud()
       const msg = err instanceof Error ? err.message : String(err)
+      // 강제 푸시가 아닌 일반 push가 non-fast-forward로 거부되면 확인 모달로 유도(에러 토스트 대신).
+      if (op === 'push' && !opts?.force && isNonFastForwardPush(msg)) { setForcePushOpen(true); return }
       if (op === 'pull') notify(...spread(TOASTS.branchPullFailed(msg)))
       else if (op === 'push') notify(...spread(TOASTS.branchPushFailed(msg)))
       else notify(...spread(TOASTS.fetchFailed(msg)))
@@ -729,9 +745,18 @@ export default function App() {
     }
   }, [repoPath, loadRepo, notify, closeSyncHud])
 
-  const handlePull = useCallback(() => handleRemoteOp('pull'), [handleRemoteOp])
+  const handlePull = useCallback(() => handleRemoteOp('pull', { strategy: pullStrategy }), [handleRemoteOp, pullStrategy])
   const handlePush = useCallback(() => handleRemoteOp('push'), [handleRemoteOp])
   const handleFetch = useCallback(() => handleRemoteOp('fetch'), [handleRemoteOp])
+  // 강제 푸시(force-with-lease) 확정 — ForcePushModal에서 호출.
+  const handleForcePush = useCallback(() => { setForcePushOpen(false); void handleRemoteOp('push', { force: 'lease' }) }, [handleRemoteOp])
+  // Pull 전략 선택(드롭다운) — 저장 후 즉시 그 전략으로 Pull 실행.
+  const selectPullStrategy = useCallback((s: PullStrategy) => {
+    setPullStrategy(s)
+    savePullStrategy(s)
+    setShowPullMenu(false)
+    void handleRemoteOp('pull', { strategy: s })
+  }, [handleRemoteOp])
 
   // ── 메뉴바 Tray 액션 처리 ──
   // 콜백은 매 렌더 갱신되는 ref로 최신 핸들러/상태를 읽는다(stale closure 방지).
@@ -1337,13 +1362,16 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowCmd(v => !v) }
       if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setShowSettings(true) }
       if (e.key === 'Escape') {
-        if (showCmd) setShowCmd(false)
+        if (showPullMenu) setShowPullMenu(false)
+        else if (forcePushOpen) setForcePushOpen(false)
+        else if (showCmd) setShowCmd(false)
         else if (ctxMenu) setCtxMenu(null)
         else if (showMerge) setShowMerge(false)
         else if (showCherryPick) setShowCherryPick(false)
         else if (showStash) setShowStash(false)
         else if (showTags) setShowTags(false)
         else if (showAuth) setShowAuth(false)
+        else if (showRemotes) setShowRemotes(false)
         else if (showBranch) setShowBranch(false)
         else if (showRebase) setShowRebase(false)
         else if (showSettings) setShowSettings(false)
@@ -1358,7 +1386,7 @@ export default function App() {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showAuth, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery])
+  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showAuth, showRemotes, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery, showPullMenu, forcePushOpen])
 
   // ── 히스토리 뷰: 방향키 위/아래로 커밋 선택, Enter로 해당 커밋 Diff 열기 ──
   useEffect(() => {
@@ -1368,8 +1396,8 @@ export default function App() {
       const t = e.target as HTMLElement | null
       if (t && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
-      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showAuth || showBranch ||
-          showRebase || showSettings || showAddRepo || showConflict || showRepoManager) return
+      if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showAuth || showRemotes || showBranch ||
+          showRebase || showSettings || showAddRepo || showConflict || showRepoManager || forcePushOpen) return
       const n = filteredCommits.length
       if (n === 0) return
       if (e.key === 'ArrowDown') {
@@ -1389,7 +1417,7 @@ export default function App() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [view, filteredCommits, selIdx, handleSelectCommit, showCmd, ctxMenu, showMerge,
-      showCherryPick, showStash, showTags, showAuth, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager])
+      showCherryPick, showStash, showTags, showAuth, showRemotes, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, forcePushOpen])
 
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
@@ -1400,6 +1428,7 @@ export default function App() {
       'stash':         () => setShowStash(true),
       'tags':          () => setShowTags(true),
       'auth':          () => setShowAuth(true),
+      'remotes':       () => setShowRemotes(true),
       'cherry':        () => setShowCherryPick(true),
       'rebase':        () => setShowRebase(true),
       'conflict':      () => setShowConflict(true),
@@ -1476,6 +1505,16 @@ export default function App() {
 
   const repo = repos[activeRepo] || null
   const displayBranch = repo?.branch || activeBranch
+
+  // 현재 브랜치가 추적 중인 upstream 원격 이름 — 원격 삭제 경고용. remote-tracking ref
+  // (`origin/main` 등)에서 현재 브랜치와 이름이 같은 항목의 원격 접두를 취한다. 판별 불가=null.
+  // 접두가 실제 원격명과 다르면(중첩 branch 경로 오탐) RemoteManagerModal이 실 원격명과
+  // 비교하므로 거짓 경고는 나지 않는다.
+  const currentUpstreamRemote = useMemo<string | null>(() => {
+    const suffix = `/${activeBranch}`
+    const match = realRemotes.find(r => r.length > suffix.length && r.endsWith(suffix))
+    return match ? match.slice(0, match.length - suffix.length) : null
+  }, [realRemotes, activeBranch])
 
   // 하단바 계정 칩 — 연결된 프로바이더별로 정규화한 프로필. GitHub 골드 · GitLab 주황.
   const accounts = useMemo<AccountProfile[]>(() => {
@@ -1633,13 +1672,33 @@ export default function App() {
       {/* Action bar — Repository Manager 활성 시 숨김 */}
       {!showRepoManager && (
       <div className="action-bar">
-        <button className={`abt sync-btn${remoteOp === 'pull' ? ' busy' : ''}`} onClick={handlePull} disabled={!repoPath || !!remoteOp}>
-          {remoteOp === 'pull'
-            ? <span className="abt-spin" />
-            : <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span>}Pull
-          {!!repo && repo.behind > 0 && remoteOp !== 'pull' && <span className="abt-cnt">{repo.behind}</span>}
-          {remoteOp === 'pull' && <span className="abt-mini" style={{ width: `${syncPct}%` }} />}
-        </button>
+        <div className="pull-split">
+          <button className={`abt sync-btn${remoteOp === 'pull' ? ' busy' : ''}`} onClick={handlePull} disabled={!repoPath || !!remoteOp}
+            title={`Pull · ${PULL_STRATEGY_LABEL[pullStrategy]}`}>
+            {remoteOp === 'pull'
+              ? <span className="abt-spin" />
+              : <span style={{ fontSize: 14, lineHeight: 1 }}>↓</span>}Pull
+            {!!repo && repo.behind > 0 && remoteOp !== 'pull' && <span className="abt-cnt">{repo.behind}</span>}
+            {remoteOp === 'pull' && <span className="abt-mini" style={{ width: `${syncPct}%` }} />}
+          </button>
+          <button className="abt sync-btn pull-caret" onClick={() => setShowPullMenu(v => !v)} disabled={!repoPath || !!remoteOp}
+            aria-label="받기 전략 선택" aria-haspopup="menu" aria-expanded={showPullMenu}>▾</button>
+          {showPullMenu && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 59 }} onClick={() => setShowPullMenu(false)} />
+              <div className="pull-menu" role="menu">
+                <div className="pull-menu-hd">Pull 전략</div>
+                {(['merge', 'rebase', 'ff-only'] as const).map(s => (
+                  <button key={s} className={`pull-opt${pullStrategy === s ? ' on' : ''}`} role="menuitemradio" aria-checked={pullStrategy === s}
+                    onClick={() => selectPullStrategy(s)}>
+                    <span className="pull-opt-top">{pullStrategy === s ? <span className="ck">✓</span> : <span className="ck" style={{ opacity: 0 }}>✓</span>}{PULL_STRATEGY_LABEL[s]}</span>
+                    <span className="pull-opt-desc">{PULL_STRATEGY_DESC[s]}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <button className={`abt sync-btn push${remoteOp === 'push' ? ' busy' : ''}`} onClick={handlePush} disabled={!repoPath || !!remoteOp}>
           {remoteOp === 'push'
             ? <span className="abt-spin" />
@@ -1973,7 +2032,8 @@ export default function App() {
         {showStash       && <StashPanel onClose={() => setShowStash(false)} repoPath={repoPath} currentBranch={activeBranch} onChanged={() => { if (repoPath) void loadRepo(repoPath, { silent: true }) }} />}
         {showTags        && <TagPanel onClose={() => setShowTags(false)} repoPath={repoPath} commits={baseCommits} onChanged={() => { if (repoPath) loadRepo(repoPath, { silent: true }) }} />}
         {showAuth        && <AuthManagerModal onClose={() => setShowAuth(false)} />}
-        {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} onOpenAuth={() => { setShowSettings(false); setSettingsTab(undefined); setShowAuth(true) }} />}
+        {showRemotes     && <RemoteManagerModal onClose={() => setShowRemotes(false)} repoPath={repoPath} currentUpstreamRemote={currentUpstreamRemote} />}
+        {showSettings    && <SettingsPanel onClose={() => { setShowSettings(false); setSettingsTab(undefined) }} repoPath={repoPath} initialTab={settingsTab} onOpenAuth={() => { setShowSettings(false); setSettingsTab(undefined); setShowAuth(true) }} onOpenRemotes={() => { setShowSettings(false); setSettingsTab(undefined); setShowRemotes(true) }} />}
         {showAddRepo     && (
           <AddRepoModal
             onClose={() => setShowAddRepo(false)}
@@ -2035,6 +2095,15 @@ export default function App() {
 
       {showCmd && <CommandPalette onClose={() => setShowCmd(false)} onAction={handleCommand}
         context={{ behind: coachBehind, conflicts: coachConflict ? (syncResultView?.kind === 'conflict' ? (syncResultView.changedFiles ?? 0) : 0) : 0 }} />}
+
+      {forcePushOpen && (
+        <ForcePushModal
+          branch={displayBranch}
+          onPull={() => { setForcePushOpen(false); void handlePull() }}
+          onForce={handleForcePush}
+          onCancel={() => setForcePushOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -180,9 +180,11 @@ interface Props {
   initialTab?: SettingsTab
   /** 인증 관리자(SSH·HTTPS) 열기 — 서비스 연결 탭 진입점 */
   onOpenAuth?: () => void
+  /** 원격 관리자(add/rename/set-url/remove) 열기 — 서비스 연결 탭 진입점 */
+  onOpenRemotes?: () => void
 }
 
-export function SettingsPanel({ onClose, repoPath, initialTab, onOpenAuth }: Props) {
+export function SettingsPanel({ onClose, repoPath, initialTab, onOpenAuth, onOpenRemotes }: Props) {
   // 좌측 nav 활성 항목. 외부 initialTab을 내부 nav id로 매핑.
   const [nav, setNav] = useState<NavId>(() => navIdForTab(initialTab ?? 'git'))
   // 서비스 연결 탭에서 인라인 연결 흐름이 열린 provider (null | 'github' | 'gitlab').
@@ -1041,6 +1043,22 @@ export function SettingsPanel({ onClose, repoPath, initialTab, onOpenAuth }: Pro
                           <span>SSH 키 · HTTPS 자격증명을 등록 · 테스트 · 삭제해요</span>
                         </div>
                         <button className="set2-conn-btn ghost" onClick={onOpenAuth}>열기</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {onOpenRemotes && (
+                    <div className="set2-group">
+                      <div className="set2-group-ttl">원격</div>
+                      <div className="set2-conn">
+                        <div className="set2-conn-mark">
+                          <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="4" cy="8" r="2" /><circle cx="12" cy="4" r="2" /><circle cx="12" cy="12" r="2" /><path d="M6 8h2.5M10.5 5L8.5 7M10.5 11L8.5 9" /></svg>
+                        </div>
+                        <div className="set2-conn-info">
+                          <b>원격 관리</b>
+                          <span>origin · upstream 같은 원격을 추가 · 이름변경 · URL변경 · 삭제해요</span>
+                        </div>
+                        <button className="set2-conn-btn ghost" onClick={onOpenRemotes}>열기</button>
                       </div>
                     </div>
                   )}

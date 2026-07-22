@@ -124,6 +124,11 @@ export function installGitApiMock() {
     checkout: vi.fn(async (_repoPath: string, branch: string) => branch),
     blame: vi.fn(async () => []),
     getRemotes,
+    // 원격 관리(add/remove/rename/set-url) — 테스트에서 호출 검증 가능하도록 vi.fn. 기본 성공(void).
+    remoteAdd: vi.fn(async () => {}),
+    remoteRemove: vi.fn(async () => {}),
+    remoteRename: vi.fn(async () => {}),
+    remoteSetUrl: vi.fn(async () => {}),
     getConfig: vi.fn(async () => ({ name: '', email: '', defaultBranch: 'main' })),
     setConfig: vi.fn(async () => {}),
     createTag: vi.fn(async () => {}),

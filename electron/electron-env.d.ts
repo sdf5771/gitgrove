@@ -315,14 +315,21 @@ interface Window {
     stage: (repoPath: string, files: string[]) => Promise<void>
     unstage: (repoPath: string, files: string[]) => Promise<void>
     commit: (repoPath: string, message: string) => Promise<void>
-    pull: (repoPath: string) => Promise<GitRemoteResult>
-    push: (repoPath: string) => Promise<GitRemoteResult>
+    // strategy: 'merge'(기본, --no-rebase) · 'rebase' · 'ff-only'. 미전달=merge(기존 동작).
+    pull: (repoPath: string, strategy?: 'merge' | 'rebase' | 'ff-only') => Promise<GitRemoteResult>
+    // opts.force: 'lease'(--force-with-lease, 안전) · 'force'(--force). 미전달=일반 푸시(기존 동작).
+    push: (repoPath: string, opts?: { force?: 'lease' | 'force' }) => Promise<GitRemoteResult>
     fetch: (repoPath: string) => Promise<GitRemoteResult>
     // pull/push/fetch 진행률 구독. 반환된 함수를 호출해 구독 해제(effect cleanup).
     onRemoteProgress: (cb: (p: RemoteProgress) => void) => () => void
     checkout: (repoPath: string, branch: string) => Promise<string>
     blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
     getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>
+    // 원격 관리(add/remove/rename/set-url). name/url 검증 실패·git 에러는 reject(사유 먼저 문구).
+    remoteAdd: (repoPath: string, name: string, url: string) => Promise<void>
+    remoteRemove: (repoPath: string, name: string) => Promise<void>
+    remoteRename: (repoPath: string, oldName: string, newName: string) => Promise<void>
+    remoteSetUrl: (repoPath: string, name: string, url: string) => Promise<void>
     getConfig: (repoPath: string) => Promise<GitConfigResult>
     setConfig: (repoPath: string, cfg: Partial<GitConfigResult>) => Promise<void>
     createTag: (repoPath: string, tagName: string, commitHash: string, opts?: { annotated?: boolean; message?: string; push?: boolean }) => Promise<void>
