@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification, Tray, Menu, nativeImage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
@@ -163,6 +163,20 @@ let splash: BrowserWindow | null = null
 let splashCreatedAt = 0
 
 // ──────────────────────────────────────────────
+// 메뉴바 Tray (상태표시줄 위젯) 상태
+// ──────────────────────────────────────────────
+// tray: macOS 메뉴바 상주 인스턴스(앱 실행 중 1회 생성, 종료 시 destroy).
+// trayState: 렌더러가 push한 최신 상태(메뉴/타이틀/툴팁 재빌드 소스).
+// isQuitting: '종료' 액션/ before-quit에서 세워 중복 quit 방지.
+// trayRendererReady: 렌더러의 tray 통합이 살아있는지(첫 tray:set-state로 확정).
+// pendingTrayActions: 창/렌더러가 아직 없을 때 위임 액션을 버퍼링 → 준비되면 flush.
+let tray: Tray | null = null
+let trayState: TrayState = { hasRepo: false }
+let isQuitting = false
+let trayRendererReady = false
+let pendingTrayActions: TrayAction[] = []
+
+// ──────────────────────────────────────────────
 // 업데이트 체크 주기/포커스/디듀프 상태 (기능 A)
 // ──────────────────────────────────────────────
 // 주기 체크 핸들(앱 종료/모든 창 닫힘 시 정리). focus 체크는 throttle용 마지막 시각.
@@ -248,6 +262,8 @@ function createWindow() {
   // 그 외 플랫폼(win/linux)은 네이티브 신호등이 없으므로 기존 frameless + 커스텀
   // 신호등(win-* IPC)을 유지한다. 두 모드는 상호 배타적이다(hiddenInset과 frame:false
   // 동시 사용 시 신호등이 표시되지 않음).
+  // 새 렌더러가 뜨는 중 — tray 통합이 다시 살아날 때까지(첫 tray:set-state) 미준비로 표시.
+  trayRendererReady = false
   const isMac = process.platform === 'darwin'
   win = new BrowserWindow({
     width: 1440,
@@ -324,6 +340,160 @@ function createWindow() {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 }
+
+// ──────────────────────────────────────────────
+// 메뉴바 Tray (상태표시줄 위젯)
+//
+// 앱 실행 중 macOS 메뉴바에 아이콘 상주 + 클릭 시 컨텍스트 메뉴.
+// 코드서명/네이티브 위젯과 무관하게 Electron Tray만으로 즉시 동작.
+// 상태는 렌더러(App)가 'tray:set-state'로 push → 메인이 메뉴/타이틀/툴팁 재빌드.
+// Fetch/Pull/Push·최근 저장소 전환·알림 열기는 실행 주체가 렌더러라 'tray:action'으로 위임.
+// ──────────────────────────────────────────────
+
+// 16×18px 단색 글리프(git 브랜치 실루엣) PNG를 base64로 임베드 — 별도 에셋
+// 파이프라인 없이 nativeImage로 로드. setTemplateImage(true)로 다크/라이트 자동 반전.
+// ⚠️ 디자인 폴리시 대상: 추후 그루(Geuru) 마스코트 실루엣으로 교체 예정(placeholder).
+const TRAY_ICON_1X = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaklEQVR42mNgoAGwg2KyQBcQ/4fiLnIMeIpkwFNyDFiGZMAyJHElIF4AxUr4DGhAMgDEDgbiOWgu20esAf+Q2Mj4HrEG4MJZpBhwFoibgdgKiHmgmIGUMCAZUGwArmikX0KiOClTnJlIBgBHGzulp+g/AQAAAABJRU5ErkJggg=='
+const TRAY_ICON_2X = 'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABNUlEQVR42u3XsQsBURwH8CuTicVkYCFlMSirP0BMBmUVm5SRXRYmJotk4w+w3KL8AUwWg1Fmk/i++irpOZz37i751Wd57673HX7v3TvD+Nd75SfHKwlV6FCVY45UCnqwhQttOZZyIkAT9neL3+w5p7UiMJIsfjPiM9oqBhOLABM+o60CbLqzZPEz5wKS90JQgDoVOGar8mBKApice6wotGAJR1pyLGonQNYigJjzQQJy0IABbCTPi7Ga6gAlaMMYVnCw6BdhCGGVAdZwerHovSnEVQWwo2+nGVUFEI1YVtkDVnawYOMJMzZgUFeAE/thDl2o8L0iZb45jJ4FOLDzx9wJYkeknxxMho4AJvd+gmeBtnp1EGmvf4BPP0ae+Bz/zoXE9SuZ65dST1zLXf8x8cSv2e/XFXT27U3GhRIOAAAAAElFTkSuQmCC'
+
+// 메인 윈도우를 앞으로 — 없거나 파괴됐으면 새로 생성(mac은 창을 닫아도 앱/Tray 상주).
+// (:2327 알림 클릭 로직과 동일한 restore/show/focus 패턴 재사용)
+function showMainWindow() {
+  if (win && !win.isDestroyed()) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    if (process.platform === 'darwin') app.focus({ steal: true })
+  } else {
+    createWindow()
+  }
+}
+
+// 렌더러 위임 액션 전송. 창/렌더러가 준비돼 있으면 즉시 send + 창을 앞으로,
+// 아니면 큐에 넣고 창을 생성 → 렌더러가 tray:set-state로 준비를 알리면 flush.
+// (창이 없을 때의 createWindow 후 전송 타이밍을 렌더러 준비 핸드셰이크로 견고화)
+function sendTrayAction(action: TrayAction) {
+  if (win && !win.isDestroyed() && trayRendererReady) {
+    win.webContents.send('tray:action', action)
+    showMainWindow()
+  } else {
+    pendingTrayActions.push(action)
+    showMainWindow() // 창 없으면 createWindow, 로딩 중이면 앞으로
+  }
+}
+
+// 큐에 쌓인 위임 액션을 렌더러가 준비된 뒤 순서대로 flush.
+function flushPendingTrayActions() {
+  if (!win || win.isDestroyed() || !pendingTrayActions.length) return
+  const queued = pendingTrayActions
+  pendingTrayActions = []
+  for (const a of queued) win.webContents.send('tray:action', a)
+}
+
+// 현재 trayState로 컨텍스트 메뉴 템플릿을 구성.
+// 라이팅 가이드: 해요체·명사형·가운뎃점 `·`·이모지 없음. git 토큰은 괄호 병기.
+function buildTrayMenu(s: TrayState): Electron.MenuItemConstructorOptions[] {
+  const items: Electron.MenuItemConstructorOptions[] = []
+
+  // 상단 상태(비활성 label)
+  if (s.hasRepo) {
+    const head = s.branch ? `${s.repoName ?? '저장소'} · ${s.branch}` : (s.repoName ?? '저장소')
+    const ahead = s.ahead ?? 0
+    const behind = s.behind ?? 0
+    const dirty = s.dirtyCount ?? 0
+    items.push({ label: head, enabled: false })
+    items.push({ label: `↑${ahead} ↓${behind} · 변경 ${dirty}`, enabled: false })
+  } else {
+    items.push({ label: '저장소가 열려 있지 않아요', enabled: false })
+  }
+
+  items.push({ type: 'separator' })
+  items.push({ label: '창 열기', click: () => showMainWindow() })
+
+  // git 액션·최근 저장소는 저장소가 있을 때만 노출(없으면 비표시).
+  if (s.hasRepo) {
+    items.push({ type: 'separator' })
+    items.push({ label: '가져오기(Fetch)', click: () => sendTrayAction({ type: 'fetch' }) })
+    items.push({ label: '받기(Pull)', click: () => sendTrayAction({ type: 'pull' }) })
+    items.push({ label: '보내기(Push)', click: () => sendTrayAction({ type: 'push' }) })
+
+    const recents = s.recentRepos ?? []
+    if (recents.length) {
+      items.push({ type: 'separator' })
+      items.push({
+        label: '최근 저장소',
+        submenu: recents.map((r) => ({
+          label: r.name,
+          click: () => sendTrayAction({ type: 'switch-repo', path: r.path }),
+        })),
+      })
+    }
+  }
+
+  // 알림은 저장소와 무관(App이 notifCount를 레포 유무와 상관없이 push, open-notifications는
+  // repoPath 없이도 처리 가능) → hasRepo 게이트 밖에서 항상 노출.
+  const notif = s.notifCount ?? 0
+  items.push({ type: 'separator' })
+  items.push({
+    label: `알림 열기${notif ? ` (${notif})` : ''}`,
+    click: () => sendTrayAction({ type: 'open-notifications' }),
+  })
+
+  items.push({ type: 'separator' })
+  items.push({ label: 'GitGrove 종료', click: () => { if (!isQuitting) { isQuitting = true; app.quit() } } })
+
+  return items
+}
+
+// trayState 반영 — 타이틀(↑↓)·툴팁·컨텍스트 메뉴 재빌드.
+function updateTray() {
+  if (!tray || tray.isDestroyed()) return
+  const s = trayState
+
+  // setTitle: ahead/behind 있으면 `↑{ahead} ↓{behind}`, 둘 다 0이면 생략.
+  const ahead = s.ahead ?? 0
+  const behind = s.behind ?? 0
+  if (s.hasRepo && (ahead > 0 || behind > 0)) {
+    tray.setTitle(` ↑${ahead} ↓${behind}`)
+  } else {
+    tray.setTitle('')
+  }
+
+  // setToolTip: `{repoName} · {branch}`
+  if (s.hasRepo && s.repoName) {
+    tray.setToolTip(s.branch ? `${s.repoName} · ${s.branch}` : s.repoName)
+  } else {
+    tray.setToolTip('GitGrove')
+  }
+
+  tray.setContextMenu(Menu.buildFromTemplate(buildTrayMenu(s)))
+}
+
+// Tray 생성(앱 실행 중 1회). 아이콘은 template image로 다크/라이트 자동 반전.
+// Tray 생성 실패(비정상 환경 등)는 graceful — 앱 시작을 막지 않는다.
+function createTray() {
+  if (tray) return
+  try {
+    const img = nativeImage.createFromDataURL(`data:image/png;base64,${TRAY_ICON_1X}`)
+    // 레티나(@2x) 표현 추가 — 메뉴바에서 선명하게.
+    img.addRepresentation({ scaleFactor: 2, dataURL: `data:image/png;base64,${TRAY_ICON_2X}` })
+    img.setTemplateImage(true)
+    tray = new Tray(img)
+    tray.setToolTip('GitGrove')
+    updateTray()
+  } catch (err) {
+    console.warn('[tray] 생성 실패(graceful):', err)
+    tray = null
+  }
+}
+
+// 렌더러 → 메인: 최신 상태 push. 저장 후 메뉴 재빌드 + 준비 핸드셰이크로 큐 flush.
+ipcMain.on('tray:set-state', (_event, state: TrayState) => {
+  trayState = state && typeof state === 'object' ? state : { hasRepo: false }
+  trayRendererReady = true
+  updateTray()
+  flushPendingTrayActions()
+})
 
 // ──────────────────────────────────────────────
 // git IPC 핸들러
@@ -2168,9 +2338,14 @@ app.on('window-all-closed', () => {
   }
 })
 
-// 앱 종료 직전 주기 체크 핸들 최종 정리(누수 방지).
+// 앱 종료 직전 주기 체크 핸들 최종 정리(누수 방지) + Tray destroy.
 app.on('before-quit', () => {
+  isQuitting = true
   stopUpdateChecks()
+  if (tray && !tray.isDestroyed()) {
+    tray.destroy()
+    tray = null
+  }
 })
 
 app.on('activate', () => {
@@ -2547,4 +2722,6 @@ app.whenReady().then(() => {
   // 스플래시를 먼저 띄워 메인 윈도우 빌드 동안 빈 화면 깜빡임 제거
   createSplashWindow()
   createWindow()
+  // 메뉴바 Tray 상주(창을 닫아도 유지). dock은 숨기지 않음(메인창 핵심 앱).
+  createTray()
 })

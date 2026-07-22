@@ -175,6 +175,30 @@ interface RepoActivity {
 }
 
 // ──────────────────────────────────────────────
+// 메뉴바 Tray(상태표시줄 위젯) IPC 공유 타입
+// ──────────────────────────────────────────────
+
+// 렌더러 → 메인('tray:set-state'). 활성 레포 요약 + 최근 레포/알림 수.
+// 메인이 저장 후 컨텍스트 메뉴 + setTitle(↑↓) + setToolTip 재빌드.
+interface TrayState {
+  hasRepo: boolean
+  repoName?: string
+  branch?: string
+  ahead?: number
+  behind?: number
+  dirtyCount?: number
+  recentRepos?: { name: string; path: string }[]
+  notifCount?: number
+}
+
+// 메인 → 렌더러('tray:action'). 실행 주체가 렌더러인 액션을 위임.
+// switch-repo는 전환 대상 path를 함께 전달.
+interface TrayAction {
+  type: 'fetch' | 'pull' | 'push' | 'open-notifications' | 'switch-repo'
+  path?: string
+}
+
+// ──────────────────────────────────────────────
 // 머지 충돌 해결 IPC 공유 타입 (ConflictEditorModal 이 소비)
 // ──────────────────────────────────────────────
 
@@ -251,6 +275,11 @@ interface Window {
     // 알림 사운드 미리듣기(Settings). 화이트리스트(14종)에 있는 macOS 시스템 사운드 이름을
     // 그 소리만 즉시 재생(배너 없이). 성공 { ok:true } / 미허용·파일없음·비-macOS { ok:false, error }.
     previewSound: (name: string) => Promise<{ ok: boolean; error?: string }>
+    // 메뉴바 Tray 상태 push('tray:set-state'). 메인이 컨텍스트 메뉴·타이틀(↑↓)·툴팁 재빌드.
+    setTrayState: (s: TrayState) => void
+    // 'tray:action'(Fetch/Pull/Push·최근 저장소 전환·알림 열기 위임) 구독. 반환 함수 호출로 구독 해제(cleanup).
+    // ⚠️ 마운트 시 이 리스너를 setTrayState보다 먼저 등록할 것(메인의 큐 flush가 리스너 존재를 전제).
+    onTrayAction: (cb: (a: TrayAction) => void) => () => void
   }
   ipcRenderer: import('electron').IpcRenderer
   gitAPI: {
