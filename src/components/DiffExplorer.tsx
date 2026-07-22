@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ReactNode } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { type Commit } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
 import { sideBySide, type SbsRow } from '../utils/sideBySide'
@@ -41,9 +41,54 @@ function wordSide(self: string, other: string | null, kind: 'del' | 'add'): Reac
   return a.map((s, i) => s.changed ? <span key={i} className={cls}>{s.text}</span> : <span key={i}>{s.text}</span>)
 }
 
+const FILES_WIDTH_KEY = 'gitgrove:diffFilesWidth'
+
 export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, onSelectCommit }: Props) {
   const [localFiles, setLocalFiles] = useState<GitFileEntry[]>([])
   const [mode, setMode] = useState<'unified' | 'split'>('unified')
+
+  // ── 파일 pane 폭 리사이즈(App 사이드바 리사이저와 동일 톤) ──
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [filesWidth, setFilesWidth] = useState<number>(() => {
+    try { const n = parseInt(localStorage.getItem(FILES_WIDTH_KEY) ?? '', 10); return Number.isFinite(n) ? n : 260 } catch { return 260 }
+  })
+  const filesWidthRef = useRef(filesWidth)
+  useEffect(() => { filesWidthRef.current = filesWidth }, [filesWidth])
+
+  // min 150 · max = min(컨테이너 55%, 480). 컨테이너 미측정 시 480 상한.
+  const clampFilesWidth = useCallback((w: number): number => {
+    const container = bodyRef.current?.clientWidth ?? 0
+    const max = container > 0 ? Math.min(480, container * 0.55) : 480
+    return Math.max(150, Math.min(max, w))
+  }, [])
+
+  // 마운트 시 1회: 레이아웃 확정 후 저장폭을 컨테이너 기준으로 클램프(좁은 창에서 max 초과 방지).
+  useEffect(() => { setFilesWidth(w => clampFilesWidth(w)) }, [clampFilesWidth])
+
+  // 창 리사이즈로 max를 넘으면 보정.
+  useEffect(() => {
+    const onResize = () => setFilesWidth(w => clampFilesWidth(w))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [clampFilesWidth])
+
+  const handleFilesResizerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    const startX = e.clientX
+    const startWidth = filesWidthRef.current
+    const onMouseMove = (ev: MouseEvent) => setFilesWidth(clampFilesWidth(startWidth + (ev.clientX - startX)))
+    const onMouseUp = () => {
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      try { localStorage.setItem(FILES_WIDTH_KEY, String(filesWidthRef.current)) } catch { /* ignore */ }
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [clampFilesWidth])
 
   // ── 변경2: 커밋 피커 ──
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -173,8 +218,8 @@ export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, o
   ))
 
   return (
-    <div className="diffx">
-      <div className="dx-files">
+    <div className="diffx" ref={bodyRef}>
+      <div className="dx-files" style={{ width: filesWidth }}>
         {showPicker && (
           <div className="dxc-bar">
             <button className="dxc-step" onClick={() => stepCommit(-1)} disabled={curIdx <= 0} title="이전 커밋">←</button>
@@ -231,6 +276,12 @@ export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, o
           })}
         </div>
       </div>
+      <div
+        onMouseDown={handleFilesResizerMouseDown}
+        style={{ width: 4, flexShrink: 0, cursor: 'col-resize', background: 'transparent', transition: 'background 120ms', position: 'relative', zIndex: 10 }}
+        onMouseOver={e => { e.currentTarget.style.background = 'var(--c-gold-border)' }}
+        onMouseOut={e => { e.currentTarget.style.background = 'transparent' }}
+      />
       <div className="dx-main">
         <div className="dx-hd">
           <span className="fp">{selFile}</span>

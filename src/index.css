@@ -542,7 +542,7 @@ body { display: flex; align-items: center; justify-content: center; }
 
 /* ── Diff Explorer (Unified·Split 토글 · word-diff · 변경바) ── */
 .diffx{flex:1;display:flex;min-width:0;overflow:hidden;}
-.dx-files{width:224px;flex-shrink:0;border-right:1px solid var(--c-divider);background:var(--c-bg-inset);display:flex;flex-direction:column;overflow:hidden;}
+.dx-files{flex-shrink:0;border-right:1px solid var(--c-divider);background:var(--c-bg-inset);display:flex;flex-direction:column;overflow:hidden;}
 .dx-files-hd{padding:9px 13px 6px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--c-text-faint);font-family:var(--font-display);display:flex;justify-content:space-between;flex-shrink:0;}
 .dx-flist{flex:1;overflow-y:auto;padding:0 5px 8px;}
 .dx-f{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:var(--r2);cursor:pointer;position:relative;}
@@ -791,7 +791,7 @@ body { display: flex; align-items: center; justify-content: center; }
 
 /* ── Blame 파일 선택기(변경3) — .bf-* ── */
 .bf-body{flex:1;display:flex;min-height:0;overflow:hidden;}
-.bf-files{width:210px;flex-shrink:0;border-right:1px solid var(--c-divider);background:var(--c-bg-inset);display:flex;flex-direction:column;overflow:hidden;}
+.bf-files{flex-shrink:0;border-right:1px solid var(--c-divider);background:var(--c-bg-inset);display:flex;flex-direction:column;overflow:hidden;}
 .bf-files-hd{padding:9px 13px 6px;font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--c-text-faint);font-family:var(--font-display);display:flex;justify-content:space-between;flex-shrink:0;}
 .bf-search{padding:0 8px 7px;flex-shrink:0;}
 .bf-search input{width:100%;padding:5px 9px;background:var(--c-bg-surface);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-strong);font-size:11px;font-family:var(--font-body);outline:none;}
@@ -807,6 +807,19 @@ body { display: flex; align-items: center; justify-content: center; }
 .bf-fp .dir{color:var(--c-text-faint);}.bf-fp .base{color:var(--c-text);}
 .bf-f.on .bf-fp .base{color:var(--c-text-strong);}
 .bf-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+/* Blame 파일 선택기 — VSCode식 디렉토리/파일 계층 트리 */
+.bf-tree{flex:1;overflow-y:auto;padding:0 5px 8px;}
+.bf-node{display:flex;align-items:center;gap:5px;padding:5px 8px;border-radius:var(--r2);cursor:pointer;position:relative;user-select:none;}
+.bf-node:hover{background:var(--c-gold-bg-soft);}
+.bf-node-file.on{background:var(--c-gold-bg);}
+.bf-node-file.on::before{content:'';position:absolute;left:-4px;top:5px;bottom:5px;width:2.5px;border-radius:2px;background:var(--c-gold-400);}
+.bf-caret{display:inline-flex;align-items:center;justify-content:center;width:10px;flex-shrink:0;color:var(--c-text-faint);transition:transform 120ms;}
+.bf-caret.open{transform:rotate(90deg);}
+.bf-ico{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--c-text-faint);}
+.bf-node-dir .bf-ico{color:var(--c-gold-300);}
+.bf-node-name{flex:1;font-family:var(--font-mono);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--c-text);}
+.bf-node-dir .bf-node-name{color:var(--c-text-faint);}
+.bf-node-file.on .bf-node-name{color:var(--c-text-strong);}
 
 /* 공용 코드 라인(blame/diff) */
 .cl{display:flex;align-items:stretch;line-height:19px;font-family:var(--font-mono);font-size:11.5px;position:relative;}
