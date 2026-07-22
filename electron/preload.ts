@@ -12,6 +12,20 @@ contextBridge.exposeInMainWorld('appAPI', {
     return () => ipcRenderer.removeListener('app:update-available', handler)
   },
   openReleaseUrl: (url: string) => ipcRenderer.send('app:open-release-url', url),
+  // 메인 프로세스 콘솔 메시지('main-process-message') 구독(디버그용). 반환 함수로 구독 해제.
+  // (기존 generic ipcRenderer 브리지 제거에 따른 스코프 API 대체)
+  onMainMessage: (cb: (message: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, message: string) => cb(message)
+    ipcRenderer.on('main-process-message', listener)
+    return () => ipcRenderer.removeListener('main-process-message', listener)
+  },
+  // 비-macOS 커스텀 신호등 창 제어(win-* IPC 래핑). macOS 는 네이티브 신호등을 쓰므로 미사용.
+  // (기존 generic ipcRenderer.send('win-*') 대체 — 임의 채널 노출 제거)
+  windowControls: {
+    minimize: () => ipcRenderer.send('win-minimize'),
+    maximize: () => ipcRenderer.send('win-maximize'),
+    close: () => ipcRenderer.send('win-close'),
+  },
   // 현재 앱 버전 조회(About 탭 표시용).
   getVersion: () => ipcRenderer.invoke('app:get-version') as Promise<string>,
   // 수동 업데이트 확인(About 탭). 새 버전 유무 결과를 동기적으로 반환. 네트워크 실패 시 graceful.
@@ -71,23 +85,28 @@ contextBridge.exposeInMainWorld('appAPI', {
   },
 })
 
-// --------- Expose ipcRenderer to the Renderer process ---------
-contextBridge.exposeInMainWorld('ipcRenderer', {
-  on(...args: Parameters<typeof ipcRenderer.on>) {
-    const [channel, listener] = args
-    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
+// --------- Splash bridge (스플래시 윈도우 전용, 스코프 한정) ---------
+// [보안 하드닝] 기존 generic ipcRenderer 브리지(임의 채널 on/off/send/invoke 가능한 안티패턴)를
+// 제거하고, 스플래시가 실제로 쓰는 수신 채널만 스코프 API 로 노출한다. 메인 창은 이 API 를 쓰지
+// 않으며(존재해도 수신 전용이라 무해), 스플래시 HTML(public/splash.html)이 소비한다.
+contextBridge.exposeInMainWorld('splashAPI', {
+  // 'splash-version' — app.getVersion() 주입. 반환 함수로 구독 해제.
+  onVersion: (cb: (version: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, version: string) => cb(version)
+    ipcRenderer.on('splash-version', listener)
+    return () => ipcRenderer.removeListener('splash-version', listener)
   },
-  off(...args: Parameters<typeof ipcRenderer.off>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.off(channel, ...omit)
+  // 'boot-progress' — { pct, done }. 완료(done 또는 pct>=100) 시 스플래시가 finish 연출.
+  onBootProgress: (cb: (payload: { pct?: number; done?: boolean }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: { pct?: number; done?: boolean }) => cb(payload)
+    ipcRenderer.on('boot-progress', listener)
+    return () => ipcRenderer.removeListener('boot-progress', listener)
   },
-  send(...args: Parameters<typeof ipcRenderer.send>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.send(channel, ...omit)
-  },
-  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.invoke(channel, ...omit)
+  // 'splash-done' — 즉시 완료 신호.
+  onDone: (cb: () => void) => {
+    const listener = () => cb()
+    ipcRenderer.on('splash-done', listener)
+    return () => ipcRenderer.removeListener('splash-done', listener)
   },
 })
 

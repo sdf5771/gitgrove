@@ -242,19 +242,20 @@ function finish(){
   if(stageEl) stageEl.classList.add('fade-out');
 }
 
-/* ── Electron IPC: preload(contextBridge)의 window.ipcRenderer.on 사용 ── */
+/* ── Electron IPC: preload(contextBridge)의 window.splashAPI 사용 ──
+   (보안 하드닝: generic window.ipcRenderer 브리지 제거 → 스코프 splashAPI 로 대체) */
 try {
-  const ipc = window.ipcRenderer;
-  if (ipc && typeof ipc.on === 'function') {
+  const api = window.splashAPI;
+  if (api) {
     // 동적 버전 주입 (app.getVersion()) — 시안의 하드코딩 v1.7.0 대체
-    ipc.on('splash-version', (_e, v) => {
+    api.onVersion((v) => {
       if (v) versionEl.textContent = 'v' + String(v).replace(/^v/, '');
     });
     // 완료 신호 (pct:100 또는 done:true)
-    ipc.on('boot-progress', (_e, payload) => {
+    api.onBootProgress((payload) => {
       if (payload && (payload.done || payload.pct >= 100)) finish();
     });
-    ipc.on('splash-done', () => finish());
+    api.onDone(() => finish());
   }
 } catch (_) { /* IPC 미가용(브라우저 프리뷰) — 자체 데모만 동작 */ }
 </script>

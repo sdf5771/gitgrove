@@ -23,7 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 )
 
-// Use contextBridge
-window.ipcRenderer.on('main-process-message', (_event, message) => {
+// Use contextBridge (스코프 API — generic ipcRenderer 브리지 제거에 따른 대체)
+window.appAPI?.onMainMessage((message) => {
   console.log(message)
 })
