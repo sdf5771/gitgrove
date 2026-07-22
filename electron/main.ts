@@ -26,7 +26,7 @@ import {
 } from '../src/utils/syncResult'
 import { normalizeGitlabHost } from '../src/utils/gitlab'
 import { parseRemoteUrl, isGithubHost } from '../src/utils/remoteAuth'
-import { planPush } from '../src/utils/pushPlan'
+import { planPush, type PushForce } from '../src/utils/pushPlan'
 import { planCheckout } from '../src/utils/checkoutTarget'
 import { buildStashPreview, type StashPreview } from '../src/utils/stashPreview'
 import {
@@ -627,13 +627,17 @@ ipcMain.handle('git:clone', async (event, url: string, parentDir: string, opts?:
   try {
     // pull/push/fetch와 동일한 progress 핸들러 패턴(remoteGit). clone은 git이
     // counting/compressing/receiving/resolving/checkout 단계를 보고하므로 stage가 그대로 흐름.
+    // 아직 repo 가 없어 원격 URL 을 config 에서 못 읽으므로 host 를 입력 URL 에서 파싱해
+    // (buildRemoteEnv) HTTPS 프라이빗 clone 에 host 별 저장 토큰을 askpass 로 주입한다.
+    // SSH URL 은 주입 없이 키 인증. GIT_TERMINAL_PROMPT=0 으로 자격증명 대기 무한 스핀도 막는다.
     const git = simpleGit({
       baseDir: parentDir,
+      unsafe: { allowUnsafeAskPass: true },
       progress(ev) {
         if (event.sender.isDestroyed()) return
         event.sender.send('git:remote-progress', mapProgress('clone', ev))
       },
-    })
+    }).env(buildRemoteEnv(url))
     await git.clone(url, target, buildCloneArgs(opts))
     return { success: true, path: target, name }
   } catch (err) {
@@ -1123,18 +1127,15 @@ async function resolvePushRemoteUrl(repoPath: string): Promise<string | null> {
   }
 }
 
-// 진행률 + (가능하면) HTTPS 토큰 인증까지 배선한 simpleGit 인스턴스.
-// HTTPS 원격 + 저장 토큰이 있으면 GIT_ASKPASS 로 자격증명을 주입한다. SSH·토큰 없음이면
-// 진행률만. 인증 실패 시 무한 대기(HUD 무한 스핀) 방지를 위해 GIT_TERMINAL_PROMPT=0 을 항상 건다.
-async function remoteGit(repoPath: string, op: RemoteOp, event: Electron.IpcMainInvokeEvent) {
-  // 상속된 위험 키 제거 + 프롬프트 비활성(tty 없는 프로세스에서 대기 hang 방지).
+// 주어진 원격 URL 로 자식 git 프로세스에 넘길 env 를 구성한다(clone·pull·push·fetch 공용).
+//  - 상속된 위험 키 제거 + GIT_TERMINAL_PROMPT=0(tty 없는 프로세스에서 자격증명 대기 hang 방지)은 항상.
+//  - HTTPS/HTTP 원격 + 저장 토큰이 있으면 host 별 토큰을 GIT_ASKPASS 로 주입(best-effort).
+//  - SSH·토큰 없음은 주입 없이 그대로(키 인증/키체인). 토큰은 URL·config 에 남기지 않고 env 로만 전달.
+function buildRemoteEnv(url: string | null): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env }
   for (const key of UNSAFE_INHERITED_ENV_KEYS) delete env[key]
   env.GIT_TERMINAL_PROMPT = '0'
-
-  // HTTPS 원격이면 host 토큰을 askpass 로 주입 시도(best-effort — 실패해도 키체인/SSH 로 진행).
   try {
-    const url = await resolvePushRemoteUrl(repoPath)
     if (url) {
       const info = parseRemoteUrl(url)
       if (info.scheme === 'https' || info.scheme === 'http') {
@@ -1149,6 +1150,17 @@ async function remoteGit(repoPath: string, op: RemoteOp, event: Electron.IpcMain
       }
     }
   } catch { /* 인증 주입 실패해도 기존 동작(키체인/SSH)으로 진행 */ }
+  return env
+}
+
+// 진행률 + (가능하면) HTTPS 토큰 인증까지 배선한 simpleGit 인스턴스.
+// HTTPS 원격 + 저장 토큰이 있으면 GIT_ASKPASS 로 자격증명을 주입한다. SSH·토큰 없음이면
+// 진행률만. 인증 실패 시 무한 대기(HUD 무한 스핀) 방지를 위해 GIT_TERMINAL_PROMPT=0 을 항상 건다.
+async function remoteGit(repoPath: string, op: RemoteOp, event: Electron.IpcMainInvokeEvent) {
+  // push 대상 원격 URL 을 판정(best-effort — 실패해도 키체인/SSH 로 진행).
+  let url: string | null = null
+  try { url = await resolvePushRemoteUrl(repoPath) } catch { url = null }
+  const env = buildRemoteEnv(url)
 
   return simpleGit({
     baseDir: repoPath,
@@ -1187,7 +1199,13 @@ async function resolveUpstream(repoPath: string): Promise<{ remote: string; bran
 }
 
 // git:pull — 원격에서 pull (진행률 스트리밍 + 결과 보강)
-ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteResult> => {
+//   strategy: 'merge'(기본, --no-rebase) · 'rebase'(--rebase) · 'ff-only'(--ff-only).
+//   미전달=merge(기존 동작). ff-only 는 빨리 감기 불가 시 raw 에러 대신 안내 문구로 변환한다.
+ipcMain.handle('git:pull', async (event, repoPath: string, strategy?: 'merge' | 'rebase' | 'ff-only'): Promise<GitRemoteResult> => {
+  const strat = strategy ?? 'merge'
+  const pullArgs = strat === 'rebase' ? ['--rebase']
+    : strat === 'ff-only' ? ['--ff-only']
+    : ['--no-rebase']
   const git = await remoteGit(repoPath, 'pull', event)
   const behindBefore = await revCount(git, 'HEAD..@{u}')  // pull 전 받을 커밋 수
 
@@ -1209,7 +1227,8 @@ ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteRes
     // 로컬·원격이 갈라지면(diverged) git 2.27+는 병합 전략을 요구해 맨 pull이
     // "Need to specify how to reconcile divergent branches"로 실패한다. GUI 관례대로
     // 병합(--no-rebase)을 기본 전략으로 명시한다(충돌은 아래 conflict 경로가 처리).
-    const result = await git.pull(undefined, undefined, ['--no-rebase'])
+    // strategy 인자로 rebase(--rebase)·ff-only(--ff-only)도 선택 가능.
+    const result = await git.pull(undefined, undefined, pullArgs)
     const stat = extractDiffStat(result)
     // newCommits: pull 전 behind(받을 커밋 수)를 best-effort로 사용
     const newCommits = behindBefore
@@ -1225,6 +1244,12 @@ ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteRes
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
+    // ff-only 인데 빨리 감기가 불가능하면(로컬·원격 diverged) git 이 "Not possible to
+    // fast-forward" 로 실패한다. raw 에러 대신 이유 먼저 안내 문구로 바꾼다. git 메시지는
+    // 로케일 의존이라 영어("fast-forward")·한국어("정방향"/"빨리 감기") 표기를 함께 매칭한다.
+    if (strat === 'ff-only' && /fast[- ]?forward|정방향|빨리 ?감기/i.test(message)) {
+      throw new Error('빨리 감기할 수 없어요 · 병합이나 리베이스가 필요해요')
+    }
     // 충돌은 throw하지 않고 conflict 결과로 변환
     if (isConflictError(message)) {
       let conflictedFiles: string[] = []
@@ -1246,7 +1271,7 @@ ipcMain.handle('git:pull', async (event, repoPath: string): Promise<GitRemoteRes
 
 // 현재 브랜치의 upstream(remote·merge)·기본 원격을 조회해 푸시 refspec 계획을 세운다.
 // upstream 브랜치명이 로컬과 달라도(push.default=simple 거부) 명시 refspec으로 우회한다.
-async function resolvePushPlan(repoPath: string): Promise<ReturnType<typeof planPush>> {
+async function resolvePushPlan(repoPath: string, force?: PushForce): Promise<ReturnType<typeof planPush>> {
   const g = simpleGit(repoPath)
   let currentBranch: string | null = null
   try {
@@ -1267,20 +1292,28 @@ async function resolvePushPlan(repoPath: string): Promise<ReturnType<typeof plan
     const remotes = await g.getRemotes()
     defaultRemote = remotes.find(r => r.name === 'origin')?.name ?? remotes[0]?.name ?? null
   } catch { defaultRemote = null }
-  return planPush({ currentBranch, upstreamRemote, upstreamBranch, defaultRemote })
+  return planPush({ currentBranch, upstreamRemote, upstreamBranch, defaultRemote, force })
 }
 
 // git:push — 원격으로 push (진행률 스트리밍 + pushedCommits 보강)
-ipcMain.handle('git:push', async (event, repoPath: string): Promise<GitRemoteResult> => {
+//   opts.force: 'lease'=--force-with-lease(안전), 'force'=--force. 미전달=일반 푸시(기존 동작).
+//   non-ff 거부는 기존대로 throw 되고, 프론트가 사용자 확인 후 force 옵션으로 재호출할 수 있다.
+ipcMain.handle('git:push', async (event, repoPath: string, opts?: { force?: PushForce }): Promise<GitRemoteResult> => {
   const git = await remoteGit(repoPath, 'push', event)
   const pushedCommits = await revCount(git, '@{u}..HEAD')  // push 전 올릴 커밋 수
   try {
     // upstream 브랜치명이 로컬과 다르면 맨 push가 거부되므로 명시 refspec으로 푸시.
-    const plan = await resolvePushPlan(repoPath)
+    const plan = await resolvePushPlan(repoPath, opts?.force)
+    // 푸시 부가 인자: -u(첫 푸시) + 강제 모드 플래그. lease 를 기본 권장(원격 최신 상태만 덮어씀).
+    const extra: string[] = plan.setUpstream ? ['-u'] : []
+    if (plan.force === 'lease') extra.push('--force-with-lease')
+    else if (plan.force === 'force') extra.push('--force')
     if (plan.remote && plan.refspec) {
-      await git.push(plan.remote, plan.refspec, plan.setUpstream ? ['-u'] : undefined)
+      await git.push(plan.remote, plan.refspec, extra.length ? extra : undefined)
+    } else if (extra.length) {
+      await git.push(undefined, undefined, extra)  // detached·원격 없음 폴백(강제 플래그만 부착)
     } else {
-      await git.push()  // detached·원격 없음 등 폴백
+      await git.push()  // detached·원격 없음 등 폴백(기존 동작)
     }
     return {
       success: true,
@@ -1340,6 +1373,64 @@ ipcMain.handle('git:remotes', async (_event, repoPath: string): Promise<GitRemot
     name: r.name,
     url: r.refs.fetch || r.refs.push || '',
   }))
+})
+
+// ── remote 관리 IPC (add/remove/rename/set-url) ─────────────────────────────
+// 전부 git.raw(['remote', ...]) 인자 배열로 실행(셸 미경유 → 인젝션 차단). 입력 검증은
+// 사유 먼저 문구로 throw. name 은 git ref 규칙에 준하는 안전 문자만, url 은 공백·제어문자
+// ·옵션 오인('-' 시작) 방어. 검증만 통과하면 git 자체 에러(중복 이름 등)는 그대로 전파된다.
+
+// 원격 이름 검증: 빈값·공백·제어문자·'-' 시작 차단, 영문·숫자·. _ - / 만 허용.
+function validateRemoteName(name: string): string {
+  const n = (name ?? '').trim()
+  if (!n) throw new Error('원격 이름을 입력해 주세요')
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(n)) throw new Error('원격 이름에 제어문자는 쓸 수 없어요')
+  if (/\s/.test(n)) throw new Error('원격 이름에 공백은 쓸 수 없어요')
+  if (n.startsWith('-')) throw new Error("원격 이름은 '-'로 시작할 수 없어요")
+  if (!/^[A-Za-z0-9._/-]+$/.test(n)) throw new Error('원격 이름에는 영문·숫자·. _ - / 만 쓸 수 있어요')
+  return n
+}
+
+// 원격 주소 검증: 빈값·공백·제어문자·'-' 시작 차단(스킴 자유 — https/ssh/scp 형식 모두 허용).
+// 추가로 ext::/fd:: 원격 헬퍼 전송은 이후 fetch/push 시 임의 명령 실행 경로가 되므로 명시 차단
+// (정원 은유 앱에서 지원 이유도 없음 · 공백 차단으로 실악용은 어렵지만 방어적으로 막는다).
+function validateRemoteUrl(url: string): string {
+  const u = (url ?? '').trim()
+  if (!u) throw new Error('원격 주소를 입력해 주세요')
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(u)) throw new Error('원격 주소에 제어문자는 쓸 수 없어요')
+  if (/\s/.test(u)) throw new Error('원격 주소에 공백은 쓸 수 없어요')
+  if (u.startsWith('-')) throw new Error("원격 주소는 '-'로 시작할 수 없어요")
+  if (/^(ext|fd)::/i.test(u)) throw new Error('지원하지 않는 원격 주소예요 · http(s)나 ssh 주소를 써 주세요')
+  return u
+}
+
+// git:remote-add — 원격 추가
+ipcMain.handle('git:remote-add', async (_event, repoPath: string, name: string, url: string): Promise<void> => {
+  const n = validateRemoteName(name)
+  const u = validateRemoteUrl(url)
+  await simpleGit(repoPath).raw(['remote', 'add', n, u])
+})
+
+// git:remote-remove — 원격 제거
+ipcMain.handle('git:remote-remove', async (_event, repoPath: string, name: string): Promise<void> => {
+  const n = validateRemoteName(name)
+  await simpleGit(repoPath).raw(['remote', 'remove', n])
+})
+
+// git:remote-rename — 원격 이름 변경
+ipcMain.handle('git:remote-rename', async (_event, repoPath: string, oldName: string, newName: string): Promise<void> => {
+  const o = validateRemoteName(oldName)
+  const nw = validateRemoteName(newName)
+  await simpleGit(repoPath).raw(['remote', 'rename', o, nw])
+})
+
+// git:remote-set-url — 원격 주소 변경
+ipcMain.handle('git:remote-set-url', async (_event, repoPath: string, name: string, url: string): Promise<void> => {
+  const n = validateRemoteName(name)
+  const u = validateRemoteUrl(url)
+  await simpleGit(repoPath).raw(['remote', 'set-url', n, u])
 })
 
 // ──────────────────────────────────────────────

@@ -130,8 +130,10 @@ contextBridge.exposeInMainWorld('gitAPI', {
   stage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:stage', repoPath, files),
   unstage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:unstage', repoPath, files),
   commit: (repoPath: string, message: string) => ipcRenderer.invoke('git:commit', repoPath, message),
-  pull: (repoPath: string) => ipcRenderer.invoke('git:pull', repoPath),
-  push: (repoPath: string) => ipcRenderer.invoke('git:push', repoPath),
+  // strategy: 'merge'(기본) · 'rebase' · 'ff-only'. 미전달=merge(기존 동작).
+  pull: (repoPath: string, strategy?: 'merge' | 'rebase' | 'ff-only') => ipcRenderer.invoke('git:pull', repoPath, strategy),
+  // opts.force: 'lease'(--force-with-lease) · 'force'(--force). 미전달=일반 푸시(기존 동작).
+  push: (repoPath: string, opts?: { force?: 'lease' | 'force' }) => ipcRenderer.invoke('git:push', repoPath, opts),
   fetch: (repoPath: string) => ipcRenderer.invoke('git:fetch', repoPath),
   // pull/push/fetch 실시간 진행률 구독. 구독 해제 함수를 반환 → effect cleanup에서 호출(리스너 누수 방지).
   onRemoteProgress: (cb: (p: RemoteProgress) => void) => {
@@ -142,6 +144,11 @@ contextBridge.exposeInMainWorld('gitAPI', {
   checkout: (repoPath: string, branch: string) => ipcRenderer.invoke('git:checkout', repoPath, branch),
   blame: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:blame', repoPath, filePath),
   getRemotes: (repoPath: string) => ipcRenderer.invoke('git:remotes', repoPath),
+  // 원격 관리(add/remove/rename/set-url). 검증 실패·git 에러는 reject(사유 먼저 문구).
+  remoteAdd: (repoPath: string, name: string, url: string) => ipcRenderer.invoke('git:remote-add', repoPath, name, url) as Promise<void>,
+  remoteRemove: (repoPath: string, name: string) => ipcRenderer.invoke('git:remote-remove', repoPath, name) as Promise<void>,
+  remoteRename: (repoPath: string, oldName: string, newName: string) => ipcRenderer.invoke('git:remote-rename', repoPath, oldName, newName) as Promise<void>,
+  remoteSetUrl: (repoPath: string, name: string, url: string) => ipcRenderer.invoke('git:remote-set-url', repoPath, name, url) as Promise<void>,
   getConfig: (repoPath: string) => ipcRenderer.invoke('git:config-get', repoPath),
   setConfig: (repoPath: string, cfg: Partial<GitConfigResult>) => ipcRenderer.invoke('git:config-set', repoPath, cfg),
   createTag: (repoPath: string, tagName: string, commitHash: string, opts?: { annotated?: boolean; message?: string; push?: boolean }) => ipcRenderer.invoke('git:tag-create', repoPath, tagName, commitHash, opts),

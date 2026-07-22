@@ -36,6 +36,7 @@ export const COMMANDS: Command[] = [
   {id:'stash',label:'Stash',icon:'⧉',cat:'Git',kbd:'⌘⇧S',desc:'작업 중 변경을 Stash'},
   {id:'tags',label:'태그 관리…',icon:'⌸',cat:'Git',kbd:'',desc:'태그 목록·생성·삭제'},
   {id:'auth',label:'인증 관리…',icon:'⚷',cat:'Git',kbd:'',desc:'SSH 키·HTTPS 자격증명 관리'},
+  {id:'remotes',label:'원격 관리…',icon:'⇅',cat:'Git',kbd:'',desc:'원격 추가·이름변경·URL변경·삭제'},
   {id:'cherry',label:'Cherry-pick…',icon:'✦',cat:'Git',kbd:'',desc:'커밋 하나를 이 브랜치에 적용'},
   {id:'rebase',label:'Interactive Rebase…',icon:'⇄',cat:'Git',kbd:'⌘⇧R',desc:'최근 커밋 순서·내용 편집'},
   {id:'branch-new',label:'새 브랜치…',icon:'+',cat:'브랜치',kbd:'⌘⇧B',desc:'로컬 브랜치 새로 만들기'},
