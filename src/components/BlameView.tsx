@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from 'react'
 import { type Commit } from '../data/mockData'
 import { HL } from '../utils/syntaxHighlight'
+import { buildFileTree, ancestorDirs, type FileTreeNode } from '../utils/fileTree'
 
 // IPC에서 반환되는 blame 라인 타입 (electron-env.d.ts의 GitBlameLine과 동일)
 interface RealBlameLine {
@@ -60,10 +61,18 @@ interface Props {
   commits?: Commit[]
 }
 
-function splitPath(p: string): { dir: string; base: string } {
-  const i = p.lastIndexOf('/')
-  return i < 0 ? { dir: '', base: p } : { dir: p.slice(0, i + 1), base: p.slice(i + 1) }
-}
+const FILES_WIDTH_KEY = 'gitgrove:blameFilesWidth'
+
+// 파일 선택기 트리용 인라인 아이콘(픽셀 톤 · 기존 툴바 stroke 톤에 맞춤).
+const CaretIcon: ReactNode = (
+  <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><path d="M2.5 1.2l3 2.8-3 2.8" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+)
+const FolderIcon: ReactNode = (
+  <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M1.5 3.5h4l1.5 1.5h7.5v8h-13z" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
+)
+const FileIcon: ReactNode = (
+  <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /><path d="M9.5 1.5v3h3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
+)
 
 export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props) {
   const [blameLines, setBlameLines] = useState<RealBlameLine[]>([])
@@ -81,6 +90,64 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
   const [fileQuery, setFileQuery] = useState('')
 
   useEffect(() => { if (filePath) setSelFile(filePath) }, [filePath])
+
+  // ── 파일 pane 폭 리사이즈(App 사이드바 리사이저와 동일 톤) ──
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const [filesWidth, setFilesWidth] = useState<number>(() => {
+    try { const n = parseInt(localStorage.getItem(FILES_WIDTH_KEY) ?? '', 10); return Number.isFinite(n) ? n : 260 } catch { return 260 }
+  })
+  const filesWidthRef = useRef(filesWidth)
+  useEffect(() => { filesWidthRef.current = filesWidth }, [filesWidth])
+
+  // min 150 · max = min(컨테이너 55%, 480). 컨테이너 미측정 시 480 상한.
+  const clampFilesWidth = useCallback((w: number): number => {
+    const container = bodyRef.current?.clientWidth ?? 0
+    const max = container > 0 ? Math.min(480, container * 0.55) : 480
+    return Math.max(150, Math.min(max, w))
+  }, [])
+
+  // 마운트 시 1회: 레이아웃 확정 후 저장폭을 컨테이너 기준으로 클램프(좁은 창에서 max 초과 방지).
+  useEffect(() => { setFilesWidth(w => clampFilesWidth(w)) }, [clampFilesWidth])
+
+  // 창 리사이즈로 max를 넘으면 보정.
+  useEffect(() => {
+    const onResize = () => setFilesWidth(w => clampFilesWidth(w))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [clampFilesWidth])
+
+  const handleFilesResizerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    document.body.style.userSelect = 'none'
+    document.body.style.cursor = 'col-resize'
+    const startX = e.clientX
+    const startWidth = filesWidthRef.current
+    const onMouseMove = (ev: MouseEvent) => setFilesWidth(clampFilesWidth(startWidth + (ev.clientX - startX)))
+    const onMouseUp = () => {
+      document.body.style.userSelect = ''
+      document.body.style.cursor = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      try { localStorage.setItem(FILES_WIDTH_KEY, String(filesWidthRef.current)) } catch { /* ignore */ }
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [clampFilesWidth])
+
+  // ── 디렉토리 접기/펼치기(세션 state, 리포 바뀌면 리셋) ──
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set())
+  useEffect(() => { setExpandedDirs(new Set()) }, [repoPath])
+  // 선택 파일의 조상 디렉토리는 자동 펼침(초기·선택 변경 시).
+  useEffect(() => {
+    if (!selFile) return
+    setExpandedDirs(prev => {
+      const next = new Set(prev)
+      for (const d of ancestorDirs(selFile)) next.add(d)
+      return next
+    })
+  }, [selFile])
+  const toggleDir = (path: string) =>
+    setExpandedDirs(prev => { const n = new Set(prev); n.has(path) ? n.delete(path) : n.add(path); return n })
 
   // ── 추적 파일 목록 로드(git:list-files) ──
   useEffect(() => {
@@ -109,6 +176,41 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
     const q = fileQuery.trim().toLowerCase()
     return q ? files.filter(f => f.toLowerCase().includes(q)) : files
   }, [files, fileQuery])
+
+  const tree = useMemo(() => buildFileTree(filteredFiles), [filteredFiles])
+
+  // 검색 중이면 매칭 파일의 조상 디렉토리를 전부 펼쳐 보인다(state와 무관, 검색 해제 시 복원).
+  const searchExpand = useMemo(() => {
+    if (!fileQuery.trim()) return null
+    const s = new Set<string>()
+    for (const f of filteredFiles) for (const d of ancestorDirs(f)) s.add(d)
+    return s
+  }, [fileQuery, filteredFiles])
+  const isDirOpen = (path: string) => (searchExpand ? searchExpand.has(path) : expandedDirs.has(path))
+
+  const renderNodes = (nodes: FileTreeNode[], depth: number): ReactNode[] =>
+    nodes.flatMap(node => {
+      const pad = 8 + depth * 12
+      if (node.type === 'dir') {
+        const open = isDirOpen(node.path)
+        return [
+          <div key={`d:${node.path}`} className="bf-node bf-node-dir" style={{ paddingLeft: pad }} onClick={() => toggleDir(node.path)} title={node.path}>
+            <span className={`bf-caret${open ? ' open' : ''}`}>{CaretIcon}</span>
+            <span className="bf-ico">{FolderIcon}</span>
+            <span className="bf-node-name">{node.name}</span>
+          </div>,
+          ...(open ? renderNodes(node.children, depth + 1) : []),
+        ]
+      }
+      const on = selFile === node.path
+      return [
+        <div key={`f:${node.path}`} className={`bf-node bf-node-file${on ? ' on' : ''}`} style={{ paddingLeft: pad }} onClick={() => setSelFile(node.path)} title={node.path}>
+          <span className="bf-caret" />
+          <span className="bf-ico">{FileIcon}</span>
+          <span className="bf-node-name">{node.name}</span>
+        </div>,
+      ]
+    })
 
   const blocks = useMemo(() => groupBlocks(blameLines), [blameLines])
 
@@ -150,8 +252,8 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
         </div>
       </div>
 
-      <div className="bf-body">
-        <div className="bf-files">
+      <div className="bf-body" ref={bodyRef}>
+        <div className="bf-files" style={{ width: filesWidth }}>
           <div className="bf-files-hd">파일<span style={{ fontFamily: 'var(--font-mono)' }}>{files.length}</span></div>
           <div className="bf-search">
             <input
@@ -160,7 +262,7 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
               placeholder="경로로 찾기"
             />
           </div>
-          <div className="bf-flist">
+          <div className="bf-tree">
             {!repoPath ? (
               <div className="bf-flist-msg">저장소를 열면 파일이 보여요</div>
             ) : filesLoading ? (
@@ -171,16 +273,16 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
               <div className="bf-flist-msg">추적 중인 파일이 없어요</div>
             ) : filteredFiles.length === 0 ? (
               <div className="bf-flist-msg">찾는 파일이 없어요</div>
-            ) : filteredFiles.map(f => {
-              const { dir, base } = splitPath(f)
-              return (
-                <div key={f} className={`bf-f${selFile === f ? ' on' : ''}`} onClick={() => setSelFile(f)} title={f}>
-                  <span className="bf-fp">{dir && <span className="dir">{dir}</span>}<span className="base">{base}</span></span>
-                </div>
-              )
-            })}
+            ) : renderNodes(tree, 0)}
           </div>
         </div>
+
+        <div
+          onMouseDown={handleFilesResizerMouseDown}
+          style={{ width: 4, flexShrink: 0, cursor: 'col-resize', background: 'transparent', transition: 'background 120ms', position: 'relative', zIndex: 10 }}
+          onMouseOver={e => { e.currentTarget.style.background = 'var(--c-gold-border)' }}
+          onMouseOut={e => { e.currentTarget.style.background = 'transparent' }}
+        />
 
         <div className="bf-main">
           {!loading && blocks.length === 0 ? (

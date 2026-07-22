@@ -142,3 +142,36 @@ describe('DiffExplorer — 커밋 피커(변경2)', () => {
     expect(r3.container.querySelector('.dxc-bar')).toBeNull()
   })
 })
+
+// ── 변경1: 파일 pane 폭 리사이즈(스모크) ──
+// BlameView 와 동일 로직. repoPath 미전달로 diff fetch 효과를 태우지 않아 async 경고를 피한다.
+// jsdom clientWidth=0 → max=480 상한이라 아래 델타 계산은 결정적.
+const DX_FILES_WIDTH_KEY = 'gitgrove:diffFilesWidth'
+
+describe('DiffExplorer — 파일 pane 리사이즈(변경1)', () => {
+  it('localStorage 저장 폭이 초기 .dx-files width로 반영된다', () => {
+    localStorage.setItem(DX_FILES_WIDTH_KEY, '300')
+    const { container } = render(<DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]} />)
+    expect((container.querySelector('.dx-files') as HTMLElement).style.width).toBe('300px')
+  })
+
+  it('저장값이 없으면 기본 260px, col-resize 핸들이 존재한다', () => {
+    const { container } = render(<DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]} />)
+    expect((container.querySelector('.dx-files') as HTMLElement).style.width).toBe('260px')
+    expect(container.querySelector('[style*="col-resize"]')).not.toBeNull()
+  })
+
+  it('드래그 시 폭이 델타만큼 바뀌고 localStorage에 저장된다', () => {
+    const { container } = render(<DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]} />)
+    const files = container.querySelector('.dx-files') as HTMLElement
+    const handle = container.querySelector('[style*="col-resize"]') as HTMLElement
+
+    // 260 + (170-100)=330, 클램프 [150,480] → 330
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 170 })
+    fireEvent.mouseUp(window)
+
+    expect(files.style.width).toBe('330px')
+    expect(localStorage.getItem(DX_FILES_WIDTH_KEY)).toBe('330')
+  })
+})

@@ -54,14 +54,36 @@ describe('BlameView — 블록 · 작성자 필터', () => {
 const FILES3 = ['src/a.ts', 'src/b.ts', 'lib/c.ts']
 
 describe('BlameView — 파일 선택기(변경3)', () => {
-  it('listFiles 결과로 좌측 파일 목록을 그린다', async () => {
+  it('listFiles 결과를 디렉토리/파일 계층 트리로 그린다', async () => {
     (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
     const { container } = render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
-    expect(await screen.findByText('a.ts')).toBeInTheDocument()
+    // 기본은 디렉토리 접힘 → 최상위 dir 노드만 보인다
+    expect(await screen.findByText('src')).toBeInTheDocument()
+    expect(screen.getByText('lib')).toBeInTheDocument()
+    expect(screen.queryByText('a.ts')).toBeNull()
+    // dir을 펼치면 하위 파일이 보인다
+    fireEvent.click(screen.getByText('src'))
+    fireEvent.click(screen.getByText('lib'))
+    expect(screen.getByText('a.ts')).toBeInTheDocument()
     expect(screen.getByText('b.ts')).toBeInTheDocument()
     expect(screen.getByText('c.ts')).toBeInTheDocument()
     // 파일 pane 헤더 카운트 = 목록 길이
     expect(container.querySelector('.bf-files-hd')?.textContent).toContain('3')
+  })
+
+  it('dir 재클릭 시 다시 접혀 하위 파일이 사라진다', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
+    render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
+    await screen.findByText('src')
+    // 펼침 → 자식 노출
+    fireEvent.click(screen.getByText('src'))
+    expect(screen.getByText('a.ts')).toBeInTheDocument()
+    expect(screen.getByText('b.ts')).toBeInTheDocument()
+    // 재클릭 → 접힘 → 자식 사라짐(src 노드 자체는 유지)
+    fireEvent.click(screen.getByText('src'))
+    expect(screen.queryByText('a.ts')).toBeNull()
+    expect(screen.queryByText('b.ts')).toBeNull()
+    expect(screen.getByText('src')).toBeInTheDocument()
   })
 
   it('파일 클릭 시 blame(repoPath, 클릭 파일)을 재조회한다', async () => {
@@ -69,22 +91,26 @@ describe('BlameView — 파일 선택기(변경3)', () => {
     (api.blame as unknown as Mock).mockResolvedValue([])
     // filePath 미전달 → 초기 selFile 없음 → 클릭 전 blame 미호출
     render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
-    await screen.findByTitle('src/b.ts')
+    await screen.findByText('src')
     expect(api.blame).not.toHaveBeenCalled()
 
+    // src 디렉토리 펼친 뒤 파일 클릭
+    fireEvent.click(screen.getByText('src'))
     fireEvent.click(screen.getByTitle('src/b.ts'))
     await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/b.ts'))
   })
 
-  it('검색 input이 파일 목록을 좁힌다', async () => {
+  it('검색 input이 트리를 좁히고 매칭 파일의 조상 dir을 자동 펼친다', async () => {
     (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
     render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
-    await screen.findByText('a.ts')
+    await screen.findByText('src')
 
     fireEvent.change(screen.getByPlaceholderText('경로로 찾기'), { target: { value: 'lib' } })
+    // lib/c.ts만 남고 조상(lib) 자동 펼침 → c.ts 노출, src 서브트리는 사라짐
+    expect(screen.getByText('c.ts')).toBeInTheDocument()
+    expect(screen.queryByText('src')).toBeNull()
     expect(screen.queryByText('a.ts')).toBeNull()
     expect(screen.queryByText('b.ts')).toBeNull()
-    expect(screen.getByText('c.ts')).toBeInTheDocument()
   })
 
   it('filePath prop이 초기 selFile로 반영돼 그 파일로 blame을 조회한다', async () => {
@@ -96,9 +122,9 @@ describe('BlameView — 파일 선택기(변경3)', () => {
     await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/a.ts'))
     // 헤더에 현재 파일 경로 노출
     expect(container.querySelector('.pnl-hdr .fp')?.textContent).toBe('src/a.ts')
-    // 좌측 목록에서 해당 파일이 선택(on) 상태
+    // 선택 파일의 조상 dir 자동 펼침 → 트리에서 해당 파일이 선택(on) 상태
     await waitFor(() =>
-      expect(container.querySelector('.bf-f.on')?.getAttribute('title')).toBe('src/a.ts')
+      expect(container.querySelector('.bf-node-file.on')?.getAttribute('title')).toBe('src/a.ts')
     )
   })
 
@@ -112,7 +138,70 @@ describe('BlameView — 파일 선택기(변경3)', () => {
 
     // 파일 미선택(저장소는 있음): 본문에 파일 선택 유도
     render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
-    await screen.findByText('a.ts')
+    await screen.findByText('src')
     expect(screen.getByText('왼쪽에서 파일을 고르면 blame을 볼 수 있어요')).toBeInTheDocument()
+  })
+})
+
+// ── 변경1: 파일 pane 폭 리사이즈(스모크) ──
+// jsdom은 레이아웃이 0이라 컨테이너 기반 max(55%) 클램프는 검증 불가.
+// 여기서는 (1) 저장된 폭이 초기 style.width로 반영 (2) 드래그 핸들 존재
+// (3) mousedown→mousemove→mouseup 시 style.width가 델타만큼 바뀌고 localStorage에 저장
+// 만 확인한다. 컨테이너 미측정(clientWidth=0)이라 max=480 상한이 되어 아래 계산은 결정적.
+const FILES_WIDTH_KEY = 'gitgrove:blameFilesWidth'
+
+describe('BlameView — 파일 pane 리사이즈(변경1)', () => {
+  it('localStorage에 저장된 폭이 초기 .bf-files width로 반영된다', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
+    localStorage.setItem(FILES_WIDTH_KEY, '320')
+    const { container } = render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
+    await screen.findByText('src')
+    expect((container.querySelector('.bf-files') as HTMLElement).style.width).toBe('320px')
+  })
+
+  it('저장값이 없으면 기본 260px', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
+    const { container } = render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
+    await screen.findByText('src')
+    expect((container.querySelector('.bf-files') as HTMLElement).style.width).toBe('260px')
+  })
+
+  it('col-resize 드래그 핸들이 렌더된다', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
+    const { container } = render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
+    await screen.findByText('src')
+    expect(container.querySelector('[style*="col-resize"]')).not.toBeNull()
+  })
+
+  it('드래그(mousedown→move→up) 시 폭이 델타만큼 바뀌고 localStorage에 저장된다', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
+    const { container } = render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
+    await screen.findByText('src')
+    const files = container.querySelector('.bf-files') as HTMLElement
+    const handle = container.querySelector('[style*="col-resize"]') as HTMLElement
+    expect(files.style.width).toBe('260px')
+
+    // clientWidth=0 → max=480. 초기 260 + (180-100)=340, 클램프 [150,480] → 340
+    fireEvent.mouseDown(handle, { clientX: 100 })
+    fireEvent.mouseMove(window, { clientX: 180 })
+    fireEvent.mouseUp(window)
+
+    expect(files.style.width).toBe('340px')
+    expect(localStorage.getItem(FILES_WIDTH_KEY)).toBe('340')
+  })
+
+  it('드래그로 폭을 줄여도 min 150 아래로는 내려가지 않는다', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3)
+    const { container } = render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
+    await screen.findByText('src')
+    const files = container.querySelector('.bf-files') as HTMLElement
+    const handle = container.querySelector('[style*="col-resize"]') as HTMLElement
+
+    // 260 + (100-400) = -40 → 클램프 하한 150
+    fireEvent.mouseDown(handle, { clientX: 400 })
+    fireEvent.mouseMove(window, { clientX: 100 })
+    fireEvent.mouseUp(window)
+
+    expect(files.style.width).toBe('150px')
   })
 })
