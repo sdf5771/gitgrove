@@ -348,6 +348,9 @@ export default function App() {
   // 다시 평가되도록 한다(같은 레포의 같은 상태에서만 숨김 유지).
   const [coachDismissed, setCoachDismissed] = useState<string | null>(null)
   const [showCmd,        setShowCmd]        = useState(false)
+  // 메뉴바 Tray 연동: NotificationBell 미읽음 수(Tray 배지) + '알림 열기' 신호(증가 시 패널 오픈).
+  const [notifCount,     setNotifCount]     = useState(0)
+  const [notifOpenSignal, setNotifOpenSignal] = useState(0)
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; commit: Commit; idx: number } | null>(null)
   const [branchCtxMenu, setBranchCtxMenu] = useState<{ x: number; y: number; name: string; type: 'local' | 'remote' | 'tag'; isCurrent: boolean } | null>(null)
 
@@ -729,6 +732,87 @@ export default function App() {
   const handlePull = useCallback(() => handleRemoteOp('pull'), [handleRemoteOp])
   const handlePush = useCallback(() => handleRemoteOp('push'), [handleRemoteOp])
   const handleFetch = useCallback(() => handleRemoteOp('fetch'), [handleRemoteOp])
+
+  // ── 메뉴바 Tray 액션 처리 ──
+  // 콜백은 매 렌더 갱신되는 ref로 최신 핸들러/상태를 읽는다(stale closure 방지).
+  // fetch/pull/push는 handleRemoteOp가 repoPath·진행중 여부를 내부에서 가드하므로 안전.
+  const runTrayRemote = useCallback((t: 'fetch' | 'pull' | 'push') => {
+    if (t === 'fetch') void handleFetch()
+    else if (t === 'pull') void handlePull()
+    else void handlePush()
+  }, [handleFetch, handlePull, handlePush])
+
+  // 콜드스타트(창을 완전히 닫았다 Tray로 재기동) 시 fetch/pull/push 액션이 loadRepo 복원보다
+  // 먼저 도착하면 repoPath===null이라 handleRemoteOp 가드에 걸려 무음 드롭된다. repoPath가
+  // 아직 없으면 여기 보류해 두고, repoPath가 채워지는 effect에서 1회 실행한다.
+  const pendingTrayRemoteRef = useRef<'fetch' | 'pull' | 'push' | null>(null)
+
+  const handleTrayActionRef = useRef<(a: TrayAction) => void>(() => {})
+  handleTrayActionRef.current = (a: TrayAction) => {
+    switch (a.type) {
+      case 'fetch':
+      case 'pull':
+      case 'push':
+        // repoPath가 있으면 즉시, 없으면(콜드스타트 복원 전) 최신 액션으로 보류.
+        if (repoPath) runTrayRemote(a.type)
+        else pendingTrayRemoteRef.current = a.type
+        break
+      case 'open-notifications': setNotifOpenSignal(s => s + 1); break
+      case 'switch-repo': {
+        const p = a.path
+        if (!p) return
+        const idx = reposRef.current.findIndex(r => r.path === p)
+        // 이미 탭에 있으면 활성 인덱스만 바꿔 탭전환 effect가 로드하게 하고, 없으면 새로 연다.
+        if (idx >= 0) setActiveRepo(idx)
+        else void loadRepo(p, { activate: true })
+        break
+      }
+    }
+  }
+
+  // ⚠️ 필수 순서: 액션 리스너를 먼저 등록한 뒤(마운트 effect, 아래 setTrayState effect보다 위)
+  // 첫 setTrayState가 나가야 메인의 큐 flush(핸드셰이크)가 액션을 유실 없이 흘려보낸다.
+  useEffect(() => {
+    const off = window.appAPI?.onTrayAction?.(a => handleTrayActionRef.current(a))
+    return () => { off?.() }
+  }, [])
+
+  // 콜드스타트 보류 액션 flush — repoPath가 채워지면 1회 실행 후 클리어.
+  useEffect(() => {
+    if (!repoPath) return
+    const pending = pendingTrayRemoteRef.current
+    if (!pending) return
+    pendingTrayRemoteRef.current = null
+    runTrayRemote(pending)
+  }, [repoPath, runTrayRemote])
+
+  // ── 활성 레포 요약을 Tray에 push ──
+  // deps는 전부 원시값(또는 원시값 파생 memo) — silent refresh로 repos/realBranches 참조가
+  // 새로 생겨도 실제 표시값이 그대로면 재호출하지 않아 메인의 컨텍스트 메뉴 재빌드를 아낀다.
+  const trayRepoName = repos[activeRepo]?.name
+  const trayCurBranch = realBranches.find(b => b.current)
+  const trayAhead = trayCurBranch?.ahead ?? 0
+  const trayBehind = trayCurBranch?.behind ?? 0
+  const trayDirtyCount = realStaged.length + realUnstaged.length
+  // 최근 레포 목록은 name+path를 이은 파생 원시 키로 변동을 감지하고, 배열은 memo로 안정화한다.
+  const trayRecentKey = repos.map(r => `${r.name} ${r.path}`).join('')
+  const trayRecentRepos = useMemo(
+    () => repos.map(r => ({ name: r.name, path: r.path })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [trayRecentKey],
+  )
+  useEffect(() => {
+    window.appAPI?.setTrayState?.({
+      hasRepo: !!repoPath,
+      repoName: trayRepoName,
+      branch: activeBranch,
+      ahead: trayAhead,
+      behind: trayBehind,
+      dirtyCount: trayDirtyCount,
+      recentRepos: trayRecentRepos,
+      notifCount,
+    })
+  }, [repoPath, trayRepoName, activeBranch, trayAhead, trayBehind, trayDirtyCount, trayRecentRepos, notifCount])
 
   // ── 브랜치 체크아웃 핸들러 ──
   const handleBranchSwitch = useCallback(async (name: string) => {
@@ -1540,6 +1624,8 @@ export default function App() {
             githubToken={githubToken}
             gitlabInstances={gitlabInstances}
             onOpenUrl={url => window.appAPI?.openReleaseUrl(url)}
+            openSignal={notifOpenSignal}
+            onUnreadChange={setNotifCount}
           />
         </div>
       </div>

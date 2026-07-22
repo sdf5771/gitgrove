@@ -58,6 +58,17 @@ contextBridge.exposeInMainWorld('appAPI', {
   // 미허용/파일없음/비-macOS는 { ok:false, error } 반환(throw 안 함).
   previewSound: (name: string) =>
     ipcRenderer.invoke('app:preview-sound', name) as Promise<{ ok: boolean; error?: string }>,
+
+  // 메뉴바 Tray(상태표시줄 위젯). 렌더러가 활성 레포 상태를 push하면 메인이 메뉴/타이틀/툴팁 재빌드.
+  // ⚠️ 마운트 시 onTrayAction을 먼저 등록한 뒤 setTrayState를 호출할 것(메인이 첫 set-state로
+  //    렌더러 준비를 확정해 큐잉된 위임 액션을 flush — 리스너가 먼저 있어야 유실이 없음).
+  setTrayState: (s: TrayState) => ipcRenderer.send('tray:set-state', s),
+  // 'tray:action' 구독(Fetch/Pull/Push·최근 저장소 전환·알림 열기 위임). 반환 함수로 구독 해제(cleanup).
+  onTrayAction: (cb: (a: TrayAction) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, a: TrayAction) => cb(a)
+    ipcRenderer.on('tray:action', listener)
+    return () => ipcRenderer.removeListener('tray:action', listener)
+  },
 })
 
 // --------- Expose ipcRenderer to the Renderer process ---------

@@ -189,6 +189,9 @@ export function installGitApiMock() {
     bounceDock: vi.fn(async () => {}) as Mock<() => Promise<void>>,
     // 알림 사운드 미리듣기(Settings) — 테스트에서 호출 검증 가능하도록 vi.fn. 기본 성공.
     previewSound: vi.fn(async (): Promise<{ ok: boolean; error?: string }> => ({ ok: true })) as Mock<(name: string) => Promise<{ ok: boolean; error?: string }>>,
+    // 메뉴바 Tray — 테스트에서 호출 검증 가능하도록 vi.fn. onTrayAction은 no-op 구독해제 반환.
+    setTrayState: vi.fn() as Mock<(s: TrayState) => void>,
+    onTrayAction: vi.fn(() => () => {}) as Mock<(cb: (a: TrayAction) => void) => () => void>,
   }
 
   window.gitAPI = gitAPI

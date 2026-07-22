@@ -188,9 +188,13 @@ export interface NotificationBellProps {
   gitlabInstances?: GitlabConn[]
   /** 외부 브라우저로 URL 열기 */
   onOpenUrl: (url: string) => void
+  /** 값이 바뀔 때마다(증가) 패널을 연다 — 메뉴바 Tray의 '알림 열기' 트리거용 */
+  openSignal?: number
+  /** 미읽음 개수가 바뀔 때 알림(App이 Tray 배지 수로 사용) */
+  onUnreadChange?: (n: number) => void
 }
 
-export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl }: NotificationBellProps) {
+export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl, openSignal, onUnreadChange }: NotificationBellProps) {
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<NotifItem[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -368,6 +372,18 @@ export function NotificationBell({ githubToken, gitlabInstances = [], onOpenUrl 
       return !o
     })
   }, [load])
+
+  // 미읽음 개수를 부모에 올린다(메뉴바 Tray 배지). items에서 직접 계산해 이른 return 전에 둔다.
+  useEffect(() => {
+    onUnreadChange?.((items ?? []).filter(n => n.unread).length)
+  }, [items, onUnreadChange])
+
+  // 메뉴바 Tray '알림 열기' — openSignal이 바뀌면 패널을 열고 최신을 가져온다.
+  useEffect(() => {
+    if (!openSignal) return
+    setOpen(true)
+    void loadRef.current()
+  }, [openSignal])
 
   if (!hasGithub && !hasGitlab) return null
 
