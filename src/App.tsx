@@ -517,6 +517,24 @@ export default function App() {
       setRealTags(gitBranches.tags)
       setRealUnstaged(statusToFileEntry(gitStatus.unstaged))
       setRealStaged(statusToFileEntry(gitStatus.staged))
+
+      // ── 변경1: 리포 전환 시 뷰 선택 상태 리셋 ──
+      // 표시 중이던 리포와 다른 경로로 바뀔 때만(isNewRepo) 이전 리포의
+      // 커밋/파일/diff 잔류를 지운다. 같은 리포 silent 갱신(커밋·amend·discard 후)은
+      // 같은 path라 스킵돼 현재 선택이 보존된다. 최초 로드(이전 path=null)는
+      // 게이트상 isNewRepo=true지만 리셋 대상이 전부 기본값이라 사실상 no-op.
+      // setRepoPath 호출 전에 캡처해야 이전 path와 비교된다.
+      const isNewRepo = path !== repoPathRef.current
+      if (isNewRepo) {
+        setSelIdx(0)
+        setCommitFiles([])
+        setDiffFile(null)
+        setDiffContent('')
+        setCommitDiffPreview('')
+        setDiffFileStaged(false)
+        diffFileRef.current = null
+        diffFileStagedRef.current = false
+      }
       setRepoPath(path)
       try { localStorage.setItem(STORAGE_KEYS.lastRepoPath, path) } catch { /* ignore */ }
 
@@ -1201,6 +1219,21 @@ export default function App() {
   useEffect(() => { if (selIdx >= filteredCommits.length) setSelIdx(Math.max(0, filteredCommits.length - 1)) }, [filteredCommits, selIdx])
   const selectedCommit = filteredCommits[selIdx] ?? null
 
+  // ── 변경1: 리포 로드/전환 후 첫 커밋(index 0) 파일 목록 자동 로드 ──
+  // handleSelectCommit이 selIdx 설정 + commitFiles 로드를 담당하므로, 새 repoPath마다
+  // 한 번 0번을 태워 CommitDetail/Diff가 즉시 새 리포를 반영하게 한다. path별로 1회만
+  // 실행(ref 게이트)해 같은 리포 silent 갱신 때 사용자 선택을 덮어쓰지 않는다.
+  const autoSelectPathRef = useRef<string | null>(null)
+  useEffect(() => {
+    // 모든 탭 닫힘 등으로 repoPath가 null이 되면 ref를 초기화한다. 이렇게 해야
+    // 방금 닫은 리포를 다시 열 때(같은 path) autoSelect가 재실행돼 커밋0이 자동로드된다.
+    if (!repoPath) { autoSelectPathRef.current = null; return }
+    if (filteredCommits.length === 0) return
+    if (autoSelectPathRef.current === repoPath) return
+    autoSelectPathRef.current = repoPath
+    void handleSelectCommit(0)
+  }, [repoPath, filteredCommits, handleSelectCommit])
+
   // 온보딩이 떠 있어도, 비동기 신호(safeStorage GitHub 토큰·GitLab 호스트)로
   // 기존 사용자임이 확인되면 닫고 영구 표시한다(동기 흔적이 없던 케이스 보완).
   useEffect(() => {
@@ -1674,7 +1707,14 @@ export default function App() {
                 />
               </>
             ) : view === 'diff' ? (
-              <DiffExplorer commit={selectedCommit} repoPath={repoPath} commitFiles={repoPath ? commitFiles : undefined} />
+              <DiffExplorer
+                commit={selectedCommit}
+                repoPath={repoPath}
+                commitFiles={repoPath ? commitFiles : undefined}
+                commits={filteredCommits}
+                selIdx={selIdx}
+                onSelectCommit={(i) => { void handleSelectCommit(i) }}
+              />
             ) : (
               <>
                 <div className="cpanel">

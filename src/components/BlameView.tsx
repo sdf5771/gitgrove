@@ -55,8 +55,14 @@ function groupBlocks(lines: RealBlameLine[]): BlameBlock[] {
 interface Props {
   onSelectCommit: (i: number) => void
   repoPath?: string | null
+  // App이 넘기는 컨텍스트 파일(Diff·CommitDetail "blame" 진입 시). 내부 선택의 초기값.
   filePath?: string
   commits?: Commit[]
+}
+
+function splitPath(p: string): { dir: string; base: string } {
+  const i = p.lastIndexOf('/')
+  return i < 0 ? { dir: '', base: p } : { dir: p.slice(0, i + 1), base: p.slice(i + 1) }
 }
 
 export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props) {
@@ -65,16 +71,44 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
   const [selHash, setSelHash] = useState<string | null>(null)
   const [offAuthors, setOffAuthors] = useState<Set<string>>(new Set())
 
+  // ── 변경3: 선택 파일을 내부에서 소유 ──
+  // 초기값 = App이 넘긴 filePath. 사용자가 좌측 목록에서 고르면 이 state가 바뀌고
+  // blame effect가 그 파일로 재조회한다. prop이 나중에 바뀌면(다른 커밋 파일로 진입) 동기화.
+  const [selFile, setSelFile] = useState<string | undefined>(filePath)
+  const [files, setFiles] = useState<string[]>([])
+  const [filesLoading, setFilesLoading] = useState(false)
+  const [filesError, setFilesError] = useState(false)
+  const [fileQuery, setFileQuery] = useState('')
+
+  useEffect(() => { if (filePath) setSelFile(filePath) }, [filePath])
+
+  // ── 추적 파일 목록 로드(git:list-files) ──
   useEffect(() => {
-    if (!repoPath || !filePath) { setBlameLines([]); return }
+    if (!repoPath) { setFiles([]); setFilesError(false); return }
+    setFilesLoading(true)
+    setFilesError(false)
+    window.gitAPI?.listFiles(repoPath)
+      .then(fs => setFiles(fs ?? []))
+      .catch(() => { setFiles([]); setFilesError(true) })
+      .finally(() => setFilesLoading(false))
+  }, [repoPath])
+
+  // ── blame 로드 — 내부 selFile 경유 ──
+  useEffect(() => {
+    if (!repoPath || !selFile) { setBlameLines([]); return }
     setLoading(true)
     setSelHash(null)
     setOffAuthors(new Set())
-    const p = window.gitAPI?.blame(repoPath, filePath) as Promise<RealBlameLine[]> | undefined
+    const p = window.gitAPI?.blame(repoPath, selFile) as Promise<RealBlameLine[]> | undefined
     p?.then(lines => setBlameLines(lines ?? []))
       .catch(() => setBlameLines([]))
       .finally(() => setLoading(false))
-  }, [repoPath, filePath])
+  }, [repoPath, selFile])
+
+  const filteredFiles = useMemo(() => {
+    const q = fileQuery.trim().toLowerCase()
+    return q ? files.filter(f => f.toLowerCase().includes(q)) : files
+  }, [files, fileQuery])
 
   const blocks = useMemo(() => groupBlocks(blameLines), [blameLines])
 
@@ -89,7 +123,7 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
     return Array.from(m.entries()).slice(0, 6).map(([name, v]) => ({ name, ...v }))
   }, [blameLines])
 
-  const displayFilePath = filePath ?? ''
+  const displayFilePath = selFile ?? ''
 
   const clickBlock = (hash: string) => {
     setSelHash(prev => prev === hash ? null : hash)
@@ -116,38 +150,77 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
         </div>
       </div>
 
-      {!loading && blocks.length === 0 ? (
-        <div className="code-scroll">
-          <div style={{ padding: '24px 16px', fontSize: 12, color: 'var(--c-text-faint)' }}>
-            {filePath ? `${displayFilePath}의 blame 정보가 없어요` : '파일을 선택하면 blame을 볼 수 있어요'}
+      <div className="bf-body">
+        <div className="bf-files">
+          <div className="bf-files-hd">파일<span style={{ fontFamily: 'var(--font-mono)' }}>{files.length}</span></div>
+          <div className="bf-search">
+            <input
+              value={fileQuery}
+              onChange={e => setFileQuery(e.target.value)}
+              placeholder="경로로 찾기"
+            />
+          </div>
+          <div className="bf-flist">
+            {!repoPath ? (
+              <div className="bf-flist-msg">저장소를 열면 파일이 보여요</div>
+            ) : filesLoading ? (
+              <div className="bf-flist-msg">불러오는 중…</div>
+            ) : filesError ? (
+              <div className="bf-flist-msg">파일 목록을 불러오지 못했어요</div>
+            ) : files.length === 0 ? (
+              <div className="bf-flist-msg">추적 중인 파일이 없어요</div>
+            ) : filteredFiles.length === 0 ? (
+              <div className="bf-flist-msg">찾는 파일이 없어요</div>
+            ) : filteredFiles.map(f => {
+              const { dir, base } = splitPath(f)
+              return (
+                <div key={f} className={`bf-f${selFile === f ? ' on' : ''}`} onClick={() => setSelFile(f)} title={f}>
+                  <span className="bf-fp">{dir && <span className="dir">{dir}</span>}<span className="base">{base}</span></span>
+                </div>
+              )
+            })}
           </div>
         </div>
-      ) : (
-        <div className="code-scroll">
-          {blocks.map((b, bi) => {
-            const dim = offAuthors.has(b.author)
-            const sel = selHash === b.hash
-            return (
-              <div key={bi} className={`blame-block${sel ? ' sel' : ''}${dim ? ' dimmed' : ''}`} onClick={() => clickBlock(b.hash)}>
-                <span className={`age age-${b.age}`} title={AGE_LBL[b.age]} />
-                <div className="blame-gutter">
-                  <div className="bg-top">
-                    <span className="blame-av" style={{ background: b.ac + '22', color: b.ac, borderColor: b.ac + '44' }}>{b.author.slice(0, 2).toUpperCase()}</span>
-                    <span className="blame-hash">{b.hash}</span>
-                    <span className="blame-time">{b.timeAgo}</span>
-                  </div>
-                  {b.summary && <div className="bg-msg">{b.summary}</div>}
-                </div>
-                <div className="blame-lines">
-                  {b.lines.map((l, i) => (
-                    <div key={i} className="cl"><span className="lnum">{b.startLine + i}</span><span className="ctext"><HL s={l} /></span></div>
-                  ))}
-                </div>
+
+        <div className="bf-main">
+          {!loading && blocks.length === 0 ? (
+            <div className="code-scroll">
+              <div style={{ padding: '24px 16px', fontSize: 12, color: 'var(--c-text-faint)' }}>
+                {!repoPath
+                  ? '저장소를 열면 blame을 볼 수 있어요'
+                  : selFile
+                    ? `${displayFilePath}의 blame 정보가 없어요`
+                    : '왼쪽에서 파일을 고르면 blame을 볼 수 있어요'}
               </div>
-            )
-          })}
+            </div>
+          ) : (
+            <div className="code-scroll">
+              {blocks.map((b, bi) => {
+                const dim = offAuthors.has(b.author)
+                const sel = selHash === b.hash
+                return (
+                  <div key={bi} className={`blame-block${sel ? ' sel' : ''}${dim ? ' dimmed' : ''}`} onClick={() => clickBlock(b.hash)}>
+                    <span className={`age age-${b.age}`} title={AGE_LBL[b.age]} />
+                    <div className="blame-gutter">
+                      <div className="bg-top">
+                        <span className="blame-av" style={{ background: b.ac + '22', color: b.ac, borderColor: b.ac + '44' }}>{b.author.slice(0, 2).toUpperCase()}</span>
+                        <span className="blame-hash">{b.hash}</span>
+                        <span className="blame-time">{b.timeAgo}</span>
+                      </div>
+                      {b.summary && <div className="bg-msg">{b.summary}</div>}
+                    </div>
+                    <div className="blame-lines">
+                      {b.lines.map((l, i) => (
+                        <div key={i} className="cl"><span className="lnum">{b.startLine + i}</span><span className="ctext"><HL s={l} /></span></div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="age-legend">
         <span>줄 나이</span>

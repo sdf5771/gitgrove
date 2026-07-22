@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import { DiffExplorer } from './DiffExplorer'
 import { installGitApiMock } from '../test/gitApiMock'
@@ -46,5 +46,99 @@ describe('DiffExplorer — Unified/Split 토글 · word-diff', () => {
     await screen.findByText('function f()')
     fireEvent.click(screen.getByText('나란히'))
     expect(container.querySelectorAll('.split .col').length).toBe(2)
+  })
+})
+
+// ── 변경2: Diff 탭 커밋 피커 ──
+// commits+selIdx+onSelectCommit 주입 시 .dxc-bar(스텝퍼 + 현재 커밋 칩 + 드롭다운)를 그린다.
+// 피커 자체는 props로 동기 렌더되므로 diff effect와 무관하다.
+const PICK_COMMITS = [
+  { id: 'aaaaaa1', msg: 'first commit', author: 'Alice', time: '3h ago', files: [] },
+  { id: 'bbbbbb2', msg: 'second commit', author: 'Bob', time: '2h ago', files: [] },
+  { id: 'cccccc3', msg: 'third commit', author: 'Carol', time: '1h ago', files: [] },
+] as unknown as Commit[]
+
+// 피커는 repoPath와 무관하게 props로 렌더된다. repoPath를 주지 않아 diff fetch 효과를
+// 태우지 않음으로써 async setState(act 경고·플레이크)를 피한다.
+describe('DiffExplorer — 커밋 피커(변경2)', () => {
+  it('현재 selIdx의 커밋 칩(7자 sha + 첫 줄 메시지)을 보인다', () => {
+    const { container } = render(
+      <DiffExplorer commit={PICK_COMMITS[1]} commitFiles={[]}
+        commits={PICK_COMMITS} selIdx={1} onSelectCommit={vi.fn()} />
+    )
+    expect(container.querySelector('.dxc-cur .sha')?.textContent).toBe('bbbbbb2')
+    expect(container.querySelector('.dxc-cur .msg')?.textContent).toBe('second commit')
+  })
+
+  it('→ 클릭 시 onSelectCommit(selIdx+1) 호출, 양끝에서 스텝퍼 disabled', () => {
+    const onSel = vi.fn()
+    const { rerender } = render(
+      <DiffExplorer commit={PICK_COMMITS[1]} commitFiles={[]}
+        commits={PICK_COMMITS} selIdx={1} onSelectCommit={onSel} />
+    )
+    fireEvent.click(screen.getByTitle('다음 커밋'))
+    expect(onSel).toHaveBeenCalledWith(2)
+
+    // 첫 커밋: ← disabled, → 활성
+    rerender(
+      <DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]}
+        commits={PICK_COMMITS} selIdx={0} onSelectCommit={onSel} />
+    )
+    expect(screen.getByTitle('이전 커밋')).toBeDisabled()
+    expect(screen.getByTitle('다음 커밋')).not.toBeDisabled()
+
+    // 마지막 커밋: → disabled
+    rerender(
+      <DiffExplorer commit={PICK_COMMITS[2]} commitFiles={[]}
+        commits={PICK_COMMITS} selIdx={2} onSelectCommit={onSel} />
+    )
+    expect(screen.getByTitle('다음 커밋')).toBeDisabled()
+  })
+
+  it('칩 클릭 → 드롭다운 열림 → 검색 필터 → 항목 클릭 시 원본 index로 onSelectCommit', () => {
+    const onSel = vi.fn()
+    const { container } = render(
+      <DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]}
+        commits={PICK_COMMITS} selIdx={0} onSelectCommit={onSel} />
+    )
+    // 닫힌 상태: 드롭다운 없음
+    expect(container.querySelector('.dxc-pop')).toBeNull()
+
+    // 칩 클릭 → 드롭다운 열림
+    fireEvent.click(container.querySelector('.dxc-cur')!)
+    expect(container.querySelector('.dxc-pop')).not.toBeNull()
+
+    // 검색으로 목록 축소(third만 남음)
+    fireEvent.change(screen.getByPlaceholderText('메시지 · sha로 찾기'), { target: { value: 'third' } })
+    expect(container.querySelectorAll('.dxc-item').length).toBe(1)
+
+    // 항목 클릭 → 원본 index(2)로 콜백, 드롭다운 닫힘
+    fireEvent.click(screen.getByText('third commit'))
+    expect(onSel).toHaveBeenCalledWith(2)
+    expect(container.querySelector('.dxc-pop')).toBeNull()
+  })
+
+  it('검색 결과가 없으면 빈 문구를 보인다', () => {
+    const { container } = render(
+      <DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]}
+        commits={PICK_COMMITS} selIdx={0} onSelectCommit={vi.fn()} />
+    )
+    fireEvent.click(container.querySelector('.dxc-cur')!)
+    fireEvent.change(screen.getByPlaceholderText('메시지 · sha로 찾기'), { target: { value: 'nope-zzz' } })
+    expect(screen.getByText('찾는 커밋이 없어요')).toBeInTheDocument()
+  })
+
+  it('commits 미전달·빈 배열·onSelectCommit 없음이면 .dxc-bar 미렌더', () => {
+    // 미전달
+    const r1 = render(<DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]} />)
+    expect(r1.container.querySelector('.dxc-bar')).toBeNull()
+    cleanup()
+    // 빈 배열
+    const r2 = render(<DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]} commits={[]} selIdx={0} onSelectCommit={vi.fn()} />)
+    expect(r2.container.querySelector('.dxc-bar')).toBeNull()
+    cleanup()
+    // onSelectCommit 없음
+    const r3 = render(<DiffExplorer commit={PICK_COMMITS[0]} commitFiles={[]} commits={PICK_COMMITS} selIdx={0} />)
+    expect(r3.container.querySelector('.dxc-bar')).toBeNull()
   })
 })
