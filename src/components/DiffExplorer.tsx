@@ -8,6 +8,11 @@ interface Props {
   commit?: Commit | null
   repoPath?: string | null
   commitFiles?: GitFileEntry[]
+  // Diff 탭 안에서 커밋을 고를 수 있게(변경2). commits=목록, selIdx=현재 선택,
+  // onSelectCommit=선택 시 상위(handleSelectCommit) 호출 → commit/commitFiles 갱신.
+  commits?: Commit[]
+  selIdx?: number
+  onSelectCommit?: (i: number) => void
 }
 
 const getFilePath = (f: unknown): string => { const e = f as Record<string, unknown>; return (e.path as string) ?? (e.p as string) ?? '' }
@@ -36,9 +41,37 @@ function wordSide(self: string, other: string | null, kind: 'del' | 'add'): Reac
   return a.map((s, i) => s.changed ? <span key={i} className={cls}>{s.text}</span> : <span key={i}>{s.text}</span>)
 }
 
-export function DiffExplorer({ commit, repoPath, commitFiles }: Props) {
+export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, onSelectCommit }: Props) {
   const [localFiles, setLocalFiles] = useState<GitFileEntry[]>([])
   const [mode, setMode] = useState<'unified' | 'split'>('unified')
+
+  // ── 변경2: 커밋 피커 ──
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerQuery, setPickerQuery] = useState('')
+  const showPicker = !!(commits && commits.length > 0 && onSelectCommit)
+  const curIdx = (selIdx != null && selIdx >= 0 && selIdx < (commits?.length ?? 0)) ? selIdx : 0
+  const curCommit = commits?.[curIdx] ?? commit ?? null
+  const pickerList = useMemo(() => {
+    if (!commits) return [] as Array<{ c: Commit; i: number }>
+    const rows = commits.map((c, i) => ({ c, i }))
+    const q = pickerQuery.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(({ c }) => c.msg.toLowerCase().includes(q) || c.id.toLowerCase().includes(q))
+  }, [commits, pickerQuery])
+  const stepCommit = (delta: number) => {
+    if (!commits || !onSelectCommit) return
+    const next = Math.min(commits.length - 1, Math.max(0, curIdx + delta))
+    if (next !== curIdx) onSelectCommit(next)
+  }
+  // 드롭다운 열림 상태에서 Escape → 닫기(검색 input이 autoFocus라 키보드 사용자 기대).
+  useEffect(() => {
+    if (!pickerOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setPickerOpen(false); setPickerQuery('') }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pickerOpen])
 
   useEffect(() => {
     if (!repoPath || !commit) { setLocalFiles([]); return }
@@ -142,6 +175,47 @@ export function DiffExplorer({ commit, repoPath, commitFiles }: Props) {
   return (
     <div className="diffx">
       <div className="dx-files">
+        {showPicker && (
+          <div className="dxc-bar">
+            <button className="dxc-step" onClick={() => stepCommit(-1)} disabled={curIdx <= 0} title="이전 커밋">←</button>
+            <button className="dxc-cur" onClick={() => setPickerOpen(o => !o)}>
+              <span className="sha">{(curCommit?.id ?? '').slice(0, 7)}</span>
+              <span className="msg">{curCommit?.msg?.split('\n')[0] ?? ''}</span>
+              <span className="caret">▾</span>
+            </button>
+            <button className="dxc-step" onClick={() => stepCommit(1)} disabled={curIdx >= (commits!.length - 1)} title="다음 커밋">→</button>
+            {pickerOpen && (
+              <>
+                <div className="dxc-backdrop" onClick={() => { setPickerOpen(false); setPickerQuery('') }} />
+                <div className="dxc-pop">
+                  <div className="dxc-search">
+                    <input
+                      autoFocus
+                      value={pickerQuery}
+                      onChange={e => setPickerQuery(e.target.value)}
+                      placeholder="메시지 · sha로 찾기"
+                    />
+                  </div>
+                  <div className="dxc-list">
+                    {pickerList.length === 0 ? (
+                      <div className="dxc-empty">찾는 커밋이 없어요</div>
+                    ) : pickerList.map(({ c, i }) => (
+                      <div
+                        key={c.id + '-' + i}
+                        className={`dxc-item${i === curIdx ? ' on' : ''}`}
+                        onClick={() => { onSelectCommit?.(i); setPickerOpen(false); setPickerQuery('') }}
+                      >
+                        <span className="sha">{c.id.slice(0, 7)}</span>
+                        <span className="msg">{c.msg.split('\n')[0]}</span>
+                        <span className="meta">{c.author} · {c.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <div className="dx-files-hd">변경 파일<span style={{ fontFamily: 'var(--font-mono)' }}>{files.length}</span></div>
         <div className="dx-flist">
           {files.map((f, i) => {

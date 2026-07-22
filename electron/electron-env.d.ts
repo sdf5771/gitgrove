@@ -267,6 +267,7 @@ interface Window {
     getFileDiff: (repoPath: string, filePath: string, staged: boolean) => Promise<string>
     applyHunk: (repoPath: string, filePath: string, hunkIndex: number, reverse: boolean) => Promise<void>
     getFiles: (repoPath: string, commitHash: string) => Promise<GitFileEntry[]>
+    listFiles: (repoPath: string) => Promise<string[]>
     getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string) => Promise<string>
     stage: (repoPath: string, files: string[]) => Promise<void>
     unstage: (repoPath: string, files: string[]) => Promise<void>
