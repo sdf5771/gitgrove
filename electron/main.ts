@@ -681,6 +681,15 @@ ipcMain.handle('git:files', async (_event, repoPath: string, commitHash: string)
   })
 })
 
+// git:list-files — 워킹트리 기준 git이 추적하는 전체 파일 목록 조회
+ipcMain.handle('git:list-files', async (_event, repoPath: string): Promise<string[]> => {
+  const git = simpleGit(repoPath)
+  // -z: NUL 분리로 비ASCII(한글 등) 경로의 8진 이스케이프/따옴표 감싸기를 방지하고
+  // 파일명 내 개행·특수문자까지 안전하게 처리한다.
+  const raw = await git.raw(['ls-files', '-z'])
+  return raw.split('\0').filter(l => l !== '').sort()
+})
+
 // git:stage — 파일 staged 처리 (git add)
 ipcMain.handle('git:stage', async (_event, repoPath: string, files: string[]): Promise<void> => {
   const git = simpleGit(repoPath)

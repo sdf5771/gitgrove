@@ -112,6 +112,7 @@ export function installGitApiMock() {
     getFileDiff: vi.fn(async () => ''),
     applyHunk: vi.fn(async () => {}),
     getFiles: vi.fn(async () => []),
+    listFiles: vi.fn(async () => [] as string[]),
     getCommitFileDiff: vi.fn(async () => ''),
     stage: vi.fn(async () => {}),
     unstage: vi.fn(async () => {}),

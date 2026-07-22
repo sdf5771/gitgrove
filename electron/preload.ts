@@ -95,6 +95,7 @@ contextBridge.exposeInMainWorld('gitAPI', {
   getFileDiff: (repoPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke('git:file-diff', repoPath, filePath, staged),
   applyHunk: (repoPath: string, filePath: string, hunkIndex: number, reverse: boolean) => ipcRenderer.invoke('git:apply-hunk', repoPath, filePath, hunkIndex, reverse),
   getFiles: (repoPath: string, commitHash: string) => ipcRenderer.invoke('git:files', repoPath, commitHash),
+  listFiles: (repoPath: string) => ipcRenderer.invoke('git:list-files', repoPath),
   getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string) => ipcRenderer.invoke('git:commit-file-diff', repoPath, commitHash, filePath),
   stage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:stage', repoPath, files),
   unstage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:unstage', repoPath, files),
