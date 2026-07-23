@@ -85,6 +85,9 @@ interface GitCommit {
   parents: string[] // parent hashes (short)
   refs: string[]    // HEAD, branch names, tags (e.g. ["HEAD -> main", "origin/main"])
   stats: { files: number; insertions: number; deletions: number }
+  // 그 커밋 시점의 파일 경로. git:file-log(--follow)에서만 설정(리네임 추적).
+  // 다른 log 경로(git:log/git:search-commits)에서는 미설정 → 프론트가 commit.path ?? filePath 사용.
+  path?: string
 }
 
 interface GitBranchResult {
@@ -648,30 +651,79 @@ ipcMain.handle('git:clone', async (event, url: string, parentDir: string, opts?:
   }
 })
 
-// git:log — 커밋 로그 조회 (최대 50개)
-ipcMain.handle('git:log', async (_event, repoPath: string, opts?: { limit?: number; all?: boolean }): Promise<GitCommit[]> => {
+// ──────────────────────────────────────────────
+// Diff/Blame/Search 공통 인자 방어 헬퍼
+// ──────────────────────────────────────────────
+
+// 커밋 조회 limit 정규화: 정수·최소 1·상한(대용량 방어). 미전달=기본값.
+function clampCommitLimit(limit: number | undefined, fallback: number): number {
+  const n = Math.floor(Number(limit ?? fallback))
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(1000, Math.max(1, n))
+}
+
+// diff 컨텍스트 줄 수 정규화: 정수·0~10000 클램프. 미전달/무효=null(→ git 기본 3줄, 기존 동작 유지).
+function clampContext(context: number | undefined): number | null {
+  if (context === undefined || context === null) return null
+  const n = Math.floor(Number(context))
+  if (!Number.isFinite(n)) return null
+  return Math.min(10000, Math.max(0, n))
+}
+
+// 컨텍스트 → diff 인자 조각. null 이면 빈 배열(git 기본값 유지).
+function contextArgs(context: number | undefined): string[] {
+  const c = clampContext(context)
+  return c === null ? [] : [`-U${c}`]
+}
+
+// 파일 경로 방어 — 빈값·제어문자/개행 차단. (호출부는 항상 `--` 뒤에 두므로 선행 '-' 는 무해)
+function validateFilePath(filePath: string): string {
+  if (typeof filePath !== 'string' || filePath === '') throw new Error('유효하지 않은 파일 경로')
+  // 제어문자/개행 차단 (경로에 정상적으로 나타나지 않음)
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f]/.test(filePath)) throw new Error('유효하지 않은 파일 경로')
+  return filePath
+}
+
+// 리비전 방어 — 빈값·선행 '-'(플래그 오인)·공백/제어문자/개행 차단. (~ ^ @{} 등 rev 문법은 허용)
+function validateRev(rev: string): string {
+  if (typeof rev !== 'string' || rev === '') throw new Error('유효하지 않은 리비전')
+  if (rev.startsWith('-')) throw new Error("리비전은 '-'로 시작할 수 없어요")
+  // \s 는 공백/탭/개행, \u0000-\u001f 는 기타 제어문자
+  // eslint-disable-next-line no-control-regex
+  if (/[\s\u0000-\u001f]/.test(rev)) throw new Error('유효하지 않은 리비전')
+  return rev
+}
+
+// 검색어(query/author) 방어 — 제어문자·개행 제거(로그 파싱 안정).
+// `--grep=<v>`/`--author=<v>` 형태로 넘겨 값의 선행 '-' 는 플래그로 오인되지 않는다.
+function sanitizeSearchTerm(term: string): string {
+  if (typeof term !== 'string') return ''
+  // eslint-disable-next-line no-control-regex
+  return term.replace(/[\u0000-\u001f]/g, '')
+}
+
+// ──────────────────────────────────────────────
+// 커밋 로그 공통 헬퍼 — git:log / git:file-log / git:search-commits 공유
+//   selectionArgs: 커밋을 고르는 옵션(--max-count / --all / --grep / --author …).
+//   pathspec: 지정 시 `--follow -- <path>` 를 붙여 파일 단위 이력(리네임 추적)으로 좁힌다.
+// 모든 엔드포인트가 동일한 GitCommit 스키마로 매핑되도록 파싱을 한 곳에서만 수행한다.
+async function fetchCommits(repoPath: string, selectionArgs: string[], pathspec?: string): Promise<GitCommit[]> {
   const git = simpleGit(repoPath)
 
-  const limit = Math.max(1, opts?.limit ?? 50)
-  const all = opts?.all ?? false
+  // git.log(array) 는 내부적으로 `--pretty=format:…` 를 맨 앞에 주입하고 배열을 뒤에 붙이므로,
+  // pathspec 의 `--`/파일은 항상 마지막에 와서 안전하다(플래그로 오인되지 않음).
+  const logArgs = [...selectionArgs, '--stat', '--decorate=full']
+  const parentArgs = ['log', ...selectionArgs, '--pretty=format:%h %P']
+  if (pathspec) {
+    logArgs.push('--follow', '--', pathspec)
+    parentArgs.push('--follow', '--', pathspec)
+  }
 
-  // 모든 핸들러가 공유하는 로그 범위 인자 (limit / 전체 브랜치 여부)
-  const rangeArgs = [`--max-count=${limit}`]
-  if (all) rangeArgs.push('--all')
-
-  // 커밋 로그 (stat 포함)
-  const log = await git.log([
-    ...rangeArgs,
-    '--stat',
-    '--decorate=full',
-  ])
+  const log = await git.log(logArgs)
 
   // parents 별도 조회: short hash 배열 맵 (hash → parents[])
-  const parentLines = await git.raw([
-    'log',
-    ...rangeArgs,
-    '--pretty=format:%h %P',
-  ])
+  const parentLines = await git.raw(parentArgs)
   const parentMap = new Map<string, string[]>()
   for (const line of parentLines.trim().split('\n')) {
     if (!line.trim()) continue
@@ -680,6 +732,10 @@ ipcMain.handle('git:log', async (_event, repoPath: string, opts?: { limit?: numb
     const parents = parts.slice(1).map(p => p.slice(0, 7))
     parentMap.set(shortHash, parents)
   }
+
+  // pathspec 지정 시(파일 이력) 커밋별 "그 시점의 파일 경로"를 해석한다.
+  // 리네임 이전 커밋은 그 시점의 옛 이름을 가지므로, 프론트가 정확한 경로로 diff/blame 을 호출할 수 있다.
+  const pathMap = pathspec ? await resolveFollowPaths(git, selectionArgs, pathspec) : null
 
   return log.all.map((entry): GitCommit => {
     const shortHash = entry.hash.slice(0, 7)
@@ -723,8 +779,81 @@ ipcMain.handle('git:log', async (_event, repoPath: string, opts?: { limit?: numb
       parents: parentMap.get(shortHash) ?? [],
       refs,
       stats,
+      // path: pathspec 있을 때만 설정. 미해석 커밋은 요청 경로로 폴백(리네임 없는 일반 커밋 안전값).
+      ...(pathMap ? { path: pathMap.get(shortHash) ?? pathspec } : {}),
     }
   })
+}
+
+// 파일 이력의 커밋별 "그 시점 경로"를 해석한다(리네임 추적).
+//   `git log --follow --name-status --pretty=format:%H -- <file>` 출력을 파싱:
+//     40-hex 단독 라인 = 커밋 헤더,  "<status>\t<path>[\t<newpath>]" = 변경 라인.
+//   name-status 의 마지막 탭 필드가 그 커밋 버전의 이름(A/M/D=경로, R/C=new 이름) → path.
+async function resolveFollowPaths(
+  git: ReturnType<typeof simpleGit>,
+  selectionArgs: string[],
+  pathspec: string,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  const raw = await git.raw([
+    'log', ...selectionArgs, '--follow', '--name-status',
+    '--pretty=format:%H', '--', pathspec,
+  ])
+  let currentHash = ''
+  for (const line of raw.split('\n')) {
+    if (/^[0-9a-f]{40}$/.test(line)) {
+      currentHash = line.slice(0, 7)
+      continue
+    }
+    // 변경 라인(상태문자 + 탭). --follow 단일 pathspec 이라 커밋당 한 줄만 온다.
+    if (currentHash && /^[ACDMRTUX]\d*\t/.test(line)) {
+      const fields = line.split('\t')
+      const p = fields[fields.length - 1]  // A/M/D=경로, R/C=new 이름
+      if (p && !map.has(currentHash)) map.set(currentHash, p)
+    }
+  }
+  return map
+}
+
+// git:log — 커밋 로그 조회 (기본 50개)
+ipcMain.handle('git:log', async (_event, repoPath: string, opts?: { limit?: number; all?: boolean }): Promise<GitCommit[]> => {
+  const limit = Math.max(1, opts?.limit ?? 50)
+  const all = opts?.all ?? false
+
+  const selectionArgs = [`--max-count=${limit}`]
+  if (all) selectionArgs.push('--all')
+
+  return fetchCommits(repoPath, selectionArgs)
+})
+
+// git:file-log — 파일 단위 커밋 이력(리네임 추적). git:log 와 동일한 GitCommit 스키마.
+//   --follow 로 리네임 이전 이력까지 추적한다. limit 기본 100 / 상한 1000.
+ipcMain.handle('git:file-log', async (_event, repoPath: string, filePath: string, opts?: { limit?: number }): Promise<GitCommit[]> => {
+  const file = validateFilePath(filePath)
+  const limit = clampCommitLimit(opts?.limit, 100)
+
+  // pathspec 지정 → 헬퍼가 `--follow -- <file>` 를 붙인다. (--all 과는 병용 불가하므로 미지원)
+  return fetchCommits(repoPath, [`--max-count=${limit}`], file)
+})
+
+// git:search-commits — 전체 히스토리 커밋 메시지 검색(서버측). git:log 와 동일한 GitCommit 스키마.
+//   query: `--grep` (고정 문자열 -F, 대소문자 무관 -i). opts.author: `--author`. opts.all: 전체 브랜치(--all).
+//   query 빈값이면 빈 배열. limit 기본 100 / 상한 1000.
+ipcMain.handle('git:search-commits', async (_event, repoPath: string, query: string, opts?: { author?: string; all?: boolean; limit?: number }): Promise<GitCommit[]> => {
+  // 제어문자·개행 제거(로그 파싱 안정). `--grep=<v>` 형태라 값의 선행 '-' 는 플래그로 오인되지 않음.
+  const q = sanitizeSearchTerm(query)
+  if (!q.trim()) return []
+
+  const limit = clampCommitLimit(opts?.limit, 100)
+  // -F(고정 문자열): 프론트 로드셋 필터(리터럴 부분일치)와 시맨틱 일치 + 정규식 오매칭/에러 제거.
+  const selectionArgs = [`--max-count=${limit}`, '-i', '-F', `--grep=${q}`]
+
+  const author = sanitizeSearchTerm(opts?.author ?? '')
+  if (author.trim()) selectionArgs.push(`--author=${author}`)
+
+  if (opts?.all) selectionArgs.push('--all')
+
+  return fetchCommits(repoPath, selectionArgs)
 })
 
 // git:activity — per-repo 최근 days일 일별 커밋 활동 (Repository Management 카드용)
@@ -879,22 +1008,25 @@ ipcMain.handle('git:status', async (_event, repoPath: string): Promise<GitStatus
 })
 
 // git:diff — 파일 diff 조회
-ipcMain.handle('git:diff', async (_event, repoPath: string, filePath: string): Promise<string> => {
+//   context: 주변 컨텍스트 줄 수(-U). 미전달=git 기본(3줄, 기존 동작). 0~10000 클램프.
+ipcMain.handle('git:diff', async (_event, repoPath: string, filePath: string, context?: number): Promise<string> => {
   const git = simpleGit(repoPath)
+  const ctx = contextArgs(context)
 
   // staged diff 먼저 시도
-  const stagedDiff = await git.diff(['--cached', '--', filePath])
+  const stagedDiff = await git.diff([...ctx, '--cached', '--', filePath])
   if (stagedDiff.trim()) return stagedDiff
 
   // unstaged diff 시도
-  const unstagedDiff = await git.diff(['--', filePath])
+  const unstagedDiff = await git.diff([...ctx, '--', filePath])
   return unstagedDiff
 })
 
 // git:commit-file-diff — 특정 커밋의 특정 파일 diff 조회
-ipcMain.handle('git:commit-file-diff', async (_event, repoPath: string, commitHash: string, filePath: string): Promise<string> => {
+//   context: 주변 컨텍스트 줄 수(-U). 미전달=git 기본(3줄, 기존 동작). 0~10000 클램프.
+ipcMain.handle('git:commit-file-diff', async (_event, repoPath: string, commitHash: string, filePath: string, context?: number): Promise<string> => {
   const git = simpleGit(repoPath)
-  const result = await git.raw(['diff-tree', '--no-commit-id', '-r', '-p', commitHash, '--', filePath])
+  const result = await git.raw(['diff-tree', '--no-commit-id', '-r', '-p', ...contextArgs(context), commitHash, '--', filePath])
   return result
 })
 
@@ -960,9 +1092,11 @@ ipcMain.handle('git:commit', async (_event, repoPath: string, message: string): 
 
 // git:file-diff — 특정 파일의 diff 조회 (staged 여부 명시)
 //   staged=false → 워킹트리(index 대비) diff,  staged=true → index(HEAD 대비) diff
-ipcMain.handle('git:file-diff', async (_event, repoPath: string, filePath: string, staged: boolean): Promise<string> => {
+//   context: 주변 컨텍스트 줄 수(-U). 미전달=git 기본(3줄, 기존 동작). 0~10000 클램프.
+ipcMain.handle('git:file-diff', async (_event, repoPath: string, filePath: string, staged: boolean, context?: number): Promise<string> => {
   const git = simpleGit(repoPath)
-  const args = staged ? ['--cached', '--', filePath] : ['--', filePath]
+  const ctx = contextArgs(context)
+  const args = staged ? [...ctx, '--cached', '--', filePath] : [...ctx, '--', filePath]
   const diff = await git.diff(args)
   if (diff) return diff
 
@@ -974,7 +1108,7 @@ ipcMain.handle('git:file-diff', async (_event, repoPath: string, filePath: strin
       // --no-index는 차이가 있으면 exit code 1을 내며 simple-git이 reject하지만,
       // 그 에러 객체에 diff 본문이 담겨 오므로 회수한다. /dev/null과 비교해 전체를 added로 표현.
       try {
-        return await git.raw(['diff', '--no-index', '--', '/dev/null', filePath])
+        return await git.raw(['diff', '--no-index', ...ctx, '--', '/dev/null', filePath])
       } catch (err: unknown) {
         const e = err as { stdout?: string; message?: string }
         if (typeof e.stdout === 'string' && e.stdout) return e.stdout
@@ -1445,15 +1579,19 @@ function getAuthorColor(name: string): string {
   return colors[Math.abs(h) % colors.length]
 }
 
-ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string): Promise<GitBlameLine[]> => {
+// git:blame — 파일 blame 조회. rev 미전달=워킹트리(기존 동작), rev 전달=해당 리비전 시점.
+ipcMain.handle('git:blame', async (_event, repoPath: string, filePath: string, rev?: string): Promise<GitBlameLine[]> => {
   const git = simpleGit(repoPath)
+
+  // rev 있으면 검증 후 인자로 추가(안전 문자·선행 '-' 차단). filePath 는 `--` 뒤에 둬 플래그 오인 방지.
+  const revArgs = rev !== undefined && rev !== '' ? [validateRev(rev)] : []
 
   let raw: string
   try {
     // --line-porcelain: author/author-time 블록을 라인마다 반복 출력.
     // (일반 --porcelain은 커밋 첫 등장 시에만 메타데이터를 주므로, 같은
     //  커밋이 재등장하면 직전 라인의 author/time이 잘못 carry-over 된다.)
-    raw = await git.raw(['blame', '--line-porcelain', filePath])
+    raw = await git.raw(['blame', '--line-porcelain', ...revArgs, '--', filePath])
   } catch {
     // 바이너리 파일 등 blame 불가 케이스 → 빈 배열 반환
     return []

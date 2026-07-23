@@ -10,6 +10,7 @@ export type FileMenuAction =
   | 'copy-rel-path'
   | 'reveal'
   | 'open-default'
+  | 'file-history'
 
 interface FileContextMenuProps {
   x: number
@@ -93,6 +94,12 @@ export function FileContextMenu({
             sv(<><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></>),
             '상대 경로 복사',
             'copy-rel-path',
+          )}
+          {sep()}
+          {item(
+            sv(<><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l3 2"/></>),
+            '파일 히스토리',
+            'file-history',
           )}
           {sep()}
           {item(

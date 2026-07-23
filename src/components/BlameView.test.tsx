@@ -97,7 +97,7 @@ describe('BlameView — 파일 선택기(변경3)', () => {
     // src 디렉토리 펼친 뒤 파일 클릭
     fireEvent.click(screen.getByText('src'))
     fireEvent.click(screen.getByTitle('src/b.ts'))
-    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/b.ts'))
+    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/b.ts', undefined))
   })
 
   it('검색 input이 트리를 좁히고 매칭 파일의 조상 dir을 자동 펼친다', async () => {
@@ -119,7 +119,7 @@ describe('BlameView — 파일 선택기(변경3)', () => {
     const { container } = render(
       <BlameView onSelectCommit={vi.fn()} repoPath={REPO} filePath="src/a.ts" commits={[]} />
     )
-    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/a.ts'))
+    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/a.ts', undefined))
     // 헤더에 현재 파일 경로 노출
     expect(container.querySelector('.pnl-hdr .fp')?.textContent).toBe('src/a.ts')
     // 선택 파일의 조상 dir 자동 펼침 → 트리에서 해당 파일이 선택(on) 상태
@@ -140,6 +140,56 @@ describe('BlameView — 파일 선택기(변경3)', () => {
     render(<BlameView onSelectCommit={vi.fn()} repoPath={REPO} commits={[]} />)
     await screen.findByText('src')
     expect(screen.getByText('왼쪽에서 파일을 고르면 blame을 볼 수 있어요')).toBeInTheDocument()
+  })
+})
+
+// ── 변경(확장): 특정 시점 blame(rev prop) ──
+// rev 전달 시 blame(repo, path, rev) 로 그 리비전 blame 을 조회하고 배지·복귀 버튼을 보인다.
+const REV = 'abcdef1234567890abcdef1234567890abcdef12'
+
+describe('BlameView — 특정 시점 blame(rev)', () => {
+  it('rev prop 주입 시 blame(repo, path, rev)로 조회하고 리비전 배지를 보인다', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3);
+    (api.blame as unknown as Mock).mockResolvedValue(LINES)
+    const { container } = render(
+      <BlameView onSelectCommit={vi.fn()} repoPath={REPO} filePath="src/a.ts" rev={REV} commits={[]} />
+    )
+    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/a.ts', REV))
+    // 배지 = @ + 앞 7자, .at 클래스
+    const badge = container.querySelector('.blame-rev')
+    expect(badge?.className).toContain('at')
+    expect(badge?.textContent).toBe('@ abcdef1')
+    // 워킹트리 복귀 버튼 노출
+    expect(screen.getByText('워킹트리로')).toBeInTheDocument()
+  })
+
+  it("'워킹트리로' 클릭 시 rev 없이 재조회하고 배지가 워킹트리로 바뀐다", async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3);
+    (api.blame as unknown as Mock).mockResolvedValue(LINES)
+    const { container } = render(
+      <BlameView onSelectCommit={vi.fn()} repoPath={REPO} filePath="src/a.ts" rev={REV} commits={[]} />
+    )
+    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/a.ts', REV))
+    ;(api.blame as unknown as Mock).mockClear()
+
+    fireEvent.click(screen.getByText('워킹트리로'))
+    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/a.ts', undefined))
+    // 배지가 워킹트리로, 복귀 버튼 사라짐
+    expect(container.querySelector('.blame-rev')?.textContent).toBe('워킹트리')
+    expect(screen.queryByText('워킹트리로')).toBeNull()
+  })
+
+  it('rev 미전달 시 워킹트리 blame(rev undefined)로 동작하고 복귀 버튼이 없다', async () => {
+    (api.listFiles as unknown as Mock).mockResolvedValue(FILES3);
+    (api.blame as unknown as Mock).mockResolvedValue(LINES)
+    const { container } = render(
+      <BlameView onSelectCommit={vi.fn()} repoPath={REPO} filePath="src/a.ts" commits={[]} />
+    )
+    await waitFor(() => expect(api.blame).toHaveBeenCalledWith(REPO, 'src/a.ts', undefined))
+    const badge = container.querySelector('.blame-rev')
+    expect(badge?.className).not.toContain('at')
+    expect(badge?.textContent).toBe('워킹트리')
+    expect(screen.queryByText('워킹트리로')).toBeNull()
   })
 })
 

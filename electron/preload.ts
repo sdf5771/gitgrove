@@ -117,16 +117,21 @@ contextBridge.exposeInMainWorld('gitAPI', {
   isRepo: (repoPath: string) => ipcRenderer.invoke('git:is-repo', repoPath),
   clone: (url: string, parentDir: string, opts?: { shallow?: boolean; recurseSubmodules?: boolean }) => ipcRenderer.invoke('git:clone', url, parentDir, opts),
   getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => ipcRenderer.invoke('git:log', repoPath, opts),
+  // 파일 단위 커밋 이력(리네임 추적, --follow). 반환은 getLog 와 동일한 GitCommit[] 스키마.
+  getFileLog: (repoPath: string, filePath: string, opts?: { limit?: number }) => ipcRenderer.invoke('git:file-log', repoPath, filePath, opts),
+  // 전체 히스토리 커밋 메시지 검색(서버측 --grep, 대소문자 무관). query 빈값=빈 배열. 반환은 GitCommit[].
+  searchCommits: (repoPath: string, query: string, opts?: { author?: string; all?: boolean; limit?: number }) => ipcRenderer.invoke('git:search-commits', repoPath, query, opts),
   getActivity: (repoPath: string, opts?: { days?: number }) => ipcRenderer.invoke('git:activity', repoPath, opts),
   getActivityBatch: (paths: string[], opts?: { days?: number }) => ipcRenderer.invoke('git:activity-batch', paths, opts),
   getBranches: (repoPath: string) => ipcRenderer.invoke('git:branches', repoPath),
   getStatus: (repoPath: string) => ipcRenderer.invoke('git:status', repoPath),
-  getDiff: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:diff', repoPath, filePath),
-  getFileDiff: (repoPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke('git:file-diff', repoPath, filePath, staged),
+  // context: 주변 컨텍스트 줄 수(-U). 미전달=기본 3줄(기존 동작). "주변 줄 더 보기" 재요청용.
+  getDiff: (repoPath: string, filePath: string, context?: number) => ipcRenderer.invoke('git:diff', repoPath, filePath, context),
+  getFileDiff: (repoPath: string, filePath: string, staged: boolean, context?: number) => ipcRenderer.invoke('git:file-diff', repoPath, filePath, staged, context),
   applyHunk: (repoPath: string, filePath: string, hunkIndex: number, reverse: boolean) => ipcRenderer.invoke('git:apply-hunk', repoPath, filePath, hunkIndex, reverse),
   getFiles: (repoPath: string, commitHash: string) => ipcRenderer.invoke('git:files', repoPath, commitHash),
   listFiles: (repoPath: string) => ipcRenderer.invoke('git:list-files', repoPath),
-  getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string) => ipcRenderer.invoke('git:commit-file-diff', repoPath, commitHash, filePath),
+  getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string, context?: number) => ipcRenderer.invoke('git:commit-file-diff', repoPath, commitHash, filePath, context),
   stage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:stage', repoPath, files),
   unstage: (repoPath: string, files: string[]) => ipcRenderer.invoke('git:unstage', repoPath, files),
   commit: (repoPath: string, message: string) => ipcRenderer.invoke('git:commit', repoPath, message),
@@ -142,7 +147,8 @@ contextBridge.exposeInMainWorld('gitAPI', {
     return () => ipcRenderer.removeListener('git:remote-progress', listener)
   },
   checkout: (repoPath: string, branch: string) => ipcRenderer.invoke('git:checkout', repoPath, branch),
-  blame: (repoPath: string, filePath: string) => ipcRenderer.invoke('git:blame', repoPath, filePath),
+  // rev 미전달=워킹트리(기존 동작), rev 전달=해당 리비전 시점 blame.
+  blame: (repoPath: string, filePath: string, rev?: string) => ipcRenderer.invoke('git:blame', repoPath, filePath, rev),
   getRemotes: (repoPath: string) => ipcRenderer.invoke('git:remotes', repoPath),
   // 원격 관리(add/remove/rename/set-url). 검증 실패·git 에러는 reject(사유 먼저 문구).
   remoteAdd: (repoPath: string, name: string, url: string) => ipcRenderer.invoke('git:remote-add', repoPath, name, url) as Promise<void>,
