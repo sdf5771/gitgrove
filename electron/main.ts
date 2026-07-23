@@ -512,6 +512,7 @@ function buildTrayMenu(s: TrayState): Electron.MenuItemConstructorOptions[] {
   items.push({ type: 'separator' })
   items.push({ label: `알림 열기${notif ? ` (${notif})` : ''}`, click: () => sendTrayAction({ type: 'open-notifications' }) })
   items.push({ label: 'GitGrove 열기', click: () => showMainWindow() })
+  items.push({ label: '설정', click: () => sendTrayAction({ type: 'open-settings' }) })
 
   items.push({ type: 'separator' })
   items.push({ label: '종료', click: () => { if (!isQuitting) { isQuitting = true; app.quit() } } })

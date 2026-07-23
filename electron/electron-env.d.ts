@@ -197,7 +197,7 @@ interface TrayState {
 // 메인 → 렌더러('tray:action'). 실행 주체가 렌더러인 액션을 위임.
 // switch-repo는 전환 대상 path를 함께 전달.
 interface TrayAction {
-  type: 'fetch' | 'pull' | 'push' | 'open-notifications' | 'switch-repo'
+  type: 'fetch' | 'pull' | 'push' | 'open-notifications' | 'open-settings' | 'switch-repo'
   path?: string
 }
 
