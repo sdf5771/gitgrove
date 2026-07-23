@@ -794,6 +794,7 @@ export default function App() {
         else pendingTrayRemoteRef.current = a.type
         break
       case 'open-notifications': setNotifOpenSignal(s => s + 1); break
+      case 'open-settings': setShowSettings(true); break
       case 'switch-repo': {
         const p = a.path
         if (!p) return
