@@ -198,7 +198,9 @@ describe('StashPanel — onChanged (부모 저장소 뷰 갱신)', () => {
   it('pop 시 onChanged 호출', async () => {
     const { onChanged } = setup()
     await screen.findByText('stash@{1}')
-    fireEvent.click(screen.getByRole('button', { name: 'Pop' }))
+    // 자동선택 effect가 한 틱 늦게 상세 pane의 Pop 버튼을 렌더 → 동기 getByRole는
+    // CI 부하에서 간헐 실패. findByRole로 렌더를 기다린다(같은 파일 다른 케이스와 일관).
+    fireEvent.click(await screen.findByRole('button', { name: 'Pop' }))
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 })
