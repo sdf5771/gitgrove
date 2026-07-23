@@ -83,6 +83,12 @@ import {
 type View = 'history' | 'commit' | 'diff' | 'blame' | 'pr'
 type BranchTab = 'create' | 'rename' | 'delete'
 
+// 중앙 패널 최소 폭. 사이드바/우패널 리사이저가 중앙을 이 값 아래로 밀지 못하게 클램프한다.
+// (CSS .cpanel min-width 와 동일 값 유지 — 둘 중 하나만 바뀌면 레이아웃이 어긋난다.)
+const CPANEL_MIN_WIDTH = 320
+// 사이드바·우패널 사이의 두 리사이저(각 4px) 폭 여유.
+const RESIZER_SLACK = 8
+
 // ──────────────────────────────────────────────
 // 변환 함수
 // ──────────────────────────────────────────────
@@ -152,6 +158,7 @@ function RepoTabs({ repos, active, switchingPath, onSelect, onAdd, onClose }: {
 }) {
   const stripRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number | undefined>(undefined)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const ovBtnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const wasMenuOpen = useRef(false)
@@ -182,23 +189,37 @@ function RepoTabs({ repos, active, switchingPath, onSelect, onAdd, onClose }: {
     })
   }, [])
 
-  // 컨테이너 크기 변화(ResizeObserver) + 가로 스크롤 + 창 리사이즈에 재측정.
+  // 리사이즈/스크롤 트레일링 디바운스: 연속 이벤트 동안 타이머가 계속 리셋돼
+  // 측정(getBoundingClientRect·setState)이 리사이즈가 멈춘 뒤 ~120ms에 1회만 돈다.
+  // → 활성 리사이즈 프레임엔 JS 측정/리플로우/리렌더가 0(rAF만으론 매 프레임 도니 디바운스가 핵심).
+  // 리사이즈 중 탭 레이아웃은 CSS flex가 네이티브로 처리하고 오버플로 인디케이터만 늦게 갱신(허용).
+  const debouncedMeasure = useCallback(() => {
+    if (debounceRef.current !== undefined) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = undefined
+      scheduleMeasure()
+    }, 120)
+  }, [scheduleMeasure])
+
+  // 컨테이너 크기 변화(ResizeObserver) + 가로 스크롤 + 창 리사이즈에 재측정(디바운스).
+  // 마운트 최초 1회는 즉시 측정해 인디케이터가 바로 반영되게 한다.
   useEffect(() => {
     const el = stripRef.current
     if (!el) return
     scheduleMeasure()
     // ResizeObserver는 jsdom에 없으므로 존재할 때만 사용(테스트 환경 안전).
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(debouncedMeasure) : null
     ro?.observe(el)
-    el.addEventListener('scroll', scheduleMeasure, { passive: true })
-    window.addEventListener('resize', scheduleMeasure)
+    el.addEventListener('scroll', debouncedMeasure, { passive: true })
+    window.addEventListener('resize', debouncedMeasure)
     return () => {
       ro?.disconnect()
-      el.removeEventListener('scroll', scheduleMeasure)
-      window.removeEventListener('resize', scheduleMeasure)
+      el.removeEventListener('scroll', debouncedMeasure)
+      window.removeEventListener('resize', debouncedMeasure)
       if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
+      if (debounceRef.current !== undefined) clearTimeout(debounceRef.current)
     }
-  }, [scheduleMeasure])
+  }, [scheduleMeasure, debouncedMeasure])
 
   // 탭 개수·활성 탭 변화 시 재측정(활성 탭이 스크롤로 들어오며 가시성 변동).
   useEffect(() => { scheduleMeasure() }, [repos, active, scheduleMeasure])
@@ -358,6 +379,7 @@ function ActionAux({ items }: { items: AuxItem[] }) {
   const moreBtnRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number | undefined>(undefined)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const auxWidthRef = useRef(0)
   const [collapsed, setCollapsed] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -386,21 +408,34 @@ function ActionAux({ items }: { items: AuxItem[] }) {
     })
   }, [])
 
+  // 리사이즈 트레일링 디바운스: 연속 리사이즈 동안 타이머가 계속 리셋돼 측정
+  // (clientWidth/scrollWidth/offsetWidth 강제 리플로우 + setState)이 리사이즈가 멈춘 뒤
+  // ~120ms에 1회만 돈다 → 활성 리사이즈 프레임엔 JS 측정/리렌더가 0. 접기/펴기 갱신만 늦어짐(허용).
+  const debouncedMeasure = useCallback(() => {
+    if (debounceRef.current !== undefined) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      debounceRef.current = undefined
+      scheduleMeasure()
+    }, 120)
+  }, [scheduleMeasure])
+
+  // 마운트 최초 1회는 즉시 측정(초기 접힘/펼침 결정), 이후 리사이즈는 디바운스.
   useEffect(() => {
     const bar = spacerRef.current?.parentElement
     if (!bar) return
     scheduleMeasure()
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(debouncedMeasure) : null
     ro?.observe(bar)
-    window.addEventListener('resize', scheduleMeasure)
+    window.addEventListener('resize', debouncedMeasure)
     return () => {
       ro?.disconnect()
-      window.removeEventListener('resize', scheduleMeasure)
+      window.removeEventListener('resize', debouncedMeasure)
       if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
+      if (debounceRef.current !== undefined) clearTimeout(debounceRef.current)
     }
-  }, [scheduleMeasure])
+  }, [scheduleMeasure, debouncedMeasure])
 
-  // 접힘/펼침 전환 시 DOM이 스왑되므로(부모 폭은 그대로라 ResizeObserver 미발화) 재측정.
+  // 접힘/펼침 전환 시 DOM이 스왑되므로(부모 폭은 그대로라 ResizeObserver 미발화) 즉시 재측정.
   useEffect(() => { scheduleMeasure() }, [collapsed, scheduleMeasure])
 
   // 펼쳐지면 메뉴는 닫는다.
@@ -707,7 +742,9 @@ export default function App() {
     const onMouseMove = (ev: MouseEvent) => {
       // rpanel은 오른쪽 고정이므로 왼쪽으로 드래그하면 넓어짐
       const delta = startX - ev.clientX
-      const newWidth = Math.max(220, Math.min(600, startWidth + delta))
+      // 중앙 패널이 CPANEL_MIN_WIDTH 아래로 눌리지 않도록 상한을 클램프한다.
+      const upper = Math.min(600, window.innerWidth - sidebarWidthRef.current - CPANEL_MIN_WIDTH - RESIZER_SLACK)
+      const newWidth = Math.max(220, Math.min(upper, startWidth + delta))
       setRpanelWidth(newWidth)
     }
     const onMouseUp = () => {
@@ -719,6 +756,35 @@ export default function App() {
     }
     window.addEventListener('mousemove', onMouseMove)
     window.addEventListener('mouseup', onMouseUp)
+  }, [])
+
+  // ── 창 축소 시 패널 폭 재클램프 ──
+  // 드래그 클램프는 드래그 경로에서만 동작하므로, 넓은 창에서 사이드바/우패널을 넓힌 뒤
+  // OS 창을 좁히면 sidebar+rpanel+CPANEL_MIN > innerWidth 가 돼(패널은 flex-shrink:0,
+  // cpanel min-width:320) .app-body(overflow:hidden)가 우패널 우측을 잘라낸다.
+  // 불변식 sidebar+rpanel ≤ innerWidth − CPANEL_MIN_WIDTH − RESIZER_SLACK 을 라이브로 유지한다.
+  // ⚠️ 리사이즈 핫패스: window.innerWidth 만 읽고(강제 리플로우/getBoundingClientRect 없음)
+  //    실제 초과 시에만 setState → 대부분의 리사이즈 프레임은 no-op(리렌더 0)이라 매끄러움 유지.
+  //    우패널을 먼저 줄이고(하한 220), 그래도 넘치면 사이드바도 줄인다(하한 160).
+  useEffect(() => {
+    const reclamp = () => {
+      const avail = window.innerWidth - CPANEL_MIN_WIDTH - RESIZER_SLACK
+      const sb = sidebarWidthRef.current
+      const rp = rpanelWidthRef.current
+      if (sb + rp <= avail) return // 여유 충분 — no-op(setState 없음 → 리렌더 없음)
+      const nextRp = Math.max(220, avail - sb)
+      if (nextRp !== rp) {
+        setRpanelWidth(nextRp)
+        try { localStorage.setItem(STORAGE_KEYS.rpanelWidth, String(nextRp)) } catch { /* ignore */ }
+      }
+      const nextSb = Math.max(160, avail - nextRp)
+      if (nextSb !== sb) {
+        setSidebarWidth(nextSb)
+        try { localStorage.setItem(STORAGE_KEYS.sidebarWidth, String(nextSb)) } catch { /* ignore */ }
+      }
+    }
+    window.addEventListener('resize', reclamp)
+    return () => window.removeEventListener('resize', reclamp)
   }, [])
 
   // ── 원격 연산 로딩 상태 ──
@@ -1446,7 +1512,9 @@ export default function App() {
 
     const onMouseMove = (ev: MouseEvent) => {
       if (!isResizing.current) return
-      const newWidth = Math.max(160, Math.min(400, startWidth + (ev.clientX - startX)))
+      // 중앙 패널이 CPANEL_MIN_WIDTH 아래로 눌리지 않도록 상한을 클램프한다.
+      const upper = Math.min(400, window.innerWidth - rpanelWidthRef.current - CPANEL_MIN_WIDTH - RESIZER_SLACK)
+      const newWidth = Math.max(160, Math.min(upper, startWidth + (ev.clientX - startX)))
       setSidebarWidth(newWidth)
     }
 
