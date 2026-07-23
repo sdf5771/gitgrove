@@ -309,12 +309,12 @@ export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, o
           {selFile && rows.length > 0 && (
             <div className="dxexp" title="위아래로 보여줄 주변 줄 수">
               <button className="dxexp-btn" disabled={ctxStep === 0} onClick={() => setCtxStep(s => Math.max(0, s - 1))} title="맥락 줄이기">−</button>
-              <span className="dxexp-lbl">맥락 {CONTEXT_STEPS[ctxStep]}줄</span>
-              <button className="dxexp-btn more" disabled={ctxStep >= CONTEXT_STEPS.length - 1} onClick={() => setCtxStep(s => Math.min(CONTEXT_STEPS.length - 1, s + 1))} title="주변 줄 더 보기">주변 줄 더 보기</button>
+              <span className="dxexp-lbl"><span className="lbl-full">맥락 {CONTEXT_STEPS[ctxStep]}줄</span><span className="lbl-short">{CONTEXT_STEPS[ctxStep]}</span></span>
+              <button className="dxexp-btn more" disabled={ctxStep >= CONTEXT_STEPS.length - 1} onClick={() => setCtxStep(s => Math.min(CONTEXT_STEPS.length - 1, s + 1))} title="주변 줄 더 보기"><span className="lbl-full">주변 줄 더 보기</span><span className="lbl-short">＋</span></button>
             </div>
           )}
           {onOpenHistory && selFile && (
-            <button className="dx-hist-btn" onClick={() => onOpenHistory(selFile)} title="이 파일의 커밋 이력 보기">파일 히스토리</button>
+            <button className="dx-hist-btn" onClick={() => onOpenHistory(selFile)} title="이 파일의 커밋 이력 보기"><span className="lbl-full">파일 히스토리</span><span className="lbl-short">이력</span></button>
           )}
           <div className="dx-mode">
             <button className={mode === 'unified' ? 'on' : ''} onClick={() => setMode('unified')}>통합</button>
