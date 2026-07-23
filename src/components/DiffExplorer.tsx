@@ -13,7 +13,12 @@ interface Props {
   commits?: Commit[]
   selIdx?: number
   onSelectCommit?: (i: number) => void
+  // 현재 파일의 커밋 이력 열기(헤더 버튼). App이 파일 히스토리 모달을 띄운다.
+  onOpenHistory?: (filePath: string) => void
 }
+
+// diff "주변 줄 더 보기" 컨텍스트 단계. 0번(3줄)=git 기본과 동일. 과도한 값은 backend가 클램프.
+const CONTEXT_STEPS = [3, 10, 25, 50] as const
 
 const getFilePath = (f: unknown): string => { const e = f as Record<string, unknown>; return (e.path as string) ?? (e.p as string) ?? '' }
 const getFileStatus = (f: unknown): string => { const e = f as Record<string, unknown>; return (e.status as string) ?? (e.s as string) ?? 'M' }
@@ -43,9 +48,11 @@ function wordSide(self: string, other: string | null, kind: 'del' | 'add'): Reac
 
 const FILES_WIDTH_KEY = 'gitgrove:diffFilesWidth'
 
-export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, onSelectCommit }: Props) {
+export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, onSelectCommit, onOpenHistory }: Props) {
   const [localFiles, setLocalFiles] = useState<GitFileEntry[]>([])
   const [mode, setMode] = useState<'unified' | 'split'>('unified')
+  // 컨텍스트(주변 줄) 단계 — 파일 선택이 바뀌면 리셋한다.
+  const [ctxStep, setCtxStep] = useState(0)
 
   // ── 파일 pane 폭 리사이즈(App 사이드바 리사이저와 동일 톤) ──
   const bodyRef = useRef<HTMLDivElement>(null)
@@ -139,20 +146,31 @@ export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, o
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commit, commitFiles, localFiles])
 
+  // 파일 선택이 바뀌면 컨텍스트를 기본(3줄)으로 되돌린다.
+  useEffect(() => { setCtxStep(0) }, [selFile])
+
+  // 파일/컨텍스트 전환 시 이전 요청이 늦게 resolve돼 라벨과 diff가 어긋나지 않도록
+  // request-id로 최신 요청만 반영한다(stale 응답 폐기).
+  const diffReqRef = useRef(0)
   useEffect(() => {
     if (!selFile) { setRawDiff(''); return }
+    const context = CONTEXT_STEPS[ctxStep]
+    const reqId = ++diffReqRef.current
+    const fresh = () => diffReqRef.current === reqId
+    const apply = (raw: string | undefined) => { if (fresh()) setRawDiff(raw ?? '') }
+    const done = () => { if (fresh()) setLoadingDiff(false) }
     if (repoPath && commit) {
       setLoadingDiff(true)
-      window.gitAPI?.getCommitFileDiff(repoPath, commit.id, selFile).then(raw => setRawDiff(raw ?? '')).catch(() => setRawDiff('')).finally(() => setLoadingDiff(false))
+      window.gitAPI?.getCommitFileDiff(repoPath, commit.id, selFile, context).then(apply).catch(() => apply('')).finally(done)
       return
     }
     if (repoPath) {
       setLoadingDiff(true)
-      window.gitAPI?.getDiff(repoPath, selFile).then(raw => setRawDiff(raw ?? '')).catch(() => setRawDiff('')).finally(() => setLoadingDiff(false))
+      window.gitAPI?.getDiff(repoPath, selFile, context).then(apply).catch(() => apply('')).finally(done)
       return
     }
     setRawDiff('')
-  }, [selFile, repoPath, commit])
+  }, [selFile, repoPath, commit, ctxStep])
 
   const rows = useMemo<SbsRow[]>(() => {
     if (!rawDiff) return []
@@ -288,6 +306,16 @@ export function DiffExplorer({ commit, repoPath, commitFiles, commits, selIdx, o
           <span className="stats">
             {loadingDiff ? <span style={{ color: 'var(--c-text-faint)' }}>불러오는 중…</span> : <><span className="sa">+{addCount}</span><span className="sd">−{delCount}</span></>}
           </span>
+          {selFile && rows.length > 0 && (
+            <div className="dxexp" title="위아래로 보여줄 주변 줄 수">
+              <button className="dxexp-btn" disabled={ctxStep === 0} onClick={() => setCtxStep(s => Math.max(0, s - 1))} title="맥락 줄이기">−</button>
+              <span className="dxexp-lbl">맥락 {CONTEXT_STEPS[ctxStep]}줄</span>
+              <button className="dxexp-btn more" disabled={ctxStep >= CONTEXT_STEPS.length - 1} onClick={() => setCtxStep(s => Math.min(CONTEXT_STEPS.length - 1, s + 1))} title="주변 줄 더 보기">주변 줄 더 보기</button>
+            </div>
+          )}
+          {onOpenHistory && selFile && (
+            <button className="dx-hist-btn" onClick={() => onOpenHistory(selFile)} title="이 파일의 커밋 이력 보기">파일 히스토리</button>
+          )}
           <div className="dx-mode">
             <button className={mode === 'unified' ? 'on' : ''} onClick={() => setMode('unified')}>통합</button>
             <button className={mode === 'split' ? 'on' : ''} onClick={() => setMode('split')}>나란히</button>

@@ -559,7 +559,7 @@ body { display: flex; align-items: center; justify-content: center; }
 .dx-bars i.a{background:var(--c-success);}.dx-bars i.d{background:var(--c-danger);}
 .dx-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
 .dx-hd{display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--c-divider);flex-shrink:0;}
-.dx-hd .fp{font-family:var(--font-mono);font-size:11.5px;color:var(--c-text-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dx-hd .fp{flex:1;min-width:40px;font-family:var(--font-mono);font-size:11.5px;color:var(--c-text-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dx-hd .stats{font-family:var(--font-mono);font-size:10.5px;display:flex;gap:5px;flex-shrink:0;}
 .sa{color:var(--c-success);}.sd{color:var(--c-danger);}
 .dx-mode{margin-left:auto;display:flex;background:var(--c-bg-inset);border:1px solid var(--c-border);border-radius:var(--r2);overflow:hidden;flex-shrink:0;}
@@ -606,6 +606,70 @@ body { display: flex; align-items: center; justify-content: center; }
 .dxc-item .msg{grid-row:1;font-size:11.5px;color:var(--c-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dxc-item .meta{grid-column:2;grid-row:2;font-family:var(--font-mono);font-size:9.5px;color:var(--c-text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dxc-empty{padding:18px 12px;text-align:center;font-size:11.5px;color:var(--c-text-faint);}
+
+/* ── Diff 주변 줄 더 보기 · 파일 히스토리 진입(.dxexp / .dx-hist-btn) ── */
+.dxexp{display:flex;align-items:center;background:var(--c-bg-inset);border:1px solid var(--c-border);border-radius:var(--r2);overflow:hidden;flex-shrink:0;}
+.dxexp-btn{padding:3px 9px;background:none;border:none;border-right:1px solid var(--c-border);color:var(--c-text-muted);font-size:10.5px;font-family:var(--font-body);cursor:pointer;transition:color 120ms,background 120ms;}
+.dxexp-btn:last-child{border-right:none;}
+.dxexp-btn:hover:not(:disabled){color:var(--c-gold-300);background:var(--c-gold-bg-soft);}
+.dxexp-btn:disabled{opacity:.35;cursor:not-allowed;}
+.dxexp-lbl{padding:0 9px;font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);border-right:1px solid var(--c-border);white-space:nowrap;}
+.dx-hist-btn{flex-shrink:0;padding:3px 10px;background:var(--c-bg-inset);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:10.5px;font-family:var(--font-body);cursor:pointer;transition:color 120ms,border-color 120ms;}
+.dx-hist-btn:hover{color:var(--c-gold-300);border-color:var(--c-gold-border);}
+
+/* ── Blame 리비전 표시 · 파일 히스토리 진입(.blame-rev / .blame-hist-btn) ── */
+.blame-rev{flex-shrink:0;font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);padding:1px 8px;border:1px solid var(--c-border);border-radius:var(--rpill);}
+.blame-rev.at{color:var(--c-gold-300);border-color:var(--c-gold-border);background:var(--c-gold-bg);}
+.blame-rev-reset,.blame-hist-btn{flex-shrink:0;padding:2px 9px;background:var(--c-bg-inset);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:10px;font-family:var(--font-body);cursor:pointer;transition:color 120ms,border-color 120ms;}
+.blame-rev-reset:hover,.blame-hist-btn:hover{color:var(--c-gold-300);border-color:var(--c-gold-border);}
+
+/* ── 전체 히스토리 검색(.gsrch-*) ── */
+.gsrch-bar{display:flex;align-items:center;gap:10px;padding:6px 14px;border-bottom:1px solid var(--c-divider);background:var(--c-bg-inset);flex-shrink:0;font-size:11px;color:var(--c-text-muted);}
+.gsrch-note{display:flex;align-items:center;gap:5px;}
+.gsrch-note b{font-family:var(--font-mono);color:var(--c-text-strong);font-weight:600;}
+.gsrch-cap{color:var(--c-warning);font-size:10px;}
+.gsrch-link{margin-left:auto;padding:3px 11px;background:var(--c-bg-surface);border:1px solid var(--c-gold-border);border-radius:var(--r2);color:var(--c-gold-300);font-size:10.5px;font-family:var(--font-body);cursor:pointer;transition:background 120ms;flex-shrink:0;}
+.gsrch-link:hover{background:var(--c-gold-bg);}
+.gsrch-list{flex:1;overflow-y:auto;}
+.gsrch-empty{padding:26px 16px;text-align:center;font-size:12px;color:var(--c-text-faint);line-height:1.6;}
+.gsrch-item{display:flex;align-items:center;gap:9px;padding:6px 14px;border-bottom:1px solid var(--c-divider);cursor:pointer;transition:background 120ms;}
+.gsrch-item:hover{background:var(--c-gold-bg-soft);}
+.gsrch-item.on{background:var(--c-gold-bg);}
+.gsrch-sha{font-family:var(--font-mono);font-size:10.5px;color:var(--c-gold-300);flex-shrink:0;min-width:52px;}
+.gsrch-msg{flex:1;min-width:0;font-size:12px;color:var(--c-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gsrch-tag{flex-shrink:0;font-family:var(--font-display);font-size:9px;letter-spacing:.04em;color:var(--c-info);background:rgba(95,184,230,.12);border:1px solid rgba(95,184,230,.3);border-radius:var(--rpill);padding:1px 7px;}
+.gsrch-au{flex-shrink:0;width:88px;font-size:11px;color:var(--c-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right;}
+.gsrch-time{flex-shrink:0;width:70px;font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);text-align:right;}
+
+/* ── 파일 히스토리 모달(.fhist-*) ── */
+.fhist-body{display:flex;height:min(560px,72vh);}
+.fhist-list{width:340px;flex-shrink:0;border-right:1px solid var(--c-divider);background:var(--c-bg-inset);overflow-y:auto;padding:6px;}
+.fhist-msg{padding:18px 12px;text-align:center;font-size:11.5px;color:var(--c-text-faint);line-height:1.6;}
+.fhist-item{padding:7px 9px;border-radius:var(--r2);cursor:pointer;transition:background 120ms;}
+.fhist-item:hover{background:var(--c-gold-bg-soft);}
+.fhist-item.on{background:var(--c-gold-bg);}
+.fhist-item-top{display:flex;align-items:baseline;gap:7px;}
+.fhist-sha{font-family:var(--font-mono);font-size:10px;color:var(--c-gold-300);flex-shrink:0;}
+.fhist-msgtxt{flex:1;min-width:0;font-size:11.5px;color:var(--c-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fhist-item-meta{display:flex;align-items:center;gap:6px;margin-top:3px;font-family:var(--font-mono);font-size:9.5px;color:var(--c-text-faint);}
+.fhist-au{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;}
+.fhist-stats{margin-left:auto;display:flex;gap:4px;flex-shrink:0;}
+.fhist-item-actions{display:flex;gap:6px;margin-top:7px;}
+.fhist-item-actions button{padding:3px 9px;background:var(--c-bg-surface);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:10px;font-family:var(--font-body);cursor:pointer;transition:color 120ms,border-color 120ms;}
+.fhist-item-actions button:hover{color:var(--c-gold-300);border-color:var(--c-gold-border);}
+.fhist-diff{flex:1;min-width:0;display:flex;flex-direction:column;}
+.fhist-diff-hd{display:flex;align-items:center;gap:8px;padding:8px 13px;border-bottom:1px solid var(--c-divider);flex-shrink:0;}
+.fhist-diff-hd .fp{font-family:var(--font-mono);font-size:11px;color:var(--c-text-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fhist-diff-sha{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--c-gold-300);flex-shrink:0;}
+.fhist-diff-body{flex:1;overflow:auto;padding:4px 0;background:var(--c-bg-surface);}
+.fhist-hunk{padding:3px 13px;font-family:var(--font-mono);font-size:10px;color:var(--c-info);background:rgba(95,184,230,.1);border-top:1px solid var(--c-divider);border-bottom:1px solid var(--c-divider);white-space:pre;}
+.fhist-cl{display:flex;font-family:var(--font-mono);font-size:11px;line-height:18px;}
+.fhist-cl.add{background:rgba(111,207,124,.08);}
+.fhist-cl.del{background:rgba(255,107,107,.08);}
+.fhist-sign{width:16px;flex-shrink:0;text-align:center;color:var(--c-text-faint);user-select:none;}
+.fhist-cl.add .fhist-sign{color:var(--c-grove);}
+.fhist-cl.del .fhist-sign{color:var(--c-danger);}
+.fhist-ctext{white-space:pre;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;padding-right:12px;}
 
 /* ── Modal base ── */
 .modal-bd{position:absolute;inset:0;background:rgba(13,18,32,.82);display:flex;align-items:center;justify-content:center;z-index:50;animation:mfade 180ms ease;}
@@ -763,7 +827,7 @@ body { display: flex; align-items: center; justify-content: center; }
 /* ── Blame view (블록 그룹 · 줄 나이 히트맵 · 작성자 필터) ── */
 .blame-wrap{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
 .blame-wrap .pnl-hdr h3{font-size:14px;text-transform:none;letter-spacing:.3px;color:var(--c-text-strong);font-weight:400;}
-.blame-wrap .pnl-hdr .fp{font-family:var(--font-mono);font-size:10.5px;color:var(--c-text-faint);}
+.blame-wrap .pnl-hdr .fp{font-family:var(--font-mono);font-size:10.5px;color:var(--c-text-faint);min-width:40px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .auth-chips{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap;}
 .auth-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--font-display);font-size:9.5px;padding:2px 8px;border-radius:var(--rpill);border:1px solid;cursor:pointer;background:none;transition:opacity .12s;}
 .auth-chip .ct{font-family:var(--font-mono);font-size:9px;opacity:.75;}

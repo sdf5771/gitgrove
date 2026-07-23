@@ -14,6 +14,8 @@ interface Props {
   // 컨텍스트 메뉴의 워킹트리 변경(discard/ignore) 후 git 상태만 갱신하는 콜백.
   // onCommitDone과 달리 'Committed' 토스트를 띄우지 않는다. 액션별 토스트는 액션 인자로 전달.
   onTreeChanged?: (toast?: { cls: 'success' | 'error' | 'warning'; title: string; msg: string }) => void | Promise<void>
+  // 컨텍스트 메뉴 '파일 히스토리' — App이 파일 이력 모달을 띄운다.
+  onFileHistory?: (filePath: string) => void
 }
 
 // 한 파일 = 한 행. 같은 path가 unstaged·staged 양쪽에 있으면 부분 스테이지(partial).
@@ -71,7 +73,7 @@ function diffTargetOf(row: MergedRow): { file: FileEntry; staged: boolean } {
   return { file: (row.unstagedEntry ?? row.stagedEntry) as FileEntry, staged: false }
 }
 
-export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone, onTreeChanged }: Props) {
+export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stagedProp, repoPath, onCommitDone, onTreeChanged, onFileHistory }: Props) {
   // controlled: props(unstaged/staged)를 단일 소스로 소비하되, stage/unstage 클릭은
   // 즉시 반영(낙관적)을 위해 로컬 state에 담는다. 이후 props가 바뀌면(=loadRepo 확정
   // 결과 도착) 그 값으로 재동기화 → 낙관 → 서버확정 순서가 자연스럽게 이어진다.
@@ -155,6 +157,9 @@ export function StageArea({ onSelDiffFile, unstaged: unstagedProp, staged: stage
           const r = await window.gitAPI?.openPath(absPath(f))
           if (r && !r.ok) console.warn('openPath failed:', r.error)
         } catch (e) { console.error('openPath failed:', e) }
+        break
+      case 'file-history':
+        onFileHistory?.(f.p)
         break
     }
   }

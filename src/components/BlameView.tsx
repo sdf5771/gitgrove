@@ -59,6 +59,10 @@ interface Props {
   // App이 넘기는 컨텍스트 파일(Diff·CommitDetail "blame" 진입 시). 내부 선택의 초기값.
   filePath?: string
   commits?: Commit[]
+  // 특정 시점 blame(파일 히스토리 → "이 시점 blame" 진입). 미전달=워킹트리(기존 동작).
+  rev?: string
+  // 현재 파일의 커밋 이력 열기(헤더 버튼). App이 파일 히스토리 모달을 띄운다.
+  onOpenHistory?: (filePath: string) => void
 }
 
 const FILES_WIDTH_KEY = 'gitgrove:blameFilesWidth'
@@ -74,7 +78,7 @@ const FileIcon: ReactNode = (
   <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 1.5h6l3 3v10h-9z" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /><path d="M9.5 1.5v3h3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
 )
 
-export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props) {
+export function BlameView({ onSelectCommit, repoPath, filePath, commits, rev: revProp, onOpenHistory }: Props) {
   const [blameLines, setBlameLines] = useState<RealBlameLine[]>([])
   const [loading, setLoading] = useState(false)
   const [selHash, setSelHash] = useState<string | null>(null)
@@ -88,6 +92,11 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
   const [filesLoading, setFilesLoading] = useState(false)
   const [filesError, setFilesError] = useState(false)
   const [fileQuery, setFileQuery] = useState('')
+
+  // ── 리비전 소유(selFile과 동일 패턴) ──
+  // prop 진입값을 초기값으로 삼고, 사용자가 "워킹트리로"를 누르면 내부에서 해제한다.
+  const [rev, setRev] = useState<string | undefined>(revProp)
+  useEffect(() => { setRev(revProp) }, [revProp])
 
   useEffect(() => { if (filePath) setSelFile(filePath) }, [filePath])
 
@@ -160,17 +169,18 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
       .finally(() => setFilesLoading(false))
   }, [repoPath])
 
-  // ── blame 로드 — 내부 selFile 경유 ──
+  // ── blame 로드 — 내부 selFile·rev 경유 ──
+  // rev 미전달=워킹트리(기존 동작), rev 전달=해당 리비전 시점.
   useEffect(() => {
     if (!repoPath || !selFile) { setBlameLines([]); return }
     setLoading(true)
     setSelHash(null)
     setOffAuthors(new Set())
-    const p = window.gitAPI?.blame(repoPath, selFile) as Promise<RealBlameLine[]> | undefined
+    const p = window.gitAPI?.blame(repoPath, selFile, rev) as Promise<RealBlameLine[]> | undefined
     p?.then(lines => setBlameLines(lines ?? []))
       .catch(() => setBlameLines([]))
       .finally(() => setLoading(false))
-  }, [repoPath, selFile])
+  }, [repoPath, selFile, rev])
 
   const filteredFiles = useMemo(() => {
     const q = fileQuery.trim().toLowerCase()
@@ -240,6 +250,16 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
       <div className="pnl-hdr">
         <h3>Git Blame</h3>
         <span className="fp">{displayFilePath}</span>
+        {/* 현재 보는 리비전 — rev 없으면 워킹트리, 있으면 짧은 해시 + 워킹트리 복귀 */}
+        <span className={`blame-rev${rev ? ' at' : ''}`} title={rev ? `${rev} 시점 blame` : '워킹트리 blame'}>
+          {rev ? `@ ${rev.slice(0, 7)}` : '워킹트리'}
+        </span>
+        {rev && (
+          <button className="blame-rev-reset" onClick={() => setRev(undefined)} title="워킹트리 blame으로 돌아가기">워킹트리로</button>
+        )}
+        {onOpenHistory && selFile && (
+          <button className="blame-hist-btn" onClick={() => onOpenHistory(selFile)} title="이 파일의 커밋 이력 보기">파일 히스토리</button>
+        )}
         {loading && <span style={{ fontSize: 10, color: 'var(--c-text-faint)' }}><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span></span>}
         <div className="auth-chips">
           {authors.map(a => (
@@ -291,7 +311,9 @@ export function BlameView({ onSelectCommit, repoPath, filePath, commits }: Props
                 {!repoPath
                   ? '저장소를 열면 blame을 볼 수 있어요'
                   : selFile
-                    ? `${displayFilePath}의 blame 정보가 없어요`
+                    ? (rev
+                      ? `이 시점에는 ${displayFilePath}이 없어요 · 워킹트리로 돌아가 보세요`
+                      : `${displayFilePath}의 blame 정보가 없어요`)
                     : '왼쪽에서 파일을 고르면 blame을 볼 수 있어요'}
               </div>
             </div>

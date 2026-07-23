@@ -12,9 +12,11 @@ interface Props {
   onFileSelect?: (filePath: string) => void
   onCherryPick: () => void
   onBlame: () => void
+  // 선택 파일의 커밋 이력 열기 — App이 파일 히스토리 모달을 띄운다.
+  onFileHistory?: (filePath: string) => void
 }
 
-export function CommitDetail({ commit, files, loadingFiles, fileDiffPreview, loadingPreview, onOpenDiff, onFileSelect, onCherryPick, onBlame }: Props) {
+export function CommitDetail({ commit, files, loadingFiles, fileDiffPreview, loadingPreview, onOpenDiff, onFileSelect, onCherryPick, onBlame, onFileHistory }: Props) {
   const [selFile, setSelFile] = useState(0)
   // 커밋이 바뀔 때만 선택을 초기화하고 첫 파일을 선택한다.
   // files/onFileSelect는 비동기로 도착·재생성되므로 deps에 넣으면 사용자 선택이 리셋된다.
@@ -129,6 +131,14 @@ export function CommitDetail({ commit, files, loadingFiles, fileDiffPreview, loa
         <button style={btnStyle} onClick={onBlame}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>Blame
         </button>
+        {onFileHistory && (
+          <button style={btnStyle} title="선택 파일의 커밋 이력" onClick={() => {
+            const filePath = hasRealFiles ? (files?.[selFile]?.path ?? '') : (commit.files[selFile]?.p ?? '')
+            if (filePath) onFileHistory(filePath)
+          }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l3 2"/></svg>이력
+          </button>
+        )}
       </div>
     </div>
   )

@@ -96,6 +96,14 @@ export function installGitApiMock() {
     isRepo: vi.fn(async () => true),
     clone: vi.fn(async (_url: string, parentDir: string): Promise<GitCloneResult> => ({ success: true, path: `${parentDir}/cloned`, name: 'cloned' })),
     getLog,
+    // 파일 단위 이력 — 기본 목은 해당 repo 의 커밋 목록 재사용(테스트에서 override 가능).
+    getFileLog: vi.fn(async (path: string) => logFor(path)),
+    // 서버측 커밋 검색 — 기본 목은 query 로 커밋 메시지를 대소문자 무관 필터(빈 query=빈 배열).
+    searchCommits: vi.fn(async (path: string, query: string) => {
+      const q = (query ?? '').trim().toLowerCase()
+      if (!q) return []
+      return logFor(path).filter(c => c.msg.toLowerCase().includes(q))
+    }),
     getActivity: vi.fn(async (_path: string, opts?: { days?: number }) => {
       const days = Math.max(1, Math.floor(opts?.days ?? 14))
       return { daily: Array(days).fill(0), total: 0, lastCommit: null }

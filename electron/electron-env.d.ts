@@ -34,6 +34,9 @@ interface GitCommit {
   parents: string[] // parent hashes (short)
   refs: string[]    // HEAD, branch names, tags (e.g. ["HEAD -> main", "origin/main"])
   stats: { files: number; insertions: number; deletions: number }
+  // 그 커밋 시점의 파일 경로. getFileLog(--follow)에서만 설정(리네임 추적).
+  // 다른 log 경로(getLog/searchCommits)에서는 미설정 → 프론트가 commit.path ?? filePath 사용.
+  path?: string
 }
 
 interface GitBranchResult {
@@ -302,16 +305,21 @@ interface Window {
     isRepo: (repoPath: string) => Promise<boolean>
     clone: (url: string, parentDir: string, opts?: { shallow?: boolean; recurseSubmodules?: boolean }) => Promise<GitCloneResult>
     getLog: (repoPath: string, opts?: { limit?: number; all?: boolean }) => Promise<GitCommit[]>
+    // 파일 단위 커밋 이력(리네임 추적, --follow). getLog 와 동일한 GitCommit 스키마. limit 기본 100/상한 1000.
+    getFileLog: (repoPath: string, filePath: string, opts?: { limit?: number }) => Promise<GitCommit[]>
+    // 전체 히스토리 커밋 메시지 검색(--grep, 대소문자 무관). author/all/limit 옵션. query 빈값=[]. limit 기본 100/상한 1000.
+    searchCommits: (repoPath: string, query: string, opts?: { author?: string; all?: boolean; limit?: number }) => Promise<GitCommit[]>
     getActivity: (repoPath: string, opts?: { days?: number }) => Promise<RepoActivity>
     getActivityBatch: (paths: string[], opts?: { days?: number }) => Promise<Record<string, RepoActivity>>
     getBranches: (repoPath: string) => Promise<GitBranchResult>
     getStatus: (repoPath: string) => Promise<GitStatusResult>
-    getDiff: (repoPath: string, filePath: string) => Promise<string>
-    getFileDiff: (repoPath: string, filePath: string, staged: boolean) => Promise<string>
+    // context: 주변 컨텍스트 줄 수(-U). 미전달=기본 3줄(기존 동작). 0~10000 클램프. "주변 줄 더 보기"용.
+    getDiff: (repoPath: string, filePath: string, context?: number) => Promise<string>
+    getFileDiff: (repoPath: string, filePath: string, staged: boolean, context?: number) => Promise<string>
     applyHunk: (repoPath: string, filePath: string, hunkIndex: number, reverse: boolean) => Promise<void>
     getFiles: (repoPath: string, commitHash: string) => Promise<GitFileEntry[]>
     listFiles: (repoPath: string) => Promise<string[]>
-    getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string) => Promise<string>
+    getCommitFileDiff: (repoPath: string, commitHash: string, filePath: string, context?: number) => Promise<string>
     stage: (repoPath: string, files: string[]) => Promise<void>
     unstage: (repoPath: string, files: string[]) => Promise<void>
     commit: (repoPath: string, message: string) => Promise<void>
@@ -323,7 +331,8 @@ interface Window {
     // pull/push/fetch 진행률 구독. 반환된 함수를 호출해 구독 해제(effect cleanup).
     onRemoteProgress: (cb: (p: RemoteProgress) => void) => () => void
     checkout: (repoPath: string, branch: string) => Promise<string>
-    blame: (repoPath: string, filePath: string) => Promise<GitBlameLine[]>
+    // rev 미전달=워킹트리(기존 동작), rev 전달=해당 리비전 시점 blame(안전 문자·선행 '-' 차단).
+    blame: (repoPath: string, filePath: string, rev?: string) => Promise<GitBlameLine[]>
     getRemotes: (repoPath: string) => Promise<GitRemoteInfo[]>
     // 원격 관리(add/remove/rename/set-url). name/url 검증 실패·git 에러는 reject(사유 먼저 문구).
     remoteAdd: (repoPath: string, name: string, url: string) => Promise<void>

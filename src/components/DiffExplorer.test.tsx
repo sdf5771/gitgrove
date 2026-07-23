@@ -143,6 +143,84 @@ describe('DiffExplorer — 커밋 피커(변경2)', () => {
   })
 })
 
+// ── 변경(확장): 주변 줄 더 보기(context 단계) ──
+// CONTEXT_STEPS=[3,10,25,50]. .dxexp 는 selFile && rows>0 일 때만 렌더되므로
+// getCommitFileDiff/getDiff 가 RAW 를 돌려주게 해서 rows 를 채운다.
+const TWO_FILES = [
+  { path: 'src/a.ts', status: 'M', additions: 2, deletions: 1 },
+  { path: 'src/b.ts', status: 'M', additions: 1, deletions: 0 },
+] as unknown as GitFileEntry[]
+
+describe('DiffExplorer — 주변 줄 더 보기(context 단계)', () => {
+  it('초기 diff는 context=3으로 호출하고, 맥락 줄이기 버튼이 양끝(3줄)에서 비활성', async () => {
+    (api.getCommitFileDiff as unknown as Mock).mockResolvedValue(RAW)
+    render(<DiffExplorer commit={COMMIT} repoPath={REPO} commitFiles={FILES} />)
+    await screen.findByText('function f()')
+    expect(api.getCommitFileDiff).toHaveBeenLastCalledWith(REPO, 'c0ffee1', 'src/a.ts', 3)
+    expect(screen.getByText('맥락 3줄')).toBeInTheDocument()
+    expect(screen.getByTitle('맥락 줄이기')).toBeDisabled()
+    expect(screen.getByTitle('주변 줄 더 보기')).not.toBeDisabled()
+  })
+
+  it("'주변 줄 더 보기'를 누르면 다음 단계(10) context로 getCommitFileDiff 재호출", async () => {
+    (api.getCommitFileDiff as unknown as Mock).mockResolvedValue(RAW)
+    render(<DiffExplorer commit={COMMIT} repoPath={REPO} commitFiles={FILES} />)
+    await screen.findByText('function f()')
+
+    fireEvent.click(screen.getByTitle('주변 줄 더 보기'))
+    await waitFor(() => expect(api.getCommitFileDiff).toHaveBeenLastCalledWith(REPO, 'c0ffee1', 'src/a.ts', 10))
+    expect(screen.getByText('맥락 10줄')).toBeInTheDocument()
+    // 단계가 오르면 줄이기 버튼이 활성화된다.
+    expect(screen.getByTitle('맥락 줄이기')).not.toBeDisabled()
+  })
+
+  it('최대 단계(50)에서 더 보기 버튼이 비활성, 줄이기로 이전 단계 context 복귀', async () => {
+    (api.getCommitFileDiff as unknown as Mock).mockResolvedValue(RAW)
+    render(<DiffExplorer commit={COMMIT} repoPath={REPO} commitFiles={FILES} />)
+    await screen.findByText('function f()')
+    const more = screen.getByTitle('주변 줄 더 보기')
+
+    fireEvent.click(more) // 10
+    fireEvent.click(more) // 25
+    fireEvent.click(more) // 50
+    await waitFor(() => expect(api.getCommitFileDiff).toHaveBeenLastCalledWith(REPO, 'c0ffee1', 'src/a.ts', 50))
+    expect(screen.getByText('맥락 50줄')).toBeInTheDocument()
+    expect(more).toBeDisabled()
+
+    fireEvent.click(screen.getByTitle('맥락 줄이기')) // 25
+    await waitFor(() => expect(api.getCommitFileDiff).toHaveBeenLastCalledWith(REPO, 'c0ffee1', 'src/a.ts', 25))
+    expect(screen.getByText('맥락 25줄')).toBeInTheDocument()
+  })
+
+  it('파일을 전환하면 context가 3줄로 리셋되어 새 파일을 context=3으로 조회', async () => {
+    (api.getCommitFileDiff as unknown as Mock).mockResolvedValue(RAW)
+    render(<DiffExplorer commit={COMMIT} repoPath={REPO} commitFiles={TWO_FILES} />)
+    await screen.findByText('function f()')
+
+    // a.ts 를 25줄까지 올린다.
+    const more = screen.getByTitle('주변 줄 더 보기')
+    fireEvent.click(more)
+    fireEvent.click(more)
+    await waitFor(() => expect(api.getCommitFileDiff).toHaveBeenLastCalledWith(REPO, 'c0ffee1', 'src/a.ts', 25))
+    expect(screen.getByText('맥락 25줄')).toBeInTheDocument()
+
+    // b.ts 로 전환 → ctxStep 리셋 → context 3 으로 새 파일 조회
+    fireEvent.click(screen.getByText('b.ts'))
+    await waitFor(() => expect(api.getCommitFileDiff).toHaveBeenLastCalledWith(REPO, 'c0ffee1', 'src/b.ts', 3))
+    expect(screen.getByText('맥락 3줄')).toBeInTheDocument()
+  })
+
+  it('커밋 없이 repoPath만 있으면 getDiff(repo, file, context)로 context를 전달', async () => {
+    (api.getDiff as unknown as Mock).mockResolvedValue(RAW)
+    render(<DiffExplorer commit={null} repoPath={REPO} commitFiles={FILES} />)
+    await screen.findByText('function f()')
+    expect(api.getDiff).toHaveBeenLastCalledWith(REPO, 'src/a.ts', 3)
+
+    fireEvent.click(screen.getByTitle('주변 줄 더 보기'))
+    await waitFor(() => expect(api.getDiff).toHaveBeenLastCalledWith(REPO, 'src/a.ts', 10))
+  })
+})
+
 // ── 변경1: 파일 pane 폭 리사이즈(스모크) ──
 // BlameView 와 동일 로직. repoPath 미전달로 diff fetch 효과를 태우지 않아 async 경고를 피한다.
 // jsdom clientWidth=0 → max=480 상한이라 아래 델타 계산은 결정적.

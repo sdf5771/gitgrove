@@ -49,6 +49,7 @@ import { SettingsPanel, type SettingsTab } from './components/modals/SettingsPan
 import { AddRepoModal } from './components/modals/AddRepoModal'
 import { CloneModal } from './components/modals/CloneModal'
 import { ConflictEditorModal } from './components/modals/ConflictEditorModal'
+import { FileHistoryModal } from './components/modals/FileHistoryModal'
 import { RepoManager } from './components/RepoManager'
 import { Onboarding } from './components/Onboarding'
 import { markOnboardingSeen, shouldShowOnboarding, hasExistingUserDataAsync } from './utils/onboarding'
@@ -328,6 +329,16 @@ export default function App() {
   const [diffFile, setDiffFile] = useState<FileEntry | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const srchRef = useRef<HTMLInputElement>(null)
+
+  // ── 파일 히스토리 모달 · 특정 시점 blame · 전체 히스토리 검색 ──
+  // 파일 이력 모달(진입: 컨텍스트 메뉴·Diff·Blame·CommitDetail). null=닫힘.
+  const [fileHistory, setFileHistory] = useState<{ path: string } | null>(null)
+  // blame 진입 요청 — path(+rev). rev 있으면 그 시점 blame. null이면 기본 파일 워킹트리.
+  const [blameReq, setBlameReq] = useState<{ path: string; rev?: string } | null>(null)
+  // 로드셋 밖 커밋을 Diff로 직접 열 때의 외부 선택 커밋(전체 검색·파일 이력 진입).
+  const [extCommit, setExtCommit] = useState<Commit | null>(null)
+  // 전체 히스토리 검색 결과(감사 H2: "로드된 것만 봤다"는 착시 제거). null=미실행.
+  const [gsearch, setGsearch] = useState<{ loading: boolean; results: GitCommit[] | null } | null>(null)
 
   const [showMerge,      setShowMerge]      = useState(false)
   const [showCherryPick, setShowCherryPick] = useState(false)
@@ -820,7 +831,7 @@ export default function App() {
   const trayBehind = trayCurBranch?.behind ?? 0
   const trayDirtyCount = realStaged.length + realUnstaged.length
   // 최근 레포 목록은 name+path를 이은 파생 원시 키로 변동을 감지하고, 배열은 memo로 안정화한다.
-  const trayRecentKey = repos.map(r => `${r.name} ${r.path}`).join('')
+  const trayRecentKey = repos.map(r => `${r.name}\u0000${r.path}`).join(String.fromCharCode(31))
   const trayRecentRepos = useMemo(
     () => repos.map(r => ({ name: r.name, path: r.path })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1301,6 +1312,7 @@ export default function App() {
 
   // ── 커밋 선택 시 파일 목록 로드 (git:files) ──
   const handleSelectCommit = useCallback(async (idx: number) => {
+    setExtCommit(null)  // 로드셋 내 선택 → 외부 커밋 표시 해제
     setSelIdx(idx)
     const commit = filteredCommits[idx]
     if (!commit || !repoPath) return
@@ -1326,7 +1338,66 @@ export default function App() {
   }, [filteredCommits, repoPath])
 
   useEffect(() => { if (selIdx >= filteredCommits.length) setSelIdx(Math.max(0, filteredCommits.length - 1)) }, [filteredCommits, selIdx])
-  const selectedCommit = filteredCommits[selIdx] ?? null
+  // 외부(로드셋 밖) 커밋을 표시 중이면 그것을, 아니면 로드셋의 선택 커밋을 쓴다.
+  const selectedCommit = extCommit ?? filteredCommits[selIdx] ?? null
+
+  // ── 파일 히스토리 모달 열기(공통 진입점) ──
+  const openFileHistory = useCallback((path: string) => {
+    if (path) setFileHistory({ path })
+  }, [])
+
+  // ── 로드셋 밖 커밋을 Diff로 열기(전체 검색·파일 이력 "이 커밋 열기") ──
+  // 로드된 목록에 있으면 그 인덱스로 선택, 없으면 외부 커밋으로 직접 파일·diff 로드.
+  const openCommitFromGit = useCallback(async (c: GitCommit) => {
+    setFileHistory(null)
+    if (!repoPath) return
+    const idx = filteredCommits.findIndex(fc => fc.id === c.id)
+    if (idx >= 0) {
+      await handleSelectCommit(idx)
+      setView('diff')
+      return
+    }
+    setExtCommit(toAppCommit(c, [], new Map()))
+    setSelIdx(0)
+    setLoadingFiles(true)
+    setCommitFiles([])
+    try {
+      const files = await window.gitAPI?.getFiles(repoPath, c.id) ?? []
+      setCommitFiles(files)
+    } catch (e) {
+      console.error('getFiles failed:', e)
+      setCommitFiles([])
+    } finally {
+      setLoadingFiles(false)
+    }
+    setView('diff')
+  }, [repoPath, filteredCommits, handleSelectCommit])
+
+  // ── 특정 시점 blame 진입(파일 이력 → "이 시점 blame") ──
+  const openBlameAtRev = useCallback((path: string, rev: string) => {
+    setFileHistory(null)
+    setBlameReq({ path, rev })
+    setView('blame')
+  }, [])
+
+  // ── 전체 히스토리 검색(git:search-commits) ──
+  const runGlobalSearch = useCallback(async () => {
+    const q = searchQuery.trim()
+    if (!repoPath || !q) return
+    setGsearch({ loading: true, results: null })
+    try {
+      // 로드셋(getLog {all:showAllBranches})과 검색 범위를 맞춘다 — 전체 브랜치 보기면 타 브랜치도 검색.
+      const results = await window.gitAPI?.searchCommits(repoPath, q, { limit: 200, all: showAllBranches }) ?? []
+      setGsearch({ loading: false, results })
+    } catch (e) {
+      console.error('searchCommits failed:', e)
+      setGsearch({ loading: false, results: [] })
+    }
+  }, [repoPath, searchQuery, showAllBranches])
+
+  // 검색어·리포가 바뀌면 이전 전체검색 결과·외부 커밋 표시를 리셋한다.
+  useEffect(() => { setGsearch(null) }, [searchQuery, repoPath])
+  useEffect(() => { setExtCommit(null) }, [repoPath])
 
   // ── 변경1: 리포 로드/전환 후 첫 커밋(index 0) 파일 목록 자동 로드 ──
   // handleSelectCommit이 selIdx 설정 + commitFiles 로드를 담당하므로, 새 repoPath마다
@@ -1362,7 +1433,8 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setShowCmd(v => !v) }
       if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setShowSettings(true) }
       if (e.key === 'Escape') {
-        if (showPullMenu) setShowPullMenu(false)
+        if (fileHistory) setFileHistory(null)
+        else if (showPullMenu) setShowPullMenu(false)
         else if (forcePushOpen) setForcePushOpen(false)
         else if (showCmd) setShowCmd(false)
         else if (ctxMenu) setCtxMenu(null)
@@ -1386,7 +1458,7 @@ export default function App() {
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showAuth, showRemotes, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery, showPullMenu, forcePushOpen])
+  }, [showCmd, ctxMenu, showMerge, showCherryPick, showStash, showTags, showAuth, showRemotes, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, searchQuery, showPullMenu, forcePushOpen, fileHistory])
 
   // ── 히스토리 뷰: 방향키 위/아래로 커밋 선택, Enter로 해당 커밋 Diff 열기 ──
   useEffect(() => {
@@ -1397,7 +1469,7 @@ export default function App() {
       if (t && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showAuth || showRemotes || showBranch ||
-          showRebase || showSettings || showAddRepo || showConflict || showRepoManager || forcePushOpen) return
+          showRebase || showSettings || showAddRepo || showConflict || showRepoManager || forcePushOpen || fileHistory) return
       const n = filteredCommits.length
       if (n === 0) return
       if (e.key === 'ArrowDown') {
@@ -1417,7 +1489,7 @@ export default function App() {
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [view, filteredCommits, selIdx, handleSelectCommit, showCmd, ctxMenu, showMerge,
-      showCherryPick, showStash, showTags, showAuth, showRemotes, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, forcePushOpen])
+      showCherryPick, showStash, showTags, showAuth, showRemotes, showBranch, showRebase, showSettings, showAddRepo, showConflict, showRepoManager, forcePushOpen, fileHistory])
 
   const handleCommand = useCallback((id: string) => {
     const M: Record<string, () => void> = {
@@ -1438,7 +1510,7 @@ export default function App() {
       'view-history':  () => setView('history'),
       'view-stage':    () => setView('commit'),
       'view-diff':     () => setView('diff'),
-      'view-blame':    () => setView('blame'),
+      'view-blame':    () => { setBlameReq(null); setView('blame') },
       'settings':      () => setShowSettings(true),
     }
     M[id]?.()
@@ -1737,7 +1809,7 @@ export default function App() {
             const tabLabel = id === 'pr' ? (repoProvider === 'gitlab' ? 'MR' : 'PR') : label
             const tabTitle = id === 'pr' ? (repoProvider === 'gitlab' ? 'Merge Requests' : 'Pull Requests') : undefined
             return (
-              <button key={id} className={`vbtn${view === id ? ' on' : ''}`} onClick={() => setView(id)} title={tabTitle}>{tabLabel}</button>
+              <button key={id} className={`vbtn${view === id ? ' on' : ''}`} onClick={() => { if (id === 'blame') setBlameReq(null); setView(id) }} title={tabTitle}>{tabLabel}</button>
             )
           })}
         </div>
@@ -1848,7 +1920,9 @@ export default function App() {
                   onSelectCommit={i => { setSelIdx(i); setView('history') }}
                   repoPath={repoPath}
                   commits={filteredCommits}
-                  filePath={diffFile?.p || selectedCommit?.files?.[0]?.p || (repoPath ? undefined : 'src/auth/jwt.ts')}
+                  filePath={blameReq?.path || diffFile?.p || selectedCommit?.files?.[0]?.p || (repoPath ? undefined : 'src/auth/jwt.ts')}
+                  rev={blameReq?.rev}
+                  onOpenHistory={openFileHistory}
                 />
               </>
             ) : view === 'diff' ? (
@@ -1856,9 +1930,10 @@ export default function App() {
                 commit={selectedCommit}
                 repoPath={repoPath}
                 commitFiles={repoPath ? commitFiles : undefined}
-                commits={filteredCommits}
+                commits={extCommit ? undefined : filteredCommits}
                 selIdx={selIdx}
-                onSelectCommit={(i) => { void handleSelectCommit(i) }}
+                onSelectCommit={extCommit ? undefined : (i) => { void handleSelectCommit(i) }}
+                onOpenHistory={openFileHistory}
               />
             ) : (
               <>
@@ -1898,8 +1973,46 @@ export default function App() {
                         <span className="gha">Author</span>
                         <span className="ght">Time</span>
                       </div>
+                      {/* 전체 히스토리 검색 유도 — "로드된 것만 봤다"는 착시 제거(감사 H2) */}
+                      {searchQuery && repoPath && (
+                        <div className="gsrch-bar">
+                          {gsearch?.results ? (
+                            <>
+                              {/* limit 200 상한 — 정확히 200이면 더 있었을 수 있어 "200+ · 상한 도달"로 표기 */}
+                              <span className="gsrch-note">전체 히스토리에서 <b>{gsearch.results.length >= 200 ? '200+' : gsearch.results.length}</b>개 일치{gsearch.results.length >= 200 && <span className="gsrch-cap"> · 상한 도달</span>}</span>
+                              <button className="gsrch-link" onClick={() => setGsearch(null)}>로드된 목록으로</button>
+                            </>
+                          ) : gsearch?.loading ? (
+                            <span className="gsrch-note"><span style={{ display: 'inline-block', animation: 'spin 600ms linear infinite' }}>⟳</span> 전체 히스토리를 살펴보는 중…</span>
+                          ) : (
+                            <>
+                              <span className="gsrch-note">로드된 <b>{baseCommits.length}</b>개 중 <b>{filteredCommits.length}</b>개 일치</span>
+                              <button className="gsrch-link" onClick={runGlobalSearch}>전체 히스토리 검색</button>
+                            </>
+                          )}
+                        </div>
+                      )}
                       {repoSwitching ? (
                         <CommitSkeletons rows={8} rowH={rowH} />
+                      ) : gsearch?.results ? (
+                        <div className="gsrch-list code-scroll">
+                          {gsearch.results.length === 0 ? (
+                            <div className="gsrch-empty">전체 히스토리에도 일치하는 커밋이 없어요 · 검색어를 바꿔 보세요</div>
+                          ) : gsearch.results.map(c => {
+                            const loadedIdx = filteredCommits.findIndex(fc => fc.id === c.id)
+                            const isSel = !extCommit && loadedIdx >= 0 && loadedIdx === selIdx
+                            const extSel = !!extCommit && extCommit.id === c.id
+                            return (
+                              <div key={c.fullId} className={`gsrch-item${isSel || extSel ? ' on' : ''}`} onClick={() => { void openCommitFromGit(c) }} title="이 커밋의 diff 열기">
+                                <span className="gsrch-sha">{c.id}</span>
+                                <span className="gsrch-msg">{c.msg.split('\n')[0]}</span>
+                                {loadedIdx < 0 && <span className="gsrch-tag" title="로드된 목록 밖의 커밋">더 과거</span>}
+                                <span className="gsrch-au">{c.author}</span>
+                                <span className="gsrch-time">{c.time}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
                       ) : (
                         <CommitGraph
                           commits={filteredCommits}
@@ -1940,6 +2053,7 @@ export default function App() {
                           if (toast) notify(toast.cls, toast.title, toast.msg)
                         }
                       }}
+                      onFileHistory={openFileHistory}
                     />
                   )}
                 </div>
@@ -1981,7 +2095,8 @@ export default function App() {
                         onFileSelect={handleCommitFileSelect}
                         onOpenDiff={handleOpenCommitFileDiff}
                         onCherryPick={() => setShowCherryPick(true)}
-                        onBlame={() => setView('blame')}
+                        onBlame={() => { setBlameReq(null); setView('blame') }}
+                        onFileHistory={openFileHistory}
                       />
                     </>
                   ) : (
@@ -2055,6 +2170,15 @@ export default function App() {
           />
         )}
         {showConflict    && <ConflictEditorModal repoPath={repoPath} onClose={() => setShowConflict(false)} onComplete={() => notify(...spread(TOASTS.conflictResolved()))} />}
+        {fileHistory && repoPath && (
+          <FileHistoryModal
+            repoPath={repoPath}
+            filePath={fileHistory.path}
+            onClose={() => setFileHistory(null)}
+            onOpenCommit={c => { void openCommitFromGit(c) }}
+            onBlameAtRev={openBlameAtRev}
+          />
+        )}
         {showOnboarding  && (
           <Onboarding
             onClose={closeOnboarding}
