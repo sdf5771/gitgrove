@@ -94,8 +94,9 @@ describe('RemoteManagerModal — 이름/URL 변경', () => {
     const { gitAPI } = setup()
     await screen.findByText('git@github.com:acme/app.git')
 
-    // 기본 선택은 첫 원격(origin). 이름 입력에 origin 프리필.
-    const nameInput = screen.getByDisplayValue('origin')
+    // 기본 선택은 첫 원격(origin). 이름 입력에 origin 프리필(자동선택 effect가 한 틱 늦게
+    // 상세 pane 입력을 채우므로 동기 getBy 대신 findBy로 프리필 완료를 기다린다 — CI 플레이크 방지).
+    const nameInput = await screen.findByDisplayValue('origin')
     await user.clear(nameInput)
     await user.type(nameInput, 'downstream')
     await user.click(screen.getByRole('button', { name: '이름 변경' }))
@@ -108,7 +109,7 @@ describe('RemoteManagerModal — 이름/URL 변경', () => {
     const { gitAPI } = setup()
     await screen.findByText('git@github.com:acme/app.git')
 
-    const urlInput = screen.getByDisplayValue('git@github.com:acme/app.git')
+    const urlInput = await screen.findByDisplayValue('git@github.com:acme/app.git')
     await user.clear(urlInput)
     await user.type(urlInput, 'git@github.com:acme/renamed.git')
     await user.click(screen.getByRole('button', { name: 'URL 변경' }))
@@ -119,6 +120,9 @@ describe('RemoteManagerModal — 이름/URL 변경', () => {
   it('값이 그대로면(dirty 아님) 변경 버튼이 비활성이라 호출 안 함', async () => {
     setup()
     await screen.findByText('git@github.com:acme/app.git')
+    // 상세 pane 프리필(origin) 완료를 기다린 뒤 dirty 판정(비활성)을 단언한다.
+    // 프리필 전에는 입력이 비어 dirty 로 오판돼 버튼이 활성일 수 있어 CI에서 간헐 실패했음.
+    await screen.findByDisplayValue('origin')
     expect(screen.getByRole('button', { name: '이름 변경' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'URL 변경' })).toBeDisabled()
   })
