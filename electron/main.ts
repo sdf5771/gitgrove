@@ -471,55 +471,50 @@ function flushPendingTrayActions() {
 
 // 현재 trayState로 컨텍스트 메뉴 템플릿을 구성.
 // 라이팅 가이드: 해요체·명사형·가운뎃점 `·`·이모지 없음. git 토큰은 괄호 병기.
+// 클로드 디자인 시안(GitGrove Tray 아이콘.html)의 드롭다운 구성을 그대로 따른다:
+// [저장소명] · [브랜치 · ↑a ↓b · 변경 n] — Fetch/Pull/Push — 최근 저장소(평면 목록) —
+// 알림 열기 · GitGrove 열기 — 종료.
+// ⚠️ Tray 메뉴는 네이티브 NSMenu라 시안의 시각 디자인(패널 라운딩·hover 색·폰트·색상 토큰·
+//    알림 배지 pill)은 재현 불가 — 라벨/순서/구분선/활성상태만 제어한다. 배지·색 토큰은 텍스트로 근사.
 function buildTrayMenu(s: TrayState): Electron.MenuItemConstructorOptions[] {
   const items: Electron.MenuItemConstructorOptions[] = []
+  const notif = s.notifCount ?? 0
 
-  // 상단 상태(비활성 label)
+  // 상단 상태(비활성) — 시안: 저장소명 한 줄 + `브랜치 · ↑a ↓b · 변경 n` 한 줄.
   if (s.hasRepo) {
-    const head = s.branch ? `${s.repoName ?? '저장소'} · ${s.branch}` : (s.repoName ?? '저장소')
     const ahead = s.ahead ?? 0
     const behind = s.behind ?? 0
     const dirty = s.dirtyCount ?? 0
-    items.push({ label: head, enabled: false })
-    items.push({ label: `↑${ahead} ↓${behind} · 변경 ${dirty}`, enabled: false })
+    items.push({ label: s.repoName ?? '저장소', enabled: false })
+    items.push({ label: `${s.branch ?? '—'} · ↑${ahead} ↓${behind} · 변경 ${dirty}`, enabled: false })
+
+    // git 액션 — 시안: 상태 바로 아래.
+    items.push({ type: 'separator' })
+    items.push({ label: '가져오기 (Fetch)', click: () => sendTrayAction({ type: 'fetch' }) })
+    items.push({ label: '받기 (Pull)', click: () => sendTrayAction({ type: 'pull' }) })
+    items.push({ label: '보내기 (Push)', click: () => sendTrayAction({ type: 'push' }) })
+
+    // 최근 저장소 — 시안: 서브메뉴가 아니라 비활성 라벨 아래 평면 목록. 메뉴 비대 방지로 상한 5.
+    const recents = (s.recentRepos ?? []).slice(0, 5)
+    if (recents.length) {
+      items.push({ type: 'separator' })
+      items.push({ label: '최근 저장소', enabled: false })
+      for (const r of recents) {
+        items.push({ label: r.name, click: () => sendTrayAction({ type: 'switch-repo', path: r.path }) })
+      }
+    }
   } else {
     items.push({ label: '저장소가 열려 있지 않아요', enabled: false })
   }
 
+  // 알림 · GitGrove 열기 — 시안: 하단 묶음. 알림은 저장소 유무와 무관(App이 notifCount를 항상
+  // push, open-notifications는 repoPath 없이도 처리). 배지 pill은 네이티브 불가 → `(n)` 텍스트로.
   items.push({ type: 'separator' })
-  items.push({ label: '창 열기', click: () => showMainWindow() })
-
-  // git 액션·최근 저장소는 저장소가 있을 때만 노출(없으면 비표시).
-  if (s.hasRepo) {
-    items.push({ type: 'separator' })
-    items.push({ label: '가져오기(Fetch)', click: () => sendTrayAction({ type: 'fetch' }) })
-    items.push({ label: '받기(Pull)', click: () => sendTrayAction({ type: 'pull' }) })
-    items.push({ label: '보내기(Push)', click: () => sendTrayAction({ type: 'push' }) })
-
-    const recents = s.recentRepos ?? []
-    if (recents.length) {
-      items.push({ type: 'separator' })
-      items.push({
-        label: '최근 저장소',
-        submenu: recents.map((r) => ({
-          label: r.name,
-          click: () => sendTrayAction({ type: 'switch-repo', path: r.path }),
-        })),
-      })
-    }
-  }
-
-  // 알림은 저장소와 무관(App이 notifCount를 레포 유무와 상관없이 push, open-notifications는
-  // repoPath 없이도 처리 가능) → hasRepo 게이트 밖에서 항상 노출.
-  const notif = s.notifCount ?? 0
-  items.push({ type: 'separator' })
-  items.push({
-    label: `알림 열기${notif ? ` (${notif})` : ''}`,
-    click: () => sendTrayAction({ type: 'open-notifications' }),
-  })
+  items.push({ label: `알림 열기${notif ? ` (${notif})` : ''}`, click: () => sendTrayAction({ type: 'open-notifications' }) })
+  items.push({ label: 'GitGrove 열기', click: () => showMainWindow() })
 
   items.push({ type: 'separator' })
-  items.push({ label: 'GitGrove 종료', click: () => { if (!isQuitting) { isQuitting = true; app.quit() } } })
+  items.push({ label: '종료', click: () => { if (!isQuitting) { isQuitting = true; app.quit() } } })
 
   return items
 }
