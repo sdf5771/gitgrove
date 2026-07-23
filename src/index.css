@@ -104,8 +104,35 @@ body { display: flex; align-items: center; justify-content: center; }
 .abt-sep { width: 1px; height: 22px; background: var(--c-border); margin: 0 3px; flex-shrink: 0; }
 .view-toggle {
   display: flex; background: var(--c-bg-inset); border: 1px solid var(--c-border);
-  border-radius: var(--r2); overflow: hidden; margin-left: auto;
+  border-radius: var(--r2); overflow: hidden;
+  /* 뷰 탭은 항상 접근 가능해야 하므로 붕괴 victim이 되지 않게 고정폭 유지.
+     우측 정렬은 .ab-spacer(flex:1)가 담당(과거 margin-left:auto 대체). */
+  flex-shrink: 0;
 }
+/* 액션바 여유 폭 흡수 스페이서 — 뷰 토글 이하(검색·⌘K)를 우측으로 민다.
+   min-width:0으로 좁아지면 0까지 줄어 부가버튼 오버플로 측정 기준이 된다. */
+.ab-spacer { flex: 1 1 auto; min-width: 0; align-self: stretch; }
+/* 부가 git-op 버튼 인라인 묶음(펼침 상태) — 최소폭 유지해 정확히 측정. */
+.action-aux { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+/* "⋯ 더보기" (접힘 상태) */
+.abar-more { position: relative; display: inline-flex; flex-shrink: 0; }
+.abar-more-btn { padding: 5px 9px; }
+.abar-more-btn svg { opacity: .8; }
+.abar-more-backdrop { position: fixed; inset: 0; z-index: 59; }
+.abar-more-menu {
+  position: absolute; top: calc(100% + 5px); left: 0; z-index: 60; min-width: 180px;
+  background: var(--c-bg-surface); border: 1px solid var(--c-border-strong); border-radius: var(--r3);
+  box-shadow: 0 16px 40px rgba(0,0,0,.6); overflow: hidden; padding: 4px; display: flex; flex-direction: column;
+  animation: mfade .14s ease;
+}
+.abar-more-item {
+  display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: var(--r2);
+  cursor: pointer; color: var(--c-text); font-family: var(--font-body); font-size: 12.5px;
+  background: none; border: none; text-align: left; width: 100%; transition: background 100ms, color 100ms;
+}
+.abar-more-item:hover { background: var(--c-gold-bg-soft); color: var(--c-text-strong); }
+.abar-more-item:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--c-gold-border); }
+.abar-more-ic { display: inline-flex; align-items: center; justify-content: center; width: 16px; flex-shrink: 0; opacity: .8; }
 .vbtn {
   padding: 5px 16px; background: transparent; border: none; color: var(--c-text-muted);
   font-size: 12px; font-family: var(--font-body); cursor: pointer; transition: background 120ms, color 120ms;
@@ -560,7 +587,7 @@ body { display: flex; align-items: center; justify-content: center; }
 .dx-bars{display:flex;gap:1px;flex-shrink:0;}
 .dx-bars i{width:3.5px;height:8px;border-radius:1px;}
 .dx-bars i.a{background:var(--c-success);}.dx-bars i.d{background:var(--c-danger);}
-.dx-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;}
+.dx-main{flex:1;display:flex;flex-direction:column;min-width:0;overflow:hidden;container-type:inline-size;container-name:dxmain;}
 .dx-hd{display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--c-divider);flex-shrink:0;}
 .dx-hd .fp{flex:1;min-width:40px;font-family:var(--font-mono);font-size:11.5px;color:var(--c-text-strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dx-hd .stats{font-family:var(--font-mono);font-size:10.5px;display:flex;gap:5px;flex-shrink:0;}
@@ -619,6 +646,17 @@ body { display: flex; align-items: center; justify-content: center; }
 .dxexp-lbl{padding:0 9px;font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);border-right:1px solid var(--c-border);white-space:nowrap;}
 .dx-hist-btn{flex-shrink:0;padding:3px 10px;background:var(--c-bg-inset);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);font-size:10.5px;font-family:var(--font-body);cursor:pointer;transition:color 120ms,border-color 120ms;}
 .dx-hist-btn:hover{color:var(--c-gold-300);border-color:var(--c-gold-border);}
+/* 헤더 라벨 축약 — 기본은 풀 라벨, 좁은 diff pane(컨테이너 쿼리)에서 짧은 라벨로 스왑해
+   모드 토글(.dx-mode)·파일경로(.fp)가 잘리지 않게 한다. */
+.dx-hd .lbl-short{display:none;}
+@container dxmain (max-width: 620px){
+  .dx-hd .dxexp-btn.more .lbl-full,
+  .dx-hd .dx-hist-btn .lbl-full,
+  .dx-hd .dxexp-lbl .lbl-full{display:none;}
+  .dx-hd .dxexp-btn.more .lbl-short,
+  .dx-hd .dx-hist-btn .lbl-short,
+  .dx-hd .dxexp-lbl .lbl-short{display:inline;}
+}
 
 /* ── Blame 리비전 표시 · 파일 히스토리 진입(.blame-rev / .blame-hist-btn) ── */
 .blame-rev{flex-shrink:0;font-family:var(--font-mono);font-size:10px;color:var(--c-text-faint);padding:1px 8px;border:1px solid var(--c-border);border-radius:var(--rpill);}
@@ -628,8 +666,8 @@ body { display: flex; align-items: center; justify-content: center; }
 
 /* ── 전체 히스토리 검색(.gsrch-*) ── */
 .gsrch-bar{display:flex;align-items:center;gap:10px;padding:6px 14px;border-bottom:1px solid var(--c-divider);background:var(--c-bg-inset);flex-shrink:0;font-size:11px;color:var(--c-text-muted);}
-.gsrch-note{display:flex;align-items:center;gap:5px;}
-.gsrch-note b{font-family:var(--font-mono);color:var(--c-text-strong);font-weight:600;}
+.gsrch-note{display:flex;align-items:center;gap:5px;min-width:0;}
+.gsrch-note b{font-family:var(--font-mono);color:var(--c-text-strong);font-weight:600;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .gsrch-cap{color:var(--c-warning);font-size:10px;}
 .gsrch-link{margin-left:auto;padding:3px 11px;background:var(--c-bg-surface);border:1px solid var(--c-gold-border);border-radius:var(--r2);color:var(--c-gold-300);font-size:10.5px;font-family:var(--font-body);cursor:pointer;transition:background 120ms;flex-shrink:0;}
 .gsrch-link:hover{background:var(--c-gold-bg);}
@@ -1117,6 +1155,9 @@ body { display: flex; align-items: center; justify-content: center; }
 .md-body h4,.md-body h5,.md-body h6{font-weight:600;color:var(--c-text-strong);margin:14px 0 6px;font-size:13px;}
 .md-body a{color:var(--c-gold-300);text-decoration:none;cursor:pointer;}
 .md-body a:hover{text-decoration:underline;}
+/* 원격 base를 몰라 열 수 없는 상대·앵커 링크 — 살려두되 강등(점선·흐리게)해 구분. */
+.md-body a.md-link-rel{color:var(--c-text-muted);text-decoration:underline dotted;text-underline-offset:2px;cursor:help;}
+.md-body a.md-link-rel:hover{color:var(--c-text);text-decoration:underline dotted;}
 .md-body code{font-family:var(--font-mono);font-size:.85em;background:var(--c-bg-inset);padding:1px 5px;border-radius:4px;}
 .md-body pre{background:var(--c-bg-elevated);border:1px solid var(--c-border);border-radius:var(--r2);padding:10px 12px;overflow-x:auto;margin:0 0 10px;}
 .md-body pre code{background:none;padding:0;font-size:12px;line-height:1.5;display:block;}
@@ -1405,8 +1446,8 @@ body { display: flex; align-items: center; justify-content: center; }
 @keyframes stashToastIn{from{opacity:0;transform:translate(-50%,10px);}to{opacity:1;transform:translate(-50%,0);}}
 
 /* ── Search ── */
-.srch-wrap{position:relative;margin-left:8px;}
-.srch-wrap .srch{width:190px;padding-right:28px;}
+.srch-wrap{position:relative;margin-left:8px;min-width:0;flex-shrink:1;}
+.srch-wrap .srch{width:190px;max-width:100%;min-width:96px;padding-right:28px;}
 .srch-wrap .srch:focus{width:230px;}
 .srch-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--c-text-faint);font-size:14px;line-height:1;padding:0;transition:color 120ms;}
 .srch-clear:hover{color:var(--c-text-strong);}

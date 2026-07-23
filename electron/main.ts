@@ -1,5 +1,5 @@
 import { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification, Tray, Menu, nativeImage, session } from 'electron'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
@@ -45,12 +45,16 @@ import {
 } from '../src/utils/appUpdate'
 import { decideMaximizeAction } from './winMaximize'
 
-// macOS GPU 프로세스 크래시 억제 — GPU 프로세스 샌드박스만 국소적으로 해제한다
-// (제거 시 크래시 재발 위험이 있어 유지).
-app.commandLine.appendSwitch('disable-gpu-sandbox')
-// [보안 하드닝] 전역 no-sandbox 스위치 제거: 모든 자식 프로세스(렌더러·유틸리티·네트워크)의
-// OS 샌드박스를 통째로 꺼버려 방어선이 무너졌다. 제거하여 렌더러/유틸리티/네트워크 프로세스의
-// OS 샌드박스를 복구한다. (GPU 크래시 억제는 위 disable-gpu-sandbox 로만 한정.)
+// [리사이즈 블랙아웃 회귀 수정] 과거 여기 있던 `app.commandLine.appendSwitch('disable-gpu-sandbox')`
+// 를 제거했다. 이 스위치는 1a9607d(6/11)에서 `no-sandbox` 전역 스위치와 "함께" GPU 크래시
+// 억제용으로 추가된 것이다. 이후 보안 하드닝(569f6dc)이 `no-sandbox` 전역 스위치를 제거하고
+// 렌더러 `sandbox:true`를 켜면서, GPU 프로세스만 seatbelt 샌드박스가 국소 해제된 비대칭 조합이
+// 남았다. 이 조합이 macOS 라이브 리사이즈 프레임 present를 지연시켜, 창을 드래그로 리사이즈할 때
+// backgroundColor(#0d1220, near-black)만 노출되는 검은 화면을 유발했다.
+// 원래의 GPU 크래시는 `no-sandbox`와의 상호작용이 원인이었을 가능성이 높고, 그 전역 스위치가
+// 이미 제거되어 이 워크어라운드는 불필요해졌다. 스위치를 없애면 GPU 프로세스 샌드박스가 정상
+// 복구되어 리사이즈 present가 회복되고, 보안(모든 자식 프로세스 OS 샌드박스)은 오히려 강화된다.
+// 렌더러 sandbox:true·contextIsolation:true 는 그대로 유지(보안 보존).
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -214,26 +218,65 @@ const SPLASH_FADE_MS = 180
 //         없어 인라인 스크립트 허용의 위험이 없다. (실제 공격면인 메인 창은 strict 유지.)
 //   - style-src 'self' 'unsafe-inline' : React 인라인 style 속성·스플래시 인라인 <style> 다수.
 //   - img-src 'self' https: data:   : GitHub/GitLab 아바타 등 원격 https 이미지 + data URI(스프라이트).
+//       · +등록된 self-hosted http GitLab 오리진(아래 화이트리스트) — 사내 http 인스턴스 아바타.
 //   - connect-src 'self' https:     : GitHub API·멀티호스트(self-hosted) GitLab API(광범위 https 불가피).
 //       · dev: ws:/wss: 추가 — Vite HMR 소켓.
+//       · +등록된 self-hosted http GitLab 오리진(아래 화이트리스트) — 사내 http 인스턴스 API.
 //   - font-src 'self' data:         : self-host woff2 + data URI 폴백.
 //   - frame-src 'none' / object-src 'none' : iframe·플러그인(무엇도 임베드 안 함) 차단.
 //   - base-uri 'self'               : <base> 태그 하이재킹 차단.
+//   ⚠️ blob: 는 의도적으로 미포함 — 현재 코드에 createObjectURL/Worker 사용이 없어 불필요하다.
+//      (추후 blob URL/Worker 도입 시 connect-src/img-src 등에 blob: 를 추가해야 함.)
+//
+// [사내 http self-hosted GitLab 지원] normalizeGitlabHost 는 http:// self-hosted GitLab 을 정식
+// 지원하는데, prod CSP 의 connect-src/img-src 가 http 를 누락해 사내 http GitLab API·아바타가
+// Blink CSP 에 조용히 차단됐다. 광범위 `http:` 전체 허용은 보안상 지양하고, 사용자가 실제 등록한
+// GitLab http 오리진만 동적 화이트리스트(httpGitlabOrigins)로 CSP 에 주입한다. https/gitlab.com
+// 은 이미 https: 로 커버되므로 http:// 키만 추린다.
+//   ⚠️ CSP 는 "문서 로드 시점"에 확정된다(SPA 는 index.html 1회 로드). 따라서 앱 실행 중 새 http
+//      GitLab host 를 처음 등록한 경우, 그 오리진은 다음 앱 재시작(또는 창 리로드) 전까지는
+//      활성 세션의 CSP 에 반영되지 않는다. 이미 저장된 host 는 다음 실행부터 정상 로드된다.
+//      (setToken/removeToken 시 화이트리스트는 즉시 refresh 되므로 이후 document load 는 최신값 사용.)
+
+// 등록된 self-hosted http GitLab 오리진 캐시(CSP 동적 화이트리스트용).
+// 토큰 파일을 요청마다 복호화하지 않도록 값을 캐싱하고, 시작/토큰 변경 시에만 갱신한다.
+let httpGitlabOrigins: string[] = []
+
+// CSP host-source 로 안전한 http 오리진만 통과시키는 엄격 패턴(심층방어).
+// scheme=http 고정, host 는 영숫자·`.`·`-` 만, 선택적 숫자 포트. 이 화이트리스트가 CSP 문자열에
+// 그대로 삽입되므로, 공백·`;`·`'`·`/`·개행 등 지시문을 끊거나 소스식을 오염시킬 수 있는 문자는
+// 전부 배제해야 한다. normalizeGitlabHost 는 host 를 소문자화·경로 제거는 하지만 `;`·`'` 같은
+// 위험문자를 걸러내지 않으므로(예: "http://gl.internal;connect-src *"), CSP 삽입 직전 여기서 다시 검증한다.
+// (IPv6 리터럴 `[::1]` 은 대괄호 때문에 매칭 실패 → 배제. gitlab.ts 대로 본 앱 범위 밖.)
+const HTTP_ORIGIN_RE = /^http:\/\/[a-z0-9.-]+(?::\d+)?$/i
+
+// 저장된 GitLab host 맵에서 CSP 에 안전하게 삽입 가능한 http:// 오리진만 추려 캐시를 갱신한다.
+// 악성/오타 host(위험문자 포함)는 HTTP_ORIGIN_RE 매칭 실패로 화이트리스트에서 제외 → CSP 오염 차단.
+function refreshHttpGitlabOrigins(): void {
+  try {
+    httpGitlabOrigins = Object.keys(readGitlabTokenMap()).filter(h => HTTP_ORIGIN_RE.test(h))
+  } catch {
+    httpGitlabOrigins = []
+  }
+}
+
 function buildCsp(isSplash: boolean): string {
   const dev = !!VITE_DEV_SERVER_URL
+  // 등록된 self-hosted http GitLab 오리진만 connect-src/img-src 에 덧붙인다(없으면 무변화).
+  const httpHosts = httpGitlabOrigins.length ? ' ' + httpGitlabOrigins.join(' ') : ''
   const scriptSrc = dev
     ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
     : isSplash
       ? "script-src 'self' 'unsafe-inline'"
       : "script-src 'self'"
   const connectSrc = dev
-    ? "connect-src 'self' https: ws: wss:"
-    : "connect-src 'self' https:"
+    ? `connect-src 'self' https: ws: wss:${httpHosts}`
+    : `connect-src 'self' https:${httpHosts}`
   return [
     "default-src 'self'",
     scriptSrc,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' https: data:",
+    `img-src 'self' https: data:${httpHosts}`,
     connectSrc,
     "font-src 'self' data:",
     "frame-src 'none'",
@@ -413,10 +456,59 @@ function createWindow() {
     }
   })
 
+  // [내비게이션 백스톱 / 심층방어] 신뢰불가 콘텐츠(PR 본문 마크다운의 상대/앵커 링크 등)가
+  // 앱 프레임 자체를 다른 문서로 내비게이트하는 것을 차단한다. prod 는 file:// 로드라, 상대링크
+  // (`[x](/foo)`)를 aux-click/휠클릭/컨텍스트메뉴 '링크 열기'로 활성화하면 앱 프레임이
+  // file:///foo 로 이탈해 화이트아웃·로컬파일 로드가 될 수 있다.
+  //   - will-navigate: 현재 앱 문서(dev=VITE URL, prod=index.html)와 다른 곳으로의 내비게이션을
+  //     막고, http/https(및 mailto)면 OS 기본 브라우저로 연다(app:open-release-url 과 동일 정책).
+  //   - setWindowOpenHandler: 새 창/window.open/target=_blank 을 전면 deny(외부 http/https 는
+  //     openExternal 후 deny). 앱은 새 창을 열 필요가 없다.
+  // dev(VITE_DEV_SERVER_URL): 동일 origin(localhost) 내 로드/HMR·리로드는 허용해 개발을 막지 않는다.
+  const appUrl = VITE_DEV_SERVER_URL ?? pathToFileURL(path.join(RENDERER_DIST, 'index.html')).href
+  win.webContents.on('will-navigate', (e, url) => {
+    if (isAppNavigation(url, appUrl)) return // 앱 자신(리로드/HMR/동일 문서) 은 허용
+    e.preventDefault()
+    openExternalSafe(url) // http/https/mailto 만 외부로, 그 외(file:// 이탈 등)는 취소만
+  })
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalSafe(url)
+    return { action: 'deny' }
+  })
+
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+  }
+}
+
+// 내비게이션 대상이 "현재 로드된 앱 문서"인지 판정(백스톱 허용 조건).
+//   - file:(prod): pathname 이 앱 index.html 과 정확히 일치할 때만 허용 → 다른 file 경로 이탈 차단.
+//   - http/https(dev): 동일 origin(localhost dev 서버) 이면 허용 → HMR·리로드·앱 내부 네비 보존.
+// 파싱 불가/스킴 불일치는 앱 내비게이션 아님(false) → 호출부가 차단.
+function isAppNavigation(target: string, appUrl: string): boolean {
+  try {
+    const t = new URL(target)
+    const a = new URL(appUrl)
+    if (t.protocol !== a.protocol) return false
+    if (t.protocol === 'file:') return decodeURIComponent(t.pathname) === decodeURIComponent(a.pathname)
+    return t.origin === a.origin
+  } catch {
+    return false
+  }
+}
+
+// 외부 링크를 OS 기본 앱으로 안전하게 연다. shell.openExternal 은 임의 스킴을 OS 핸들러로
+// 넘기는 sink 라, app:open-release-url 과 동일하게 http/https/mailto 만 허용(javascript:/file: 등 차단).
+function openExternalSafe(url: string): void {
+  try {
+    const scheme = new URL(url).protocol.toLowerCase()
+    if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
+      shell.openExternal(url)
+    }
+  } catch {
+    /* URL 파싱 불가(상대경로 등) → 무시 */
   }
 }
 
@@ -2596,7 +2688,10 @@ ipcMain.handle('gitlab:setToken', (_event, host: string, token: string): boolean
   } else {
     map[key] = token
   }
-  return writeGitlabTokenMap(map)
+  const ok = writeGitlabTokenMap(map)
+  // http GitLab 오리진 화이트리스트 갱신(다음 document load 부터 CSP 에 반영).
+  if (ok) refreshHttpGitlabOrigins()
+  return ok
 })
 
 // host 토큰 복호화 조회. 없으면 null.
@@ -2622,7 +2717,10 @@ ipcMain.handle('gitlab:removeToken', (_event, host: string): boolean => {
   const map = readGitlabTokenMap()
   if (!(key in map)) return true
   delete map[key]
-  return writeGitlabTokenMap(map)
+  const ok = writeGitlabTokenMap(map)
+  // http GitLab 오리진 화이트리스트 갱신(제거된 오리진을 CSP 에서 제외).
+  if (ok) refreshHttpGitlabOrigins()
+  return ok
 })
 
 // ──────────────────────────────────────────────
@@ -3030,6 +3128,9 @@ ipcMain.handle('app:download-update', async (event, dmgUrl: string): Promise<{ p
 })
 
 app.whenReady().then(() => {
+  // 저장된 self-hosted http GitLab 오리진을 CSP 화이트리스트 캐시에 먼저 로드해야
+  // 첫 문서 로드부터 사내 http GitLab API/아바타가 허용된다.
+  refreshHttpGitlabOrigins()
   // [보안 하드닝] 창을 만들기 전에 CSP 헤더 필터를 먼저 등록해야 첫 로드부터 적용된다.
   installCsp()
   // 스플래시를 먼저 띄워 메인 윈도우 빌드 동안 빈 화면 깜빡임 제거

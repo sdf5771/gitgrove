@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode, type CSSProperties } from 'react'
 import './App.css'
 import { type Commit, type Repo, type FileEntry, type CommitLabel, type Branch } from './data/mockData'
 import { Geuru, type GeuruExpr } from './components/Geuru'
@@ -231,11 +231,16 @@ function RepoTabs({ repos, active, switchingPath, onSelect, onAdd, onClose }: {
   }, [isMenuOpen])
 
   // 열려 있을 때 Escape로 닫기(바깥 클릭은 backdrop이 담당).
+  // App 전역 Escape 핸들러도 window에 달려 있어 버블 단계 stopPropagation으론 못 막는다.
+  // → 캡처 단계(true)로 먼저 받아 stopImmediatePropagation으로 전역 핸들러 도달을 차단
+  //   (메뉴만 닫히고 검색어 등 전역 Escape 동작은 트리거되지 않음). cleanup도 capture 일치.
   useEffect(() => {
     if (!isMenuOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsMenuOpen(false) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); e.stopPropagation(); setIsMenuOpen(false) }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [isMenuOpen])
 
   const hiddenCount = hiddenIdx.length
@@ -319,6 +324,145 @@ function RepoTabs({ repos, active, switchingPath, onSelect, onAdd, onClose }: {
           )}
         </div>
       )}
+    </>
+  )
+}
+
+// ──────────────────────────────────────────────
+// ActionAux — 액션바 부가 git-op 버튼(반응형 오버플로)
+// ──────────────────────────────────────────────
+
+/** 액션바 오버플로 대상 버튼 1개의 서술. */
+interface AuxItem {
+  key: string
+  label: string
+  icon: ReactNode
+  onClick: () => void
+  /** 인라인 버튼에 얹을 강조 스타일(활성/경고 등). */
+  style?: CSSProperties
+}
+
+/**
+ * 좁은 창에서 부가 git-op 버튼(Branch·Merge·Rebase·Stash·Tags·Conflicts)을
+ * 인라인으로 두거나 "⋯ 더보기" 메뉴로 접는다. 항상 렌더되는 flex 스페이서를 기준으로
+ * 액션바(부모)의 여유 폭을 측정한다:
+ *  - 펼침 상태에서 스페이서가 0으로 눌리고 스크롤폭이 넘치면 → 접기.
+ *  - 접힘 상태에서 스페이서(여유)가 (부가버튼폭 − 더보기버튼폭 + 여유버퍼)보다 크면 → 펼치기.
+ * 측정은 rAF 디바운스 + 값 동등성 시 setState 스킵(RepoTabs 패턴). ResizeObserver + resize,
+ * 언마운트 정리. jsdom(측정 불가)에선 펼침 유지(부가버튼 항상 접근 가능).
+ */
+function ActionAux({ items }: { items: AuxItem[] }) {
+  const spacerRef = useRef<HTMLDivElement>(null)
+  const auxRef = useRef<HTMLDivElement>(null)
+  const moreRef = useRef<HTMLDivElement>(null)
+  const moreBtnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const rafRef = useRef<number | undefined>(undefined)
+  const auxWidthRef = useRef(0)
+  const [collapsed, setCollapsed] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const scheduleMeasure = useCallback(() => {
+    if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined
+      const spacer = spacerRef.current
+      const bar = spacer?.parentElement
+      if (!spacer || !bar) return
+      const cw = bar.clientWidth
+      if (cw === 0) return // 레이아웃 전/측정 불가 → 펼침 유지
+      const free = spacer.offsetWidth // flex 스페이서가 흡수한 여유 폭
+      setCollapsed(prev => {
+        if (!prev) {
+          // 펼침: 부가버튼 실제 폭을 기록하고, 넘치면 접는다.
+          if (auxRef.current) auxWidthRef.current = auxRef.current.offsetWidth
+          return bar.scrollWidth > cw + 1 ? true : prev
+        }
+        // 접힘: 펼쳐도 들어가면(여유 ≥ 부가버튼폭 − 더보기폭 + 버퍼) 다시 편다.
+        const moreW = moreRef.current?.offsetWidth ?? 0
+        const need = auxWidthRef.current - moreW
+        return auxWidthRef.current > 0 && free >= need + 12 ? false : prev
+      })
+    })
+  }, [])
+
+  useEffect(() => {
+    const bar = spacerRef.current?.parentElement
+    if (!bar) return
+    scheduleMeasure()
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null
+    ro?.observe(bar)
+    window.addEventListener('resize', scheduleMeasure)
+    return () => {
+      ro?.disconnect()
+      window.removeEventListener('resize', scheduleMeasure)
+      if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
+    }
+  }, [scheduleMeasure])
+
+  // 접힘/펼침 전환 시 DOM이 스왑되므로(부모 폭은 그대로라 ResizeObserver 미발화) 재측정.
+  useEffect(() => { scheduleMeasure() }, [collapsed, scheduleMeasure])
+
+  // 펼쳐지면 메뉴는 닫는다.
+  useEffect(() => { if (!collapsed) setMenuOpen(false) }, [collapsed])
+
+  // 메뉴 열림 상태에서 Escape → 닫기. App 전역 Escape 핸들러(window·버블)와의 형제 충돌을
+  // 피하려 캡처 단계(true)로 먼저 받아 stopImmediatePropagation으로 전역 도달을 차단한다
+  // (메뉴만 닫히고 검색어 초기화 등 전역 Escape는 트리거되지 않음).
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); e.stopPropagation(); setMenuOpen(false) }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [menuOpen])
+
+  return (
+    <>
+      {collapsed ? (
+        <div className="abar-more" ref={moreRef}>
+          <button
+            ref={moreBtnRef}
+            className="abt abar-more-btn"
+            onClick={() => setMenuOpen(v => !v)}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            aria-label={`추가 작업 ${items.length}개 더보기`}
+            title="더보기"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+          </button>
+          {menuOpen && (
+            <>
+              <div className="abar-more-backdrop" onClick={() => setMenuOpen(false)} />
+              <div className="abar-more-menu" role="menu" aria-label="추가 작업" ref={menuRef}>
+                <div className="pull-menu-hd">추가 작업</div>
+                {items.map(a => (
+                  <button
+                    key={a.key}
+                    className="abar-more-item"
+                    role="menuitem"
+                    onClick={() => { setMenuOpen(false); a.onClick() }}
+                    style={a.style}
+                  >
+                    <span className="abar-more-ic">{a.icon}</span>{a.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="action-aux" ref={auxRef}>
+          {items.map(a => (
+            <button key={a.key} className="abt" onClick={a.onClick} style={a.style}>
+              {a.icon}{a.label}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="ab-spacer" ref={spacerRef} />
     </>
   )
 }
@@ -1936,24 +2080,34 @@ export default function App() {
           {remoteOp === 'fetch' && <span className="abt-mini" style={{ width: `${syncPct}%` }} />}
         </button>
         <div className="abt-sep" />
-        <button className="abt" onClick={() => { setBranchTab('create'); setShowBranch(true) }}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>Branch
-        </button>
-        <button className="abt" onClick={() => setShowMerge(true)} style={showMerge ? { borderColor: 'var(--c-gold-border)', color: 'var(--c-gold-300)' } : {}}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>Merge
-        </button>
-        <button className="abt" onClick={() => setShowRebase(true)}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="17,1 21,5 17,9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7,23 3,19 7,15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>Rebase
-        </button>
-        <button className="abt" onClick={() => setShowStash(true)}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="8,17 3,12 8,7"/><polyline points="16,17 21,12 16,7"/></svg>Stash
-        </button>
-        <button className="abt" onClick={() => setShowTags(true)}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>Tags
-        </button>
-        <button className="abt" onClick={() => setShowConflict(true)} style={{ color: 'var(--c-warning)', borderColor: 'rgba(255,206,90,.3)' }}>
-          <span style={{ fontSize: 12 }}>⚡</span>Conflicts
-        </button>
+        <ActionAux items={[
+          {
+            key: 'branch', label: 'Branch', onClick: () => { setBranchTab('create'); setShowBranch(true) },
+            icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>,
+          },
+          {
+            key: 'merge', label: 'Merge', onClick: () => setShowMerge(true),
+            style: showMerge ? { borderColor: 'var(--c-gold-border)', color: 'var(--c-gold-300)' } : undefined,
+            icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 012 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>,
+          },
+          {
+            key: 'rebase', label: 'Rebase', onClick: () => setShowRebase(true),
+            icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="17,1 21,5 17,9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7,23 3,19 7,15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>,
+          },
+          {
+            key: 'stash', label: 'Stash', onClick: () => setShowStash(true),
+            icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><polyline points="8,17 3,12 8,7"/><polyline points="16,17 21,12 16,7"/></svg>,
+          },
+          {
+            key: 'tags', label: 'Tags', onClick: () => setShowTags(true),
+            icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
+          },
+          {
+            key: 'conflicts', label: 'Conflicts', onClick: () => setShowConflict(true),
+            style: { color: 'var(--c-warning)', borderColor: 'rgba(255,206,90,.3)' },
+            icon: <span style={{ fontSize: 12 }}>⚡</span>,
+          },
+        ]} />
         <div className="view-toggle">
           {([['history', 'History'], ['commit', 'Stage'], ['diff', 'Diff'], ['blame', 'Blame'], ['pr', 'PR']] as const).map(([id, label]) => {
             // 'pr' 탭은 provider에 따라 표시 라벨만 동적으로(내부 id는 'pr' 유지).
