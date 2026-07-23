@@ -68,6 +68,9 @@ body { display: flex; align-items: center; justify-content: center; }
 .title-bar.mac { padding-left: 78px; }
 .title-bar button,
 .title-bar .repo-tabs,
+.title-bar .repo-ov,
+.title-bar .repo-ov-btn,
+.title-bar .repo-ov-menu,
 .title-bar .tb-repos-tab,
 .title-bar .update-pill,
 .title-bar .tl { -webkit-app-region: no-drag; }
@@ -1011,6 +1014,36 @@ body { display: flex; align-items: center; justify-content: center; }
 .repo-tab-close:hover{color:var(--c-danger);background:rgba(255,107,107,.12);}
 .repo-tab-add{display:flex;align-items:center;justify-content:center;width:24px;height:24px;background:none;border:none;border-radius:var(--r2);color:var(--c-text-muted);cursor:pointer;font-size:15px;transition:background 120ms,color 120ms;flex-shrink:0;margin-left:4px;}
 .repo-tab-add:hover{background:var(--c-bg-elevated);color:var(--c-text);}
+/* B — 탭 이름 ellipsis. 아이콘·dirty·behind·×는 flex-shrink:0로 유지되고 이름만 줄어든다.
+   활성 탭은 더 넉넉히, hover 시 title 속성으로 전체 이름 툴팁. */
+.repo-tab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;min-width:0;flex-shrink:1;}
+.repo-tab-name.on{max-width:180px;}
+/* C — 스크롤 스트립이 넘칠 때 그 우측 가장자리에만 "더 있음" 그라데이션 신호.
+   페이드는 스트립 컨테이너(.repo-tabs-strip) 기준이라 '+'(스트립 밖 형제)를 안 가린다.
+   has-ov(오버플로 있을 때만)로 켠다 → 오버플로 없으면 미표시. pointer-events:none. */
+.repo-tabs-strip{position:relative;flex:1 1 auto;min-width:0;display:flex;align-items:center;}
+.repo-tabs-strip::after{content:"";position:absolute;top:0;right:0;width:20px;height:100%;pointer-events:none;opacity:0;transition:opacity 120ms;background:linear-gradient(to right,transparent,var(--c-bg-surface));}
+.repo-tabs-strip.has-ov::after{opacity:1;}
+/* A — 오버플로 드롭다운(‘▾ N’ 버튼 + 열린 저장소 전체 목록) */
+.repo-ov{position:relative;flex-shrink:0;display:flex;align-items:center;}
+.repo-ov-btn{display:flex;align-items:center;gap:3px;height:24px;padding:0 7px;background:var(--c-bg-elevated);border:1px solid var(--c-border);border-radius:var(--r2);color:var(--c-text-muted);cursor:pointer;font-size:11px;transition:border-color 120ms,color 120ms,background 120ms;}
+.repo-ov-btn:hover{border-color:var(--c-gold-border);color:var(--c-gold-200);}
+.repo-ov-btn:focus-visible{outline:none;color:var(--c-text-strong);box-shadow:inset 0 0 0 1px var(--c-gold-border);}
+.repo-ov-caret{font-size:9px;line-height:1;}
+.repo-ov-count{font-family:var(--font-mono);font-size:10.5px;line-height:1;}
+.repo-ov-backdrop{position:fixed;inset:0;z-index:199;}
+.repo-ov-menu{position:absolute;top:calc(100% + 5px);right:0;z-index:200;min-width:220px;max-width:320px;background:var(--c-bg-surface);border:1px solid var(--c-border-strong);border-radius:var(--r3);box-shadow:0 16px 40px rgba(0,0,0,.6);overflow:hidden;padding:4px;display:flex;flex-direction:column;max-height:340px;animation:mfade .14s ease;}
+.repo-ov-hd{font-family:var(--font-display);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--c-text-faint);padding:7px 9px 5px;flex-shrink:0;}
+.repo-ov-list{overflow-y:auto;display:flex;flex-direction:column;gap:1px;}
+.repo-ov-item{display:flex;align-items:center;gap:7px;padding:6px 8px;border-radius:var(--r2);cursor:pointer;color:var(--c-text-muted);font-size:12px;transition:background 100ms,color 100ms;}
+.repo-ov-item:hover{background:var(--c-gold-bg-soft);color:var(--c-text);}
+.repo-ov-item.on{background:var(--c-gold-bg);color:var(--c-gold-200);}
+.repo-ov-item:focus-visible{outline:none;box-shadow:inset 0 0 0 1px var(--c-gold-border);}
+.repo-ov-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.repo-ov-behind{font-size:9px;color:var(--c-warning);font-family:var(--font-mono);flex-shrink:0;}
+.repo-ov-hidden{width:5px;height:5px;border-radius:50%;border:1px solid var(--c-text-faint);flex-shrink:0;}
+.repo-ov-close{color:var(--c-text-faint);font-size:13px;line-height:1;padding:1px 3px;border-radius:2px;background:none;border:none;cursor:pointer;flex-shrink:0;transition:color 80ms,background 80ms;}
+.repo-ov-close:hover{color:var(--c-danger);background:rgba(255,107,107,.12);}
 .repo-recent{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r2);cursor:pointer;border:1px solid var(--c-border);background:var(--c-bg-inset);transition:border-color 100ms,background 100ms;}
 .repo-recent:hover{background:var(--c-gold-bg-soft);border-color:var(--c-gold-border);}
 .repo-recent-info{flex:1;min-width:0;}

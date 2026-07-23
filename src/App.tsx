@@ -137,6 +137,11 @@ function statusToFileEntry(
 // RepoTabs 컴포넌트
 // ──────────────────────────────────────────────
 
+/** 폴더 글리프 — 탭·오버플로 목록에서 공용. */
+function RepoFolderIcon() {
+  return <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .7, flexShrink: 0 }}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+}
+
 function RepoTabs({ repos, active, switchingPath, onSelect, onAdd, onClose }: {
   repos: Repo[]; active: number
   /** 전환 중인 레포 경로 — 해당 탭에 미니 스피너를 표시한다. */
@@ -145,31 +150,176 @@ function RepoTabs({ repos, active, switchingPath, onSelect, onAdd, onClose }: {
   onAdd: () => void
   onClose: (i: number) => void
 }) {
+  const stripRef = useRef<HTMLDivElement>(null)
+  const rafRef = useRef<number | undefined>(undefined)
+  const ovBtnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const wasMenuOpen = useRef(false)
+  // 뷰포트에 완전히 보이지 않는(좌/우로 잘린) 탭 인덱스 목록.
+  const [hiddenIdx, setHiddenIdx] = useState<number[]>([])
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
+
+  // 오버플로 측정: 각 탭의 rect를 스크롤 컨테이너 rect와 비교해 완전히 보이지 않는
+  // 탭을 센다. getBoundingClientRect는 scrollLeft가 반영된 위치라 스크롤 상태와
+  // 무관하게 정확하다. jsdom은 rect가 모두 0이라 측정 불가 → 아무것도 숨김으로
+  // 잡지 않고(빈 배열) 안전하게 폴백한다(‘▾ N’ 미표시가 정상).
+  const scheduleMeasure = useCallback(() => {
+    if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined
+      const el = stripRef.current
+      if (!el) return
+      const cont = el.getBoundingClientRect()
+      if (cont.width === 0) { setHiddenIdx([]); return } // 레이아웃 전/측정 불가
+      const hidden: number[] = []
+      Array.from(el.children).forEach((child, i) => {
+        const r = (child as HTMLElement).getBoundingClientRect()
+        if (r.left < cont.left - 1 || r.right > cont.right + 1) hidden.push(i)
+      })
+      setHiddenIdx(prev =>
+        prev.length === hidden.length && prev.every((v, k) => v === hidden[k]) ? prev : hidden,
+      )
+    })
+  }, [])
+
+  // 컨테이너 크기 변화(ResizeObserver) + 가로 스크롤 + 창 리사이즈에 재측정.
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el) return
+    scheduleMeasure()
+    // ResizeObserver는 jsdom에 없으므로 존재할 때만 사용(테스트 환경 안전).
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasure) : null
+    ro?.observe(el)
+    el.addEventListener('scroll', scheduleMeasure, { passive: true })
+    window.addEventListener('resize', scheduleMeasure)
+    return () => {
+      ro?.disconnect()
+      el.removeEventListener('scroll', scheduleMeasure)
+      window.removeEventListener('resize', scheduleMeasure)
+      if (rafRef.current !== undefined) cancelAnimationFrame(rafRef.current)
+    }
+  }, [scheduleMeasure])
+
+  // 탭 개수·활성 탭 변화 시 재측정(활성 탭이 스크롤로 들어오며 가시성 변동).
+  useEffect(() => { scheduleMeasure() }, [repos, active, scheduleMeasure])
+
+  // 활성 탭이 바뀌면 그 탭이 잘려 있어도 스트립을 스크롤해 보이게 한다.
+  // (드롭다운으로 숨은 탭을 골라도 여기서 스크롤 → 다시 "숨음"으로 남지 않음.)
+  // scrollIntoView는 jsdom에 없을 수 있어 옵셔널 체이닝으로 가드한다.
+  useEffect(() => {
+    const el = stripRef.current
+    if (!el || active < 0) return
+    const tab = el.children[active] as HTMLElement | undefined
+    tab?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' })
+  }, [active])
+
+  // 숨은 탭이 없어지면(창을 넓히면) 드롭다운도 닫는다.
+  useEffect(() => { if (hiddenIdx.length === 0) setIsMenuOpen(false) }, [hiddenIdx])
+
+  // 포커스 관리(a11y): 열리면 활성(없으면 첫) 항목에 포커스,
+  // 닫히면 트리거(‘▾ N’) 버튼으로 포커스 복원(버튼이 사라졌으면 무시).
+  useEffect(() => {
+    if (isMenuOpen) {
+      const menu = menuRef.current
+      const target = menu?.querySelector<HTMLElement>('.repo-ov-item.on')
+        ?? menu?.querySelector<HTMLElement>('.repo-ov-item')
+      target?.focus?.()
+    } else if (wasMenuOpen.current) {
+      ovBtnRef.current?.focus?.()
+    }
+    wasMenuOpen.current = isMenuOpen
+  }, [isMenuOpen])
+
+  // 열려 있을 때 Escape로 닫기(바깥 클릭은 backdrop이 담당).
+  useEffect(() => {
+    if (!isMenuOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setIsMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isMenuOpen])
+
+  const hiddenCount = hiddenIdx.length
+  const hasOverflow = hiddenCount > 0
+
   return (
-    <div className="repo-tabs-wrap">
-      <div className="repo-tabs" role="tablist">
-        {repos.map((r, i) => (
-          <div
-            key={r.id}
-            className={`repo-tab${i === active ? ' on' : ''}`}
-            role="tab"
-            tabIndex={0}
-            aria-selected={i === active}
-            onClick={() => onSelect(i)}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i) } }}
-          >
-            {switchingPath === r.path
-              ? <span className="mini-spin" aria-label="불러오는 중" title="불러오는 중" />
-              : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ opacity: .7, flexShrink: 0 }}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>}
-            {r.dirty && <span className="repo-tab-dirty" title="커밋 안 된 변경" />}
-            <span>{r.name}</span>
-            {r.behind > 0 && <span style={{ fontSize: 9, color: 'var(--c-warning)', fontFamily: 'var(--font-mono)' }}>↓{r.behind}</span>}
-            <button className="repo-tab-close" aria-label={`${r.name} 탭 닫기`} onClick={e => { e.stopPropagation(); onClose(i) }}>×</button>
+    <>
+      <div className="repo-tabs-wrap">
+        {/* 스크롤 스트립을 감싸는 포지셔닝 컨테이너. 페이드(::after)는 이 컨테이너의
+            우측 끝(=스트립 경계)에만 그려져 '+'(스트립 밖 형제)를 가리지 않는다. */}
+        <div className={`repo-tabs-strip${hasOverflow ? ' has-ov' : ''}`}>
+          <div className="repo-tabs" role="tablist" ref={stripRef}>
+            {repos.map((r, i) => (
+            <div
+              key={r.id}
+              className={`repo-tab${i === active ? ' on' : ''}`}
+              role="tab"
+              tabIndex={0}
+              aria-selected={i === active}
+              onClick={() => onSelect(i)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i) } }}
+            >
+              {switchingPath === r.path
+                ? <span className="mini-spin" aria-label="불러오는 중" title="불러오는 중" />
+                : <RepoFolderIcon />}
+              {r.dirty && <span className="repo-tab-dirty" title="커밋 안 된 변경" />}
+              <span className={`repo-tab-name${i === active ? ' on' : ''}`} title={r.name}>{r.name}</span>
+              {r.behind > 0 && <span style={{ fontSize: 9, color: 'var(--c-warning)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>↓{r.behind}</span>}
+              <button className="repo-tab-close" aria-label={`${r.name} 탭 닫기`} onClick={e => { e.stopPropagation(); onClose(i) }}>×</button>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+        <button className="repo-tab-add" onClick={onAdd} aria-label="저장소 추가" title="저장소 추가">+</button>
       </div>
-      <button className="repo-tab-add" onClick={onAdd} aria-label="저장소 추가" title="저장소 추가">+</button>
-    </div>
+      {hasOverflow && (
+        <div className="repo-ov">
+          <button
+            ref={ovBtnRef}
+            className="repo-ov-btn"
+            onClick={() => setIsMenuOpen(v => !v)}
+            aria-label={`숨은 저장소 ${hiddenCount}개 보기`}
+            aria-haspopup="menu"
+            aria-expanded={isMenuOpen}
+            title={`숨은 저장소 ${hiddenCount}개`}
+          >
+            <span className="repo-ov-caret">▾</span>
+            <span className="repo-ov-count">{hiddenCount > 99 ? '99+' : hiddenCount}</span>
+          </button>
+          {isMenuOpen && (
+            <>
+              <div className="repo-ov-backdrop" onClick={() => setIsMenuOpen(false)} />
+              <div className="repo-ov-menu" role="menu" aria-label="열린 저장소" ref={menuRef}>
+                <div className="repo-ov-hd">열린 저장소</div>
+                <div className="repo-ov-list">
+                  {repos.map((r, i) => (
+                    <div
+                      key={r.id}
+                      className={`repo-ov-item${i === active ? ' on' : ''}`}
+                      role="menuitem"
+                      tabIndex={0}
+                      aria-current={i === active}
+                      onClick={() => { onSelect(i); setIsMenuOpen(false) }}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(i); setIsMenuOpen(false) } }}
+                    >
+                      <RepoFolderIcon />
+                      {r.dirty && <span className="repo-tab-dirty" title="커밋 안 된 변경" />}
+                      <span className="repo-ov-name" title={r.name}>{r.name}</span>
+                      {r.behind > 0 && <span className="repo-ov-behind">↓{r.behind}</span>}
+                      {hiddenIdx.includes(i) && <span className="repo-ov-hidden" title="지금 탭에 안 보여요" aria-label="탭에 안 보임" />}
+                      <button
+                        className="repo-ov-close"
+                        aria-label={`${r.name} 탭 닫기`}
+                        onClick={e => { e.stopPropagation(); onClose(i) }}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
   )
 }
 
@@ -1467,7 +1617,7 @@ export default function App() {
     const h = (e: KeyboardEvent) => {
       // 포커스가 인터랙티브 요소(입력/버튼/탭 등 자체 키 처리)에 있으면 양보.
       const t = e.target as HTMLElement | null
-      if (t && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
+      if (t && typeof t.closest === 'function' && t.closest('input, textarea, select, button, a, [role="tab"], [contenteditable="true"]')) return
       if (e.metaKey || e.ctrlKey || e.altKey) return
       if (showCmd || ctxMenu || showMerge || showCherryPick || showStash || showTags || showAuth || showRemotes || showBranch ||
           showRebase || showSettings || showAddRepo || showConflict || showRepoManager || forcePushOpen || fileHistory) return
