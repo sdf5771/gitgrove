@@ -100,8 +100,10 @@
 |------|-------------|
 | **History** | SVG branch graph with bezier lane lines, merge nodes, label chips (HEAD / branch / tag / remote) — **All-branches toggle** + **Load-more pagination** for large repos |
 | **Stage** | Two-column unstaged ↔ staged file mover, commit message editor, amend support — **per-hunk Stage / Unstage** (`git add -p` style) |
-| **Diff Explorer** | Full-screen side-by-side diff with syntax highlighting and file list |
-| **Git Blame** | Line-by-line blame with author info — click to jump to commit |
+| **Diff Explorer** | Full-screen diff with syntax highlighting — **unified / split** toggle, **word-diff**, an **in-tab commit picker** (step through commits without returning to History), and **expand surrounding context** lines |
+| **Git Blame** | Line-by-line blame with author info and line-age heatmap — **file picker (VSCode-style directory tree)**, **blame at any revision**, author filter, click to jump to commit |
+| **File History** | Per-file commit log (`--follow`, rename-aware) — open any commit's diff for that file or view **blame at that point in time** |
+| **Menu Bar (Tray)** | macOS status-bar icon + context menu with active-repo summary (branch · ahead/behind · changed count) and quick actions (Fetch / Pull / Push · switch recent repo · open notifications · quit); **stays resident when windows are closed**. Template icon auto-inverts for light / dark menu bars |
 | **PR / MR Review** | Open / Merged list, file changes, inline comments, CI / pipeline checks, approve / request-changes — for both **GitHub** Pull Requests and **GitLab** Merge Requests, with **GitHub-flavored Markdown** rendering for descriptions & comments |
 | **Notifications** | Global GitHub notification inbox (reason-grouped) with unread badge — **background polling** surfaces new items as **native macOS notifications** (Dock badge + bounce), and clicking brings the app forward |
 
@@ -112,7 +114,9 @@
 | **Merge / Rebase** | Merge commit · Rebase · Squash — with animated progress |
 | **Interactive Rebase** | Drag to reorder, click to cycle pick / squash / fixup / edit / drop |
 | **Cherry-pick** | Apply any commit to current branch, `--no-commit` option, conflict detection |
-| **Stash** | Push with message, Pop / Apply / Drop, stash stack management |
+| **Stash** | Two-pane manager — save (with message · include untracked · pre-save preview), Pop / Apply / Drop, stash-to-branch, per-file diff |
+| **Push / Pull** | **Pull strategy** picker (merge / rebase / fast-forward-only), safe **force-with-lease** when a normal push is rejected (non-fast-forward), and credential injection so **private HTTPS clone / push** authenticate without hanging |
+| **Remotes** | Manage remotes in-app — add · rename · change URL · remove (name / URL validation, dangerous transports like `ext::` blocked) |
 | **Conflict Editor** | Side-by-side ours/theirs resolver with per-conflict choices and progress tracking |
 | **Tag** | Two-pane manager (list · detail · create) — lightweight & annotated tags with a fruit metaphor, push to origin, delete (local + remote), pushed-state indicator; also "Tag here" from any commit |
 | **Authentication** | SSH / HTTPS credential manager — list `~/.ssh` keys with fingerprints & passphrase state, **test connection** (`ssh -T`), **generate** ED25519 keys, delete; HTTPS token store (GitHub / GitLab) with verify · add · remove |
@@ -122,8 +126,9 @@
 - **Repository Manager** — full-screen hub to browse **Open / Favorite / Recent** repos, **clone remote repos** (URL → pick folder, optional shallow `--depth 1`), and organize repos into user-named **Workspaces** (e.g. Work / Personal — a repo can belong to several). Opens as the landing screen when there's no repo to restore. Per-row `⋯` menu: open · add to workspace · remove from GitGrove
 - **Safe repo loading** — opening a folder with no/deleted `.git` (or an empty directory) is caught and surfaced as a clear notification instead of breaking the view
 - **⌘K Command Palette** — search and run any action from the keyboard
-- **Live Commit Search** — real-time filter by message, author, hash, or file path
-- **Multi-repo Tabs** — open multiple repos in one window, with dirty-state indicator
+- **Live Commit Search** — real-time filter by message, author, hash, or file path, with a **full-history search** so results aren't limited to already-loaded commits
+- **Resizable panes** — drag to resize the branch sidebar, detail panel, and Diff / Blame file pickers; widths persist across sessions
+- **Multi-repo Tabs** — open multiple repos in one window, with dirty-state indicator; switching or closing a repo cleanly resets the view to the newly active one
 - **Unified Context Menus** — one `.ctx-*` family across commit · branch · file, with a **target header** (what you right-clicked), grouped actions, and destructive actions **always last**:
   - *Commit* — Copy hash / message · Cherry-pick · Revert · Reset (soft / mixed / hard submenu) · Branch here · Tag here · Interactive Rebase
   - *Branch* — Checkout · Merge · Rebase · Rename · Copy name · Delete (danger)
@@ -133,6 +138,7 @@
 - **Settings Panel** — Git config · Appearance · notification sound · **GitHub & GitLab integration**: PAT / token setup guide with one-click token pages, in-place token **verify** (scopes + rate limit), and **secure token storage** via OS keychain (Electron `safeStorage`)
 - **Account Chips & Profile Cards** — the status bar shows a chip per connected provider (**GitHub** gold · **GitLab** orange); click one to open a provider-tinted profile card (name · bio · stats · company · location · join year) with your **permission role** on the current repo (admin / Maintainer …), then jump to the service
 - **Focus Auto-refresh** — repository state refreshes when the app regains focus
+- **Hardened renderer** — the window runs sandboxed with context isolation, a Content-Security-Policy, a minimal scoped preload bridge (no generic IPC surface), and external Markdown links restricted to safe schemes
 
 ---
 
@@ -249,7 +255,7 @@ Packaged `.app` is produced by electron-builder (see `package.json` for the buil
 ```
 gitgrove/
 ├── electron/
-│   ├── main.ts            Electron main process — BrowserWindow + 40+ IPC handlers (git ops · clone · is-repo · safeStorage token store)
+│   ├── main.ts            Electron main process — BrowserWindow + Tray + 80+ IPC handlers (git ops · remotes · clone · blame · file-log · is-repo · safeStorage token store)
 │   ├── preload.ts         contextBridge → window.gitAPI · window.appAPI
 │   └── electron-env.d.ts  TypeScript types for IPC API
 ├── src/
@@ -301,7 +307,7 @@ gitgrove/
 
 ## ✦ Roadmap
 
-- [x] Real Git backend (simple-git IPC, 32 handlers)
+- [x] Real Git backend (simple-git IPC, 80+ handlers)
 - [x] Branch graph with bezier lane lines
 - [x] Stage / Commit / Amend
 - [x] Side-by-side Diff Explorer with syntax highlighting
@@ -322,7 +328,16 @@ gitgrove/
 - [x] Account chips + provider profile cards (GitHub · GitLab)
 - [x] Tag manager — list · detail · create (lightweight / annotated) · push · delete
 - [x] SSH / HTTPS authentication manager
-- [ ] Commit graph virtualization (large repos)
+- [x] Stash 2-pane manager — save preview · include untracked · stash-to-branch · per-file diff
+- [x] Menu-bar (Tray) icon + context menu with repo summary & quick actions, resident when windows closed
+- [x] Remote workflow — private-repo clone/push auth, force-with-lease, pull strategy (merge / rebase / ff-only), remote add / rename / set-url / remove
+- [x] Diff / Blame depth — in-tab commit picker, expand context, file history (`--follow`), blame at revision, full-history commit search
+- [x] Resizable panes + Blame VSCode-style file tree
+- [x] Security hardening — sandboxed renderer, CSP, scoped IPC bridge, link-scheme guard
+- [ ] Commit graph & large file-tree virtualization (large repos)
+- [ ] Keyboard accessibility for tree / resizer / context menus
+- [ ] Native macOS widget (WidgetKit) — requires code signing & notarization
+- [ ] Code signing & notarization (remove unsigned-app install friction)
 - [ ] Split-diff editor with inline editing
 - [ ] Windows / Linux support
 - [ ] Plugin system
