@@ -36,3 +36,6 @@ export function useNotifications() {
 
   return { notifs, notify, dismiss }
 }
+
+/** notify 함수 시그니처 — PRView/MRView 등 자식이 prop으로 받을 때 쓰는 타입. */
+export type NotifyFn = ReturnType<typeof useNotifications>['notify']

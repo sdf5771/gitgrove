@@ -8,11 +8,34 @@ import {
   getMergeRequestNotes,
   getMergeRequestPipelines,
   getMergeRequestApprovals,
+  approveMergeRequest,
+  unapproveMergeRequest,
+  acceptMergeRequest,
+  createMergeRequestNote,
+  GitlabApiError,
   type GitlabMergeRequest,
   type GitlabMrChange,
   type GitlabMrNote,
   type GitlabMrApprovals,
 } from '../utils/gitlabClient'
+import { ConfirmModal } from './modals/ConfirmModal'
+import { TOASTS, spread } from '../toasts'
+import type { NotifyFn } from '../hooks/useNotifications'
+
+type GlAction = 'approve' | 'merge' | 'note'
+
+// 쓰기 액션 실패 사유 → 사용자 안내(사유 먼저). err.status + 액션 종류로 분기.
+function glActionError(err: unknown, action: GlAction): string {
+  const status = err instanceof GitlabApiError ? err.status : 0
+  if (status === 403) return '토큰에 쓰기 권한(GitLab `api` 스코프)이 필요해요'
+  if (status === 404) return '대상을 찾지 못했어요 · 이미 닫혔거나 접근 권한이 없을 수 있어요'
+  if (status === 405 || status === 406) {
+    if (action === 'merge') return '지금은 머지할 수 없어요 · 충돌·파이프라인·승인 상태를 확인해주세요'
+    if (action === 'approve') return '지금은 승인할 수 없는 상태예요 · 대상 상태를 확인해주세요'
+    return '지금은 처리할 수 없는 상태예요 · 대상 상태를 확인해주세요'
+  }
+  return err instanceof Error ? err.message : String(err)
+}
 
 // ── 뷰 모델 (디자인 MRS 데이터 형태에 맞춘 UI용 정규화 타입) ──
 interface MRReviewer { n: string; i: string; ac: string; st: 'approved' | 'pending' }
@@ -43,6 +66,8 @@ interface MRDetail {
   reviewers: MRReviewer[]
   /** [현재 승인 수, 요구 승인 수]. 승인 기능 미지원/없음이면 null(승인 박스 숨김). */
   appr: [number, number] | null
+  /** 현재 토큰 사용자가 이미 승인했는지 — 승인/취소 토글 방향. */
+  hasApproved: boolean
   pipe: PipeState
   loading: boolean
   error: string | null
@@ -153,14 +178,23 @@ function Avatar({ init, ac, mini }: { init: string; ac: string; mini?: boolean }
 interface Props {
   repoPath?: string | null
   onOpenUrl?: (url: string) => void
+  notify: NotifyFn
 }
 
-export function MRView({ repoPath, onOpenUrl }: Props) {
+export function MRView({ repoPath, onOpenUrl, notify }: Props) {
   const [filter, setFilter] = useState<'open' | 'merged' | 'all'>('open')
   const [selId, setSelId] = useState<number | null>(null)
   const [dtab, setDtab] = useState<'overview' | 'changes' | 'pipelines' | 'notes'>('overview')
-  const [approved, setApproved] = useState(false)
-  const [requested, setRequested] = useState(false)
+  const [busy, setBusy] = useState<null | 'approve' | 'merge' | 'note'>(null)
+  // 승인 여부 낙관적 오버라이드 — 승인 GET을 지원 안 하는 인스턴스에서도 토글 반영.
+  const [approvedOverride, setApprovedOverride] = useState<boolean | null>(null)
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false)
+  const [squash, setSquash] = useState(false)
+  // 승인/승인취소도 원격을 바꾸므로 확인 다이얼로그를 먼저 띄운다.
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
+  const [noteBody, setNoteBody] = useState('')
+  // 상세 강제 재조회 트리거(승인/노트 후). 값이 바뀌면 선택 MR 상세를 다시 가져온다.
+  const [detailNonce, setDetailNonce] = useState(0)
 
   const [ctx, setCtx] = useState<GitlabRepoCtx | null>(null)
   const [mrs, setMrs] = useState<MRItem[] | null>(null)
@@ -238,7 +272,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
     if (loadedDetailRef.current.has(selId)) return // 이미 로드(또는 로드 중)
     loadedDetailRef.current.add(selId)
     let cancelled = false
-    setDetails(d => ({ ...d, [selId]: { files: [], notes: [], reviewers: [], appr: null, pipe: sel.pipe, loading: true, error: null } }))
+    setDetails(d => ({ ...d, [selId]: { files: [], notes: [], reviewers: [], appr: null, hasApproved: false, pipe: sel.pipe, loading: true, error: null } }))
     ;(async () => {
       try {
         const [changes, notesRaw, pipelines, approvals] = await Promise.all([
@@ -261,26 +295,34 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
           })
         const pipe = pipelines.length ? pipelineStatusToPipe(pipelines[0].status) : sel.pipe
         let appr: [number, number] | null = null
+        let hasApproved = false
         const reviewers: MRReviewer[] = []
         if (approvals) {
           const required = approvals.approvals_required ?? 0
           const current = Math.max(0, required - (approvals.approvals_left ?? 0))
           appr = [current, required]
+          hasApproved = !!approvals.user_has_approved
           for (const ab of approvals.approved_by ?? []) {
             const name = ab.user?.name ?? ab.user?.username ?? '?'
             reviewers.push({ n: name, i: initialsOf(name), ac: colorForName(name), st: 'approved' })
           }
         }
-        setDetails(d => ({ ...d, [selId]: { files, notes, reviewers, appr, pipe, loading: false, error: null } }))
+        setDetails(d => ({ ...d, [selId]: { files, notes, reviewers, appr, hasApproved, pipe, loading: false, error: null } }))
       } catch (err) {
         if (cancelled) return
         // 실패 시 재시도 가능하도록 추적에서 제거
         loadedDetailRef.current.delete(selId)
-        setDetails(d => ({ ...d, [selId]: { files: [], notes: [], reviewers: [], appr: null, pipe: sel.pipe, loading: false, error: (err as Error).message } }))
+        setDetails(d => ({ ...d, [selId]: { files: [], notes: [], reviewers: [], appr: null, hasApproved: false, pipe: sel.pipe, loading: false, error: (err as Error).message } }))
       }
     })()
     return () => { cancelled = true }
-  }, [selId, ctx, mrs])
+  }, [selId, ctx, mrs, detailNonce])
+
+  // 승인/노트 등 액션 후 선택 MR 상세를 강제 재조회한다(추적 해제 + nonce 증가).
+  const refreshDetail = useCallback(() => {
+    if (selId != null) loadedDetailRef.current.delete(selId)
+    setDetailNonce(n => n + 1)
+  }, [selId])
 
   // ── 상태별 화면 ──
   if (loading && !mrs) {
@@ -320,6 +362,64 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
   const detail = sel ? details[sel.id] : undefined
   const selPipe = detail?.pipe ?? sel?.pipe ?? 'pend'
   const apprMet = detail?.appr ? detail.appr[0] >= detail.appr[1] : true
+  const isApproved = approvedOverride ?? detail?.hasApproved ?? false
+
+  // ── 쓰기 액션. 인자 순서 주의: 쓰기 메서드는 (host, projectId, iid, token). ──
+  const handleApproveToggle = async () => {
+    if (!ctx || !sel || busy) return
+    setBusy('approve')
+    try {
+      if (isApproved) {
+        await unapproveMergeRequest(ctx.host, sel.projectId, sel.id, ctx.token)
+        setApprovedOverride(false)
+        notify(...spread(TOASTS.mrUnapproved()))
+      } else {
+        await approveMergeRequest(ctx.host, sel.projectId, sel.id, ctx.token)
+        setApprovedOverride(true)
+        notify(...spread(TOASTS.mrApproved()))
+      }
+      setShowApproveConfirm(false)
+      refreshDetail()
+    } catch (err) {
+      notify(...spread(TOASTS.reviewActionFailed('승인 처리 실패', glActionError(err, 'approve'))))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleMerge = async () => {
+    if (!ctx || !sel || busy) return
+    setBusy('merge')
+    try {
+      // 비동기 머지(merge_when_pipeline_succeeds 등)면 200이어도 state가 아직 'merged'가
+      // 아닐 수 있어, 반환 state를 보고 완료/예약을 분기한다(조기 "머지 완료" 방지).
+      const mr = await acceptMergeRequest(ctx.host, sel.projectId, sel.id, ctx.token, squash ? { squash: true } : undefined)
+      setShowMergeConfirm(false)
+      notify(...spread(mr.state === 'merged' ? TOASTS.merged() : TOASTS.mrMergeScheduled()))
+      await loadMRs()
+    } catch (err) {
+      notify(...spread(TOASTS.reviewActionFailed('머지 실패', glActionError(err, 'merge'))))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleNote = async () => {
+    if (!ctx || !sel || busy) return
+    const body = noteBody.trim()
+    if (!body) return
+    setBusy('note')
+    try {
+      await createMergeRequestNote(ctx.host, sel.projectId, sel.id, ctx.token, body)
+      setNoteBody('')
+      notify(...spread(TOASTS.mrNoteAdded()))
+      refreshDetail()
+    } catch (err) {
+      notify(...spread(TOASTS.reviewActionFailed('노트 실패', glActionError(err, 'note'))))
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const tabs: Array<[typeof dtab, string]> = [
     ['overview', '개요'],
@@ -357,7 +457,7 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
             const stCls = mr.draft ? 'pr-draft' : `pr-${mr.status}`
             const stLbl = mr.draft ? 'draft' : mr.status
             return (
-              <div key={mr.id} className={`pr-item${mr.id === sel?.id ? ' on' : ''}`} onClick={() => { setSelId(mr.id); setDtab('overview'); setApproved(false); setRequested(false) }}>
+              <div key={mr.id} className={`pr-item${mr.id === sel?.id ? ' on' : ''}`} onClick={() => { setSelId(mr.id); setDtab('overview'); setApprovedOverride(null); setNoteBody(''); setShowMergeConfirm(false); setShowApproveConfirm(false); setSquash(false) }}>
                 <div className="pr-item-hd">
                   <span className={`pr-status ${stCls}`}>{stLbl}</span>
                   <span className="pr-num" style={{ color: GL_ORANGE }}>!{mr.id}</span>
@@ -485,40 +585,77 @@ export function MRView({ repoPath, onOpenUrl }: Props) {
                 </>
               )}
               {dtab === 'notes' && (
-                detail?.loading
-                  ? <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>노트 불러오는 중…</div>
-                  : (detail?.notes.length ?? 0) === 0
-                    ? <div className="pr-empty" style={{ height: 140 }}><Geuru expr="sleepy" scale={2.2} /><span>아직 노트가 없어요 · 첫 코멘트를 남겨 보세요</span></div>
-                    : detail?.notes.map(n => (
-                      <div key={n.id} className="pr-comment">
-                        <div className="pr-comment-hd">
-                          <div className="pr-comment-av" style={{ background: n.ac + '22', color: n.ac, border: `1px solid ${n.ac}44` }}>{n.i}</div>
-                          <span style={{ fontSize: 12, color: 'var(--c-text-strong)', fontWeight: 600 }}>{n.author}</span>
-                          <span style={{ fontSize: 11, color: 'var(--c-text-faint)' }}>{n.time}</span>
-                        </div>
-                        <Markdown source={n.body} className="pr-comment-body" />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {detail?.loading && <div style={{ fontSize: 12, color: 'var(--c-text-faint)' }}>노트 불러오는 중…</div>}
+                  {!detail?.loading && (detail?.notes.length ?? 0) === 0 && (
+                    <div className="pr-empty" style={{ height: 140 }}><Geuru expr="sleepy" scale={2.2} /><span>아직 노트가 없어요 · 첫 코멘트를 남겨 보세요</span></div>
+                  )}
+                  {detail?.notes.map(n => (
+                    <div key={n.id} className="pr-comment">
+                      <div className="pr-comment-hd">
+                        <div className="pr-comment-av" style={{ background: n.ac + '22', color: n.ac, border: `1px solid ${n.ac}44` }}>{n.i}</div>
+                        <span style={{ fontSize: 12, color: 'var(--c-text-strong)', fontWeight: 600 }}>{n.author}</span>
+                        <span style={{ fontSize: 11, color: 'var(--c-text-faint)' }}>{n.time}</span>
                       </div>
-                    ))
+                      <Markdown source={n.body} className="pr-comment-body" />
+                    </div>
+                  ))}
+                  <div className="pr-comment-form">
+                    <textarea
+                      className="pr-comment-input"
+                      placeholder="첫 코멘트를 남겨 보세요"
+                      value={noteBody}
+                      onChange={e => setNoteBody(e.target.value)}
+                      rows={3}
+                    />
+                    <button className="pr-comment-send" disabled={!noteBody.trim() || busy === 'note'} onClick={() => void handleNote()}>
+                      {busy === 'note' ? <span className="pr-spin">⟳</span> : '보내기'}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
             {sel.status === 'open' && (
               <div className="pr-approve-row">
-                <button className="pr-request-btn" onClick={() => { setRequested(r => !r); setApproved(false) }}
-                  style={requested ? { background: 'rgba(255,107,107,.22)' } : {}}>
-                  {requested ? '✓ 변경 요청됨' : '변경 요청'}
+                <button className={`pr-approve-btn${isApproved ? ' done' : ''}`} disabled={!!busy} onClick={() => setShowApproveConfirm(true)}
+                  style={isApproved ? { filter: 'brightness(1.1)' } : {}}>
+                  {busy === 'approve' ? <span className="pr-spin">⟳</span> : isApproved ? '✓ 승인함' : '승인'}
                 </button>
-                <button className={`pr-approve-btn${approved ? ' done' : ''}`} onClick={() => { setApproved(a => !a); setRequested(false) }}
-                  style={approved ? { filter: 'brightness(1.1)' } : {}}>
-                  {approved ? '✓ 승인함' : '승인'}
-                </button>
-                <button className="pr-merge-btn" disabled={(!apprMet || selPipe === 'fail') && !approved}>
-                  {sel.draft ? 'Draft 표시 해제' : 'Merge'}
+                <button className="pr-merge-btn" disabled={!!busy || sel.draft} onClick={() => setShowMergeConfirm(true)}
+                  title={sel.draft ? 'Draft MR은 머지할 수 없어요' : !apprMet ? '승인 요건 미충족 · 머지가 거부될 수 있어요' : selPipe === 'fail' ? '파이프라인 실패 · 머지가 거부될 수 있어요' : undefined}>
+                  {sel.draft ? 'Draft' : 'Merge'}
                 </button>
               </div>
             )}
           </>
         ) : <div className="pr-empty"><Geuru expr="idle" scale={2.8} /><span>왼쪽에서 MR을 고르면 여기에 보여요</span></div>}
       </div>
+      {showApproveConfirm && sel && (
+        <ConfirmModal
+          title={isApproved ? '승인을 취소할까요?' : '이 MR을 승인할까요?'}
+          message={`!${sel.id} · ${sel.title} ${isApproved ? '의 승인을 취소해요' : '를 승인해요'} · 원격에 바로 반영돼요.`}
+          confirmLabel={busy === 'approve' ? '처리 중…' : isApproved ? '승인 취소' : '승인'}
+          confirmDisabled={busy === 'approve'}
+          onConfirm={() => void handleApproveToggle()}
+          onCancel={() => { if (busy !== 'approve') setShowApproveConfirm(false) }}
+        />
+      )}
+      {showMergeConfirm && sel && (
+        <ConfirmModal
+          title={`MR !${sel.id} 머지`}
+          message={`이 MR을 ${sel.to}에 머지해요 · 원격에 바로 반영되는 작업이에요.`}
+          confirmLabel={busy === 'merge' ? '머지 중…' : '머지'}
+          danger
+          confirmDisabled={busy === 'merge'}
+          onConfirm={() => void handleMerge()}
+          onCancel={() => { if (busy !== 'merge') setShowMergeConfirm(false) }}
+        >
+          <label className="pr-merge-method" style={{ justifyContent: 'flex-start' }}>
+            <input type="checkbox" checked={squash} onChange={e => setSquash(e.target.checked)} />
+            커밋을 squash로 합치기
+          </label>
+        </ConfirmModal>
+      )}
     </div>
   )
 }

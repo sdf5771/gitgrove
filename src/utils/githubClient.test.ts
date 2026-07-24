@@ -10,6 +10,9 @@ import {
   parseRepoFromUrl,
   clearGithubCache,
   GithubApiError,
+  mergePull,
+  createReview,
+  createIssueComment,
 } from './githubClient'
 
 // fetch mock 헬퍼: 주어진 응답을 돌려주는 Response-유사 객체를 만든다.
@@ -313,6 +316,122 @@ describe('githubClient', () => {
       expect(fetchMock.mock.calls[0][0]).toBe('https://api.github.com/notifications?per_page=30')
       expect(list).toHaveLength(1)
       expect(list[0].reason).toBe('review_requested')
+    })
+  })
+
+  // ── PR 쓰기 API (B-write) — URL·method·body(JSON)·Content-Type 계약 검증 ──
+  // 실 API는 라이브 PR이 필요해 손검증 불가 → fetch stub으로 요청 형태만 단언한다.
+  describe('PR 쓰기 API (B-write)', () => {
+    // 마지막 fetch 호출의 [url, opts] + 파싱된 body를 꺼내는 헬퍼
+    function lastCall(fetchMock: ReturnType<typeof vi.fn>) {
+      const [url, opts] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1] as [string, RequestInit]
+      const headers = opts.headers as Record<string, string>
+      const body = opts.body != null ? JSON.parse(opts.body as string) : undefined
+      return { url, opts, headers, body }
+    }
+
+    it('mergePull: PUT /pulls/{n}/merge · body {merge_method} · Content-Type json (기본 merge)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ merged: true, message: 'Merged', sha: 'abc' }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const res = await mergePull('o', 'r', 7, 'tok')
+      const { url, opts, headers, body } = lastCall(fetchMock)
+      expect(url).toBe('https://api.github.com/repos/o/r/pulls/7/merge')
+      expect(opts.method).toBe('PUT')
+      expect(headers['Content-Type']).toBe('application/json')
+      expect(body).toEqual({ merge_method: 'merge' })
+      expect(res).toEqual({ merged: true, message: 'Merged', sha: 'abc' })
+    })
+
+    it('mergePull: method 인자가 body.merge_method로 전달된다 (squash/rebase)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ merged: true, message: 'ok' }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await mergePull('o', 'r', 7, 'tok', 'squash')
+      expect(lastCall(fetchMock).body).toEqual({ merge_method: 'squash' })
+      await mergePull('o', 'r', 7, 'tok', 'rebase')
+      expect(lastCall(fetchMock).body).toEqual({ merge_method: 'rebase' })
+    })
+
+    it('createReview APPROVE: payload에 body 키가 없다 (event만)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ id: 1, state: 'APPROVED', body: '', html_url: '', user: { login: 'octo' } }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await createReview('o', 'r', 7, 'tok', 'APPROVE')
+      const { url, opts, headers, body } = lastCall(fetchMock)
+      expect(url).toBe('https://api.github.com/repos/o/r/pulls/7/reviews')
+      expect(opts.method).toBe('POST')
+      expect(headers['Content-Type']).toBe('application/json')
+      expect(body).toEqual({ event: 'APPROVE' })
+      expect('body' in body).toBe(false)
+    })
+
+    it('createReview REQUEST_CHANGES/COMMENT: body가 payload에 포함된다', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ id: 1, state: 'CHANGES_REQUESTED', body: '', html_url: '', user: null }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      await createReview('o', 'r', 7, 'tok', 'REQUEST_CHANGES', '테스트 더 부탁해요')
+      expect(lastCall(fetchMock).body).toEqual({ event: 'REQUEST_CHANGES', body: '테스트 더 부탁해요' })
+
+      await createReview('o', 'r', 7, 'tok', 'COMMENT', '참고만')
+      expect(lastCall(fetchMock).body).toEqual({ event: 'COMMENT', body: '참고만' })
+    })
+
+    it('createReview: body 미전달이면 payload에 body 키 없음(APPROVE 외에도)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ id: 1, state: 'COMMENTED', body: '', html_url: '', user: null }))
+      vi.stubGlobal('fetch', fetchMock)
+      await createReview('o', 'r', 7, 'tok', 'COMMENT')
+      const body = lastCall(fetchMock).body
+      expect(body).toEqual({ event: 'COMMENT' })
+      expect('body' in body).toBe(false)
+    })
+
+    it('createIssueComment: POST /issues/{n}/comments · body {body}', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ id: 9, body: 'LGTM', html_url: '', user: { login: 'octo' }, created_at: '', updated_at: '' }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const res = await createIssueComment('o', 'r', 7, 'tok', 'LGTM 🌱')
+      const { url, opts, headers, body } = lastCall(fetchMock)
+      expect(url).toBe('https://api.github.com/repos/o/r/issues/7/comments')
+      expect(opts.method).toBe('POST')
+      expect(headers['Content-Type']).toBe('application/json')
+      expect(body).toEqual({ body: 'LGTM 🌱' })
+      expect(res.id).toBe(9)
+    })
+
+    it('회귀: GET에는 body/Content-Type가 적용되지 않는다', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ login: 'octo' }))
+      vi.stubGlobal('fetch', fetchMock)
+      // ghRequest에 body를 넘겨도 method가 GET이면 무시돼야 한다.
+      await ghRequest('/user', { token: 'tok', body: { should: 'ignore' } })
+      const { opts, headers } = lastCall(fetchMock)
+      expect(headers['Content-Type']).toBeUndefined()
+      expect(opts.body).toBeUndefined()
+    })
+
+    it('쓰기(PUT/POST)는 캐시하지 않는다 — 매 호출 fetch', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({ merged: true, message: 'ok' }))
+      vi.stubGlobal('fetch', fetchMock)
+      await mergePull('o', 'r', 7, 'tok')
+      await mergePull('o', 'r', 7, 'tok')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+
+      const postMock = vi.fn().mockResolvedValue(mockResponse({ id: 1 }))
+      vi.stubGlobal('fetch', postMock)
+      await createIssueComment('o', 'r', 7, 'tok', 'a')
+      await createIssueComment('o', 'r', 7, 'tok', 'a')
+      expect(postMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('non-2xx는 GithubApiError로 status(403/404/405/422)를 보존', async () => {
+      for (const status of [403, 404, 405, 422]) {
+        const fetchMock = vi.fn().mockResolvedValue(mockResponse({ message: 'nope' }, { status, ok: false }))
+        vi.stubGlobal('fetch', fetchMock)
+        const err = await mergePull('o', 'r', 7, 'tok').catch(e => e)
+        expect(err).toBeInstanceOf(GithubApiError)
+        expect(err.status).toBe(status)
+        expect(err.rateLimited).toBe(false)
+      }
     })
   })
 })

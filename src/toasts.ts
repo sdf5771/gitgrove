@@ -71,6 +71,18 @@ export const TOASTS = {
   comingSoon: (label: string): Toast => ({ type: 'info', title: `${label} 준비 중`, msg: '다음 버전에서 제공돼요' }),
   notARepo: (): Toast => ({ type: 'error', title: 'Git 저장소가 아니에요', msg: '.git 폴더가 없거나 삭제됐어요', geuru: 'conflict' }),
 
+  // ── PR/MR 리뷰·머지·코멘트 (GitHub PRView · GitLab MRView) ──
+  prApproved: (): Toast => ({ type: 'success', title: '승인 완료', geuru: 'happy' }),
+  prChangesRequested: (): Toast => ({ type: 'success', title: '변경 요청 완료' }),
+  prCommented: (): Toast => ({ type: 'success', title: '코멘트 등록됨', dur: 3000 }),
+  mrApproved: (): Toast => ({ type: 'success', title: '승인 완료', geuru: 'happy' }),
+  mrUnapproved: (): Toast => ({ type: 'info', title: '승인 취소' }),
+  mrNoteAdded: (): Toast => ({ type: 'success', title: '노트 등록됨', dur: 3000 }),
+  // 비동기 머지(파이프라인 통과 후 머지) — 즉시 merged가 아닌 예약 상태.
+  mrMergeScheduled: (): Toast => ({ type: 'info', title: '머지 예약됨', msg: '파이프라인 통과 후 머지돼요' }),
+  // 액션 실패 — 호출부가 사유(msg)를 먼저 만들어 넘긴다(WRITING_GUIDE: 에러 사유 먼저).
+  reviewActionFailed: (title: string, reason: string): Toast => ({ type: 'error', title, msg: reason }),
+
   // ── 업데이트 ──
   updateAvailable: (ver: string, onClick: () => void): Toast => ({ type: 'info', title: `GitGrove ${ver} 출시`, msg: '클릭해서 받기', onClick, dur: 8000 }),
   downloadDone: (): Toast => ({ type: 'success', title: '다운로드 완료', msg: '설치 창이 열렸어요 · 안내대로 교체해 주세요', geuru: 'merge', dur: 6000 }),

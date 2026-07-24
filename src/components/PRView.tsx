@@ -5,7 +5,29 @@ import { Markdown } from './Markdown'
 import { Geuru } from './Geuru'
 import { parseGitHubRepo } from '../utils/github'
 import { getGithubToken } from '../utils/githubToken'
-import { getPulls } from '../utils/githubClient'
+import { getPulls, mergePull, createReview, createIssueComment, GithubApiError } from '../utils/githubClient'
+import { ConfirmModal } from './modals/ConfirmModal'
+import { TOASTS, spread } from '../toasts'
+import type { NotifyFn } from '../hooks/useNotifications'
+
+type GhAction = 'approve' | 'request' | 'merge' | 'comment'
+
+// 쓰기 액션 실패 사유 → 사용자 안내 문구(사유 먼저). err.status + 액션 종류로 분기.
+function ghActionError(err: unknown, action: GhAction): string {
+  const status = err instanceof GithubApiError ? err.status : 0
+  if (status === 403) return '토큰에 쓰기 권한(GitHub `repo` 스코프)이 필요해요'
+  if (status === 404) return '대상을 찾지 못했어요 · 이미 닫혔거나 접근 권한이 없을 수 있어요'
+  if (status === 405) {
+    return action === 'merge'
+      ? '지금은 머지할 수 없어요 · 충돌·브랜치 보호 규칙을 확인해주세요'
+      : '지금은 처리할 수 없는 상태예요 · 대상 상태를 확인해주세요'
+  }
+  if (status === 409) return 'PR이 그새 바뀌었어요 · 새로고침 후 다시 시도해주세요'
+  if (status === 422) return '요청을 처리하지 못했어요 · 입력 내용을 확인해주세요'
+  return err instanceof Error ? err.message : String(err)
+}
+
+interface PostedComment { id: number; author: string; time: string; body: string }
 
 interface GHPullRequest {
   number: number
@@ -31,15 +53,26 @@ async function fetchGitHubPRs(owner: string, repo: string, token: string): Promi
 interface Props {
   onOpenConflict?: () => void
   repoPath?: string | null
+  notify: NotifyFn
 }
 
-export function PRView({ onOpenConflict, repoPath }: Props) {
+export function PRView({ onOpenConflict, repoPath, notify }: Props) {
   const [filter, setFilter] = useState<'open' | 'merged' | 'all'>('open')
   // 탭 진입 시 아무것도 선택하지 않은 상태가 기본. 목록에서 클릭해야 상세가 뜬다.
   const [selId, setSelId] = useState<number | null>(null)
   const [dtab, setDtab] = useState<'overview' | 'files' | 'comments' | 'checks'>('overview')
-  const [approved, setApproved] = useState(false)
-  const [requested, setRequested] = useState(false)
+  // 리뷰 결과 — 실제 API 성공 후에만 세팅(스텁 토글 아님). 선택 변경 시 초기화.
+  const [reviewState, setReviewState] = useState<'approved' | 'changes_requested' | null>(null)
+  const [busy, setBusy] = useState<null | 'approve' | 'request' | 'merge' | 'comment'>(null)
+  const [showRequestForm, setShowRequestForm] = useState(false)
+  const [requestBody, setRequestBody] = useState('')
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false)
+  const [mergeMethod, setMergeMethod] = useState<'merge' | 'squash' | 'rebase'>('merge')
+  // 승인은 원격을 바꾸는 액션이라 클릭 즉시 호출하지 않고 확인 다이얼로그를 먼저 띄운다.
+  const [showApproveConfirm, setShowApproveConfirm] = useState(false)
+  const [commentBody, setCommentBody] = useState('')
+  // 코멘트 GET 클라이언트가 없어(백엔드 계약은 쓰기만) 방금 올린 코멘트를 낙관적으로 표시.
+  const [postedComments, setPostedComments] = useState<PostedComment[]>([])
 
   const [realPRs, setRealPRs] = useState<PullRequest[] | null>(null)
   const [prLoading, setPRLoading] = useState(false)
@@ -149,6 +182,81 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
   const statusIcon = { pass: '✓', fail: '✗', pend: '…' } as const
   const statusCls = { pass: 'pass', fail: 'fail', pend: 'pend' } as const
 
+  // ── 쓰기 액션(승인·변경요청·머지·코멘트). owner/repo는 ghInfo, number는 sel.id, token 재사용. ──
+  const handleApprove = async () => {
+    if (!ghInfo || !sel || busy) return
+    setBusy('approve')
+    try {
+      await createReview(ghInfo.owner, ghInfo.repo, sel.id, token, 'APPROVE')
+      setReviewState('approved')
+      setShowApproveConfirm(false)
+      notify(...spread(TOASTS.prApproved()))
+      await loadPRs()
+    } catch (err) {
+      notify(...spread(TOASTS.reviewActionFailed('승인 실패', ghActionError(err, 'approve'))))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleRequestChanges = async () => {
+    if (!ghInfo || !sel || busy) return
+    const body = requestBody.trim()
+    if (!body) return // GitHub는 REQUEST_CHANGES에 body 필수
+    setBusy('request')
+    try {
+      await createReview(ghInfo.owner, ghInfo.repo, sel.id, token, 'REQUEST_CHANGES', body)
+      setReviewState('changes_requested')
+      setShowRequestForm(false)
+      setRequestBody('')
+      notify(...spread(TOASTS.prChangesRequested()))
+      await loadPRs()
+    } catch (err) {
+      notify(...spread(TOASTS.reviewActionFailed('변경 요청 실패', ghActionError(err, 'request'))))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleMerge = async () => {
+    if (!ghInfo || !sel || busy) return
+    setBusy('merge')
+    try {
+      const res = await mergePull(ghInfo.owner, ghInfo.repo, sel.id, token, mergeMethod)
+      if (!res.merged) throw new Error(res.message || '머지가 거부됐어요')
+      setShowMergeConfirm(false)
+      notify(...spread(TOASTS.merged()))
+      await loadPRs()
+    } catch (err) {
+      notify(...spread(TOASTS.reviewActionFailed('머지 실패', ghActionError(err, 'merge'))))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleComment = async () => {
+    if (!ghInfo || !sel || busy) return
+    const body = commentBody.trim()
+    if (!body) return
+    setBusy('comment')
+    try {
+      const c = await createIssueComment(ghInfo.owner, ghInfo.repo, sel.id, token, body)
+      setPostedComments(prev => [...prev, {
+        id: c.id,
+        author: c.user?.login ?? '나',
+        time: new Date(c.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
+        body: c.body,
+      }])
+      setCommentBody('')
+      notify(...spread(TOASTS.prCommented()))
+      await loadPRs()
+    } catch (err) {
+      notify(...spread(TOASTS.reviewActionFailed('코멘트 실패', ghActionError(err, 'comment'))))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div className="pr-wrap">
       <div className="pr-list-pane">
@@ -177,7 +285,7 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
         </div>
         <div className="pr-list-scroll">
           {filtered.map(pr => (
-            <div key={pr.id} className={`pr-item${pr.id === selId ? ' on' : ''}`} onClick={() => { setSelId(pr.id); setDtab('overview'); setApproved(false); setRequested(false) }}>
+            <div key={pr.id} className={`pr-item${pr.id === selId ? ' on' : ''}`} onClick={() => { setSelId(pr.id); setDtab('overview'); setReviewState(null); setShowRequestForm(false); setRequestBody(''); setCommentBody(''); setPostedComments([]); setShowApproveConfirm(false); setShowMergeConfirm(false); setMergeMethod('merge') }}>
               <div className="pr-item-hd">
                 <span className={`pr-status pr-${pr.status}`}>{pr.status}</span>
                 <span className="pr-num">#{pr.id}</span>
@@ -261,9 +369,11 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
                 </div>
               )}
               {dtab === 'comments' && (
-                sel.threads.length === 0
-                  ? <div className="pr-empty" style={{ height: 120 }}><Geuru expr="sleepy" scale={2.2} /><span>No comments yet</span></div>
-                  : sel.threads.map(t => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {sel.threads.length === 0 && postedComments.length === 0 && (
+                    <div className="pr-empty" style={{ height: 120 }}><Geuru expr="sleepy" scale={2.2} /><span>No comments yet</span></div>
+                  )}
+                  {sel.threads.map(t => (
                     <div key={t.id} className="pr-comment">
                       <div className="pr-comment-hd">
                         <div className="pr-comment-av" style={{ background: t.ac + '22', color: t.ac, border: `1px solid ${t.ac}44` }}>{t.i}</div>
@@ -273,7 +383,30 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
                       </div>
                       <Markdown source={t.body} className="pr-comment-body" />
                     </div>
-                  ))
+                  ))}
+                  {postedComments.map(c => (
+                    <div key={`posted-${c.id}`} className="pr-comment">
+                      <div className="pr-comment-hd">
+                        <div className="pr-comment-av" style={{ background: '#5fb8e622', color: '#5fb8e6', border: '1px solid #5fb8e644' }}>{c.author.slice(0, 2).toUpperCase()}</div>
+                        <span style={{ fontSize: 12, color: 'var(--c-text-strong)', fontWeight: 600 }}>{c.author}</span>
+                        <span style={{ fontSize: 11, color: 'var(--c-text-faint)' }}>{c.time}</span>
+                      </div>
+                      <Markdown source={c.body} className="pr-comment-body" />
+                    </div>
+                  ))}
+                  <div className="pr-comment-form">
+                    <textarea
+                      className="pr-comment-input"
+                      placeholder="코멘트를 남겨 보세요"
+                      value={commentBody}
+                      onChange={e => setCommentBody(e.target.value)}
+                      rows={3}
+                    />
+                    <button className="pr-comment-send" disabled={!commentBody.trim() || busy === 'comment'} onClick={() => void handleComment()}>
+                      {busy === 'comment' ? <span className="pr-spin">⟳</span> : '보내기'}
+                    </button>
+                  </div>
+                </div>
               )}
               {dtab === 'checks' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -291,20 +424,72 @@ export function PRView({ onOpenConflict, repoPath }: Props) {
               )}
             </div>
             {sel.status === 'open' && (
-              <div className="pr-approve-row">
-                <button className="pr-request-btn" onClick={() => { setRequested(true); setApproved(false) }}
-                  style={requested ? { background: 'rgba(255,107,107,.25)' } : {}}>
-                  {requested ? '✓ Changes Requested' : 'Request Changes'}
-                </button>
-                <button className="pr-approve-btn" onClick={() => { setApproved(true); setRequested(false) }}
-                  style={approved ? { filter: 'brightness(1.1)' } : {}}>
-                  {approved ? '✓ Approved' : 'Approve'}
-                </button>
-              </div>
+              <>
+                {showRequestForm && (
+                  <div className="pr-request-form">
+                    <textarea
+                      className="pr-comment-input"
+                      placeholder="변경 요청 사유를 적어 주세요 (필수)"
+                      value={requestBody}
+                      onChange={e => setRequestBody(e.target.value)}
+                      rows={2}
+                    />
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      <button className="mbtn-cancel" onClick={() => { setShowRequestForm(false); setRequestBody('') }}>취소</button>
+                      <button className="pr-comment-send" disabled={!requestBody.trim() || busy === 'request'} onClick={() => void handleRequestChanges()}>
+                        {busy === 'request' ? <span className="pr-spin">⟳</span> : '변경 요청 보내기'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <div className="pr-approve-row">
+                  <button className="pr-request-btn" disabled={!!busy}
+                    onClick={() => setShowRequestForm(v => !v)}
+                    style={reviewState === 'changes_requested' ? { background: 'rgba(255,107,107,.25)' } : {}}>
+                    {reviewState === 'changes_requested' ? '✓ Changes Requested' : 'Request Changes'}
+                  </button>
+                  <button className="pr-approve-btn" disabled={!!busy} onClick={() => setShowApproveConfirm(true)}
+                    style={reviewState === 'approved' ? { filter: 'brightness(1.1)' } : {}}>
+                    {busy === 'approve' ? <span className="pr-spin">⟳</span> : reviewState === 'approved' ? '✓ Approved' : 'Approve'}
+                  </button>
+                  <button className="pr-merge-btn" disabled={!!busy} onClick={() => setShowMergeConfirm(true)}
+                    title={sel.checks.some(c => c.s === 'fail') ? '체크 실패 · 머지가 거부될 수 있어요' : undefined}>Merge</button>
+                </div>
+              </>
             )}
           </>
         ) : <div className="pr-empty"><Geuru expr="idle" scale={2.8} /><span>왼쪽에서 PR을 고르면 여기에 보여요</span></div>}
       </div>
+      {showApproveConfirm && sel && (
+        <ConfirmModal
+          title="이 PR을 승인할까요?"
+          message={`#${sel.id} · ${sel.title} 를 승인해요 · 원격에 리뷰가 바로 등록돼요.`}
+          confirmLabel={busy === 'approve' ? '승인 중…' : '승인'}
+          confirmDisabled={busy === 'approve'}
+          onConfirm={() => void handleApprove()}
+          onCancel={() => { if (busy !== 'approve') setShowApproveConfirm(false) }}
+        />
+      )}
+      {showMergeConfirm && sel && (
+        <ConfirmModal
+          title={`PR #${sel.id} 머지`}
+          message="이 PR을 대상 브랜치에 머지해요 · 원격에 바로 반영되는 작업이에요."
+          confirmLabel={busy === 'merge' ? '머지 중…' : '머지'}
+          danger
+          confirmDisabled={busy === 'merge'}
+          onConfirm={() => void handleMerge()}
+          onCancel={() => { if (busy !== 'merge') setShowMergeConfirm(false) }}
+        >
+          <div className="pr-merge-methods">
+            {(['merge', 'squash', 'rebase'] as const).map(m => (
+              <label key={m} className={`pr-merge-method${mergeMethod === m ? ' on' : ''}`}>
+                <input type="radio" name="pr-merge-method" checked={mergeMethod === m} onChange={() => setMergeMethod(m)} />
+                {m === 'merge' ? '머지 커밋' : m === 'squash' ? 'Squash' : 'Rebase'}
+              </label>
+            ))}
+          </div>
+        </ConfirmModal>
+      )}
     </div>
   )
 }

@@ -2283,9 +2283,9 @@ export default function App() {
 
             {view === 'pr' ? (
               repoProvider === 'gitlab' ? (
-                <MRView repoPath={repoPath} onOpenUrl={url => window.appAPI?.openReleaseUrl(url)} />
+                <MRView repoPath={repoPath} onOpenUrl={url => window.appAPI?.openReleaseUrl(url)} notify={notify} />
               ) : (
-                <PRView onOpenConflict={() => setShowConflict(true)} repoPath={repoPath} />
+                <PRView onOpenConflict={() => setShowConflict(true)} repoPath={repoPath} notify={notify} />
               )
             ) : view === 'blame' ? (
               <>

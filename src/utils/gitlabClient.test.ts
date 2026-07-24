@@ -15,6 +15,10 @@ import {
   getMergeRequestApprovals,
   getTodos,
   clearGitlabCache,
+  approveMergeRequest,
+  unapproveMergeRequest,
+  acceptMergeRequest,
+  createMergeRequestNote,
 } from './gitlabClient'
 
 // fetch mock 헬퍼: 응답 본문 + 헤더 + status 구성
@@ -256,5 +260,104 @@ describe('헬퍼 — 경로/파라미터 구성', () => {
     const url = fetchMock.mock.calls[0][0] as string
     expect(url).toContain('/api/v4/projects/7/merge_requests/128/approvals')
     expect(res.approvals_required).toBe(2)
+  })
+})
+
+// ── MR 쓰기 API (GL-write) — URL·method·body(JSON)·Content-Type 계약 검증 ──
+// 실 API는 라이브 MR이 필요해 손검증 불가 → fetch stub으로 요청 형태만 단언한다.
+describe('MR 쓰기 API (GL-write)', () => {
+  function lastCall() {
+    const [url, opts] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1] as [string, RequestInit]
+    const headers = opts.headers as Record<string, string>
+    const body = opts.body != null ? JSON.parse(opts.body as string) : undefined
+    return { url, opts, headers, body }
+  }
+
+  it('approveMergeRequest: POST /approve · body 없음 · Content-Type 없음', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ approvals_required: 1, approvals_left: 0 }))
+    await approveMergeRequest('gitlab.com', 7, 128, 't')
+    const { url, opts, headers } = lastCall()
+    expect(url).toBe('https://gitlab.com/api/v4/projects/7/merge_requests/128/approve')
+    expect(opts.method).toBe('POST')
+    expect(opts.body).toBeUndefined()
+    expect(headers['Content-Type']).toBeUndefined()
+    expect(headers['PRIVATE-TOKEN']).toBe('t')
+  })
+
+  it('unapproveMergeRequest: POST /unapprove · body 없음', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ approvals_required: 1, approvals_left: 1 }))
+    await unapproveMergeRequest('gitlab.com', 7, 128, 't')
+    const { url, opts, headers } = lastCall()
+    expect(url).toBe('https://gitlab.com/api/v4/projects/7/merge_requests/128/unapprove')
+    expect(opts.method).toBe('POST')
+    expect(opts.body).toBeUndefined()
+    expect(headers['Content-Type']).toBeUndefined()
+  })
+
+  it('acceptMergeRequest: squash 미지정이면 PUT /merge · body 미전송 · Content-Type 없음', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ id: 1, iid: 128, state: 'merged' }))
+    await acceptMergeRequest('gitlab.com', 7, 128, 't')
+    const { url, opts, headers } = lastCall()
+    expect(url).toBe('https://gitlab.com/api/v4/projects/7/merge_requests/128/merge')
+    expect(opts.method).toBe('PUT')
+    expect(opts.body).toBeUndefined()
+    expect(headers['Content-Type']).toBeUndefined()
+  })
+
+  it('acceptMergeRequest: squash 지정 시 body {squash} 전송 · Content-Type json', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ id: 1, iid: 128, state: 'merged' }))
+    await acceptMergeRequest('gitlab.com', 7, 128, 't', { squash: true })
+    const { headers, body } = lastCall()
+    expect(headers['Content-Type']).toBe('application/json')
+    expect(body).toEqual({ squash: true })
+
+    // squash:false도 undefined가 아니므로 body에 실린다({squash:false}).
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ id: 1, iid: 128, state: 'merged' }))
+    await acceptMergeRequest('gitlab.com', 7, 128, 't', { squash: false })
+    expect(lastCall().body).toEqual({ squash: false })
+  })
+
+  it('createMergeRequestNote: POST /notes · body {body} · Content-Type json', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ id: 5, body: '노트', system: false, created_at: '', author: null }))
+    const res = await createMergeRequestNote('gitlab.com', 7, 128, 't', '리뷰 코멘트')
+    const { url, opts, headers, body } = lastCall()
+    expect(url).toBe('https://gitlab.com/api/v4/projects/7/merge_requests/128/notes')
+    expect(opts.method).toBe('POST')
+    expect(headers['Content-Type']).toBe('application/json')
+    expect(body).toEqual({ body: '리뷰 코멘트' })
+    expect(res.id).toBe(5)
+  })
+
+  it('projectId의 slash는 단일 인코딩된다(group/repo → group%2Frepo)', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({}))
+    await acceptMergeRequest('gitlab.com', 'platform/web-client', 128, 't', { squash: true })
+    const { url } = lastCall()
+    expect(url).toContain('/api/v4/projects/platform%2Fweb-client/merge_requests/128/merge')
+    expect(url).not.toContain('%252F')
+  })
+
+  it('회귀: GET에는 body/Content-Type가 적용되지 않는다', async () => {
+    fetchMock.mockResolvedValueOnce(mockFetchOnce({ ok: 1 }))
+    await glRequest('gitlab.com', '/user', { token: 't', body: { should: 'ignore' } })
+    const { opts, headers } = lastCall()
+    expect(headers['Content-Type']).toBeUndefined()
+    expect(opts.body).toBeUndefined()
+  })
+
+  it('쓰기(POST/PUT)는 캐시하지 않는다 — 매 호출 fetch', async () => {
+    fetchMock.mockResolvedValue(mockFetchOnce({ ok: 1 }))
+    await approveMergeRequest('gitlab.com', 7, 128, 't')
+    await approveMergeRequest('gitlab.com', 7, 128, 't')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('non-2xx는 GitlabApiError로 status(403/404/405)를 보존', async () => {
+    for (const status of [403, 404, 405]) {
+      fetchMock.mockResolvedValueOnce(mockFetchOnce({ message: 'nope' }, { status }))
+      const err = await acceptMergeRequest('gitlab.com', 7, 128, 't').catch(e => e)
+      expect(err).toBeInstanceOf(GitlabApiError)
+      expect(err.status).toBe(status)
+      expect(err.rateLimited).toBe(false)
+    }
   })
 })
