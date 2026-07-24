@@ -623,6 +623,35 @@ body { display: flex; align-items: center; justify-content: center; }
 .split .col{flex:1;min-width:0;border-right:1px solid var(--c-divider);}
 .split .col:last-child{border-right:none;}
 
+/* ── Diff 코드 가로 스크롤(긴 줄) + 줄번호/부호 좌측 고정 ──
+   .dx-main 스코프라 blame(.blame-wrap)에는 영향 없음. 헤더(.dx-hd)는 .code-scroll의
+   형제라 그대로 고정. 줄번호·부호는 sticky-left로 GitHub식 좌측 고정(불투명 배경 필수). */
+.dx-main .code-scroll{overflow-x:auto;}
+/* 긴 줄이 잘리지 않게 ctext는 자연 폭(pre 유지, 잘림 해제) */
+.dx-main .cl .ctext{flex:0 0 auto;min-width:auto;overflow:visible;text-overflow:clip;}
+/* 좌측 고정 gutter 공통 배경(불투명 — 코드가 비쳐 겹치지 않게). ctx는 bg-deep,
+   add/del은 행 tint를 얹어 이음새 없이. */
+.dx-main .cl .lnum,
+.dx-main .cl .sign{position:sticky;z-index:2;background:var(--c-bg-deep);}
+.dx-main .cl.add .lnum,
+.dx-main .cl.add .sign{background:linear-gradient(rgba(111,207,124,.07),rgba(111,207,124,.07)),var(--c-bg-deep);}
+.dx-main .cl.del .lnum,
+.dx-main .cl.del .sign{background:linear-gradient(rgba(255,107,107,.07),rgba(255,107,107,.07)),var(--c-bg-deep);}
+
+/* Unified: 행이 콘텐츠 폭만큼 늘어나 code-scroll이 가로 스크롤. 줄번호 2개(old/new)+부호 누적 offset. */
+.dx-main .code-scroll > .cl{min-width:max-content;}
+.dx-main .code-scroll > .cl > .lnum:first-child{left:0;}
+.dx-main .code-scroll > .cl > .lnum:nth-child(2){left:38px;}
+.dx-main .code-scroll > .cl > .sign{left:76px;}
+/* Unified 훅 헤더: 세로(top) 고정 유지 + 가로 스크롤 시에도 좌측에 붙어 항상 보이게. */
+.dx-main .code-scroll > .hunk-hd{left:0;}
+
+/* Split: 각 컬럼이 독립 가로 스크롤. 줄번호 1개(+부호)만 좌측 고정. */
+.dx-main .split .col{overflow-x:auto;overflow-y:hidden;}
+.dx-main .split .col > .cl{min-width:max-content;}
+.dx-main .split .col > .cl > .lnum{left:0;}
+.dx-main .split .col > .cl > .sign{left:38px;}
+
 /* ── Diff 커밋 피커(변경2) — .dxc-* ── */
 .dxc-bar{position:relative;display:flex;align-items:center;gap:5px;padding:7px 8px;border-bottom:1px solid var(--c-divider);flex-shrink:0;}
 .dxc-step{width:24px;height:24px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--c-bg-inset);border:1px solid var(--c-border);border-bottom-width:2px;border-radius:var(--r2);color:var(--c-text-muted);font-size:12px;line-height:1;cursor:pointer;transition:color 120ms,border-color 120ms;}
