@@ -27,6 +27,12 @@ export interface GhRequestOptions {
   method?: string
   /** Accept 헤더 override(기본 application/vnd.github+json) */
   accept?: string
+  /**
+   * 요청 본문(쓰기 API용). method가 GET이 아니고 값이 있으면
+   * JSON.stringify되어 전송되며 Content-Type: application/json이 붙는다.
+   * GET에는 무시된다.
+   */
+  body?: unknown
   /** GET 캐시 사용 여부(기본 true). 항상 최신이 필요하면 false */
   cache?: boolean
   /** 캐시 TTL(ms). 기본 60s */
@@ -98,10 +104,13 @@ function makeHttpError(status: number, rateLimit: GhResponse<unknown>['rateLimit
  * 기본은 throw지만, 헤더는 throw 전에 캐시하지 않는다(에러는 캐시 금지).
  */
 export async function ghRequest<T>(path: string, opts: GhRequestOptions): Promise<GhResponse<T>> {
-  const { token, method = 'GET', accept = 'application/vnd.github+json', signal } = opts
-  const useCache = method.toUpperCase() === 'GET' && opts.cache !== false
+  const { token, method = 'GET', accept = 'application/vnd.github+json', body, signal } = opts
+  const upperMethod = method.toUpperCase()
+  const useCache = upperMethod === 'GET' && opts.cache !== false
   const ttl = opts.ttl ?? DEFAULT_TTL
-  const key = `${method.toUpperCase()} ${path} ${hashToken(token)}`
+  const key = `${upperMethod} ${path} ${hashToken(token)}`
+  // GET이 아니고 body가 주어졌을 때만 직렬화(쓰기 API). GET은 body 미적용.
+  const hasBody = upperMethod !== 'GET' && body !== undefined
 
   if (useCache) {
     const hit = cache.get(key)
@@ -119,7 +128,9 @@ export async function ghRequest<T>(path: string, opts: GhRequestOptions): Promis
     headers: {
       Authorization: `token ${token}`,
       Accept: accept,
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
     },
+    ...(hasBody ? { body: JSON.stringify(body) } : {}),
     cache: 'no-store',
     signal,
   })
@@ -160,6 +171,108 @@ export function getPulls<T = unknown>(owner: string, repo: string, token: string
 /** GET /rate_limit — 항상 최신이어야 하므로 호출부에서 cache:false 권장 */
 export function getRateLimit<T = unknown>(token: string, opts?: Partial<GhRequestOptions>): Promise<GhResponse<T>> {
   return ghRequest<T>('/rate_limit', { token, ...opts })
+}
+
+// ── PR 쓰기 API (B-write) ──
+//
+// ⚠️ 아래 메서드는 실제 원격 PR을 변이한다(특히 mergePull). 클라이언트는 호출만
+// 하고, 확인 UX/에러 안내는 프론트가 담당한다. 에러는 GithubApiError로 status를
+// 보존해 throw하므로(403 스코프 부족/404/422 검증 등) 호출부가 사유별로 안내 가능.
+// 쓰기(PUT/POST)는 캐시하지 않는다(ghRequest의 useCache는 GET 전용).
+
+/** PUT /repos/{owner}/{repo}/pulls/{number}/merge 응답 중 UI가 쓰는 필드 */
+export interface GithubMergeResult {
+  merged: boolean
+  message: string
+  /** 머지 커밋 SHA(있으면) */
+  sha?: string
+}
+
+/**
+ * PUT /repos/{owner}/{repo}/pulls/{number}/merge — PR 머지.
+ * @param method 머지 방식(merge/squash/rebase, 기본 merge)
+ * 에러: 403(PAT `repo` 스코프 부족)·404·405(머지 불가)·409(head가 변경됨)·
+ *       422(검증)를 GithubApiError로 status 보존 throw.
+ */
+export async function mergePull(
+  owner: string,
+  repo: string,
+  number: number,
+  token: string,
+  method: 'merge' | 'squash' | 'rebase' = 'merge',
+  opts?: Partial<GhRequestOptions>,
+): Promise<GithubMergeResult> {
+  const res = await ghRequest<GithubMergeResult>(
+    `/repos/${owner}/${repo}/pulls/${number}/merge`,
+    { token, method: 'PUT', body: { merge_method: method }, ...opts },
+  )
+  return res.data
+}
+
+/** POST /repos/{owner}/{repo}/pulls/{number}/reviews 응답 중 UI가 쓰는 필드 */
+export interface GithubReview {
+  id: number
+  state: string
+  body: string
+  html_url: string
+  user: { login: string } | null
+  submitted_at?: string
+}
+
+/**
+ * POST /repos/{owner}/{repo}/pulls/{number}/reviews — PR 리뷰(승인/변경요청/코멘트).
+ * @param event APPROVE | REQUEST_CHANGES | COMMENT
+ * @param body 리뷰 코멘트. event가 REQUEST_CHANGES/COMMENT면 필수(GitHub는 빈 body면
+ *   422). APPROVE는 선택.
+ * 에러: 403(스코프 부족)·404·422(검증: body 누락 등)를 GithubApiError로 throw.
+ */
+export async function createReview(
+  owner: string,
+  repo: string,
+  number: number,
+  token: string,
+  event: 'APPROVE' | 'REQUEST_CHANGES' | 'COMMENT',
+  body?: string,
+  opts?: Partial<GhRequestOptions>,
+): Promise<GithubReview> {
+  // body가 있을 때만 payload에 포함(APPROVE는 body 없이도 유효).
+  const payload: { event: string; body?: string } = { event }
+  if (body !== undefined) payload.body = body
+  const res = await ghRequest<GithubReview>(
+    `/repos/${owner}/${repo}/pulls/${number}/reviews`,
+    { token, method: 'POST', body: payload, ...opts },
+  )
+  return res.data
+}
+
+/** POST /repos/{owner}/{repo}/issues/{number}/comments 응답 중 UI가 쓰는 필드 */
+export interface GithubIssueComment {
+  id: number
+  body: string
+  html_url: string
+  user: { login: string } | null
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * POST /repos/{owner}/{repo}/issues/{number}/comments — PR/이슈에 코멘트.
+ * (PR도 issue 번호를 공유하므로 이 엔드포인트로 코멘트한다.)
+ * 에러: 403(스코프 부족)·404·422를 GithubApiError로 throw.
+ */
+export async function createIssueComment(
+  owner: string,
+  repo: string,
+  number: number,
+  token: string,
+  body: string,
+  opts?: Partial<GhRequestOptions>,
+): Promise<GithubIssueComment> {
+  const res = await ghRequest<GithubIssueComment>(
+    `/repos/${owner}/${repo}/issues/${number}/comments`,
+    { token, method: 'POST', body: { body }, ...opts },
+  )
+  return res.data
 }
 
 // ── 내 레포 둘러보기 (B18) ──

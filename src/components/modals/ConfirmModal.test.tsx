@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { ConfirmModal } from './ConfirmModal'
 
 // ──────────────────────────────────────────────────────────────
@@ -38,5 +38,14 @@ describe('ConfirmModal 정본 골격 가드', () => {
       <ConfirmModal title="삭제할까요" message="진행할까요" onConfirm={() => {}} onCancel={() => {}} />,
     )
     expect(screen.getByText('취소')).toBeTruthy()
+  })
+
+  it('Escape는 onCancel을 부르고 onConfirm은 부르지 않는다', () => {
+    const onConfirm = vi.fn()
+    const onCancel = vi.fn()
+    render(<ConfirmModal title="머지할까요" message="진행할까요" onConfirm={onConfirm} onCancel={onCancel} />)
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onConfirm).not.toHaveBeenCalled()
   })
 })

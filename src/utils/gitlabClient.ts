@@ -27,6 +27,12 @@ export interface GlRequestOptions {
   method?: string
   /** Accept 헤더 override(기본 application/json) */
   accept?: string
+  /**
+   * 요청 본문(쓰기 API용). method가 GET이 아니고 값이 있으면
+   * JSON.stringify되어 전송되며 Content-Type: application/json이 붙는다.
+   * GET에는 무시된다.
+   */
+  body?: unknown
   /** GET 캐시 사용 여부(기본 true). 항상 최신이 필요하면 false */
   cache?: boolean
   /** 캐시 TTL(ms). 기본 60s */
@@ -105,11 +111,14 @@ export function gitlabApiBase(host: string): string {
  * 캐시 키에 host를 포함한다(다중 인스턴스 충돌 방지).
  */
 export async function glRequest<T>(host: string, path: string, opts: GlRequestOptions): Promise<GlResponse<T>> {
-  const { token, method = 'GET', accept = 'application/json', signal } = opts
+  const { token, method = 'GET', accept = 'application/json', body, signal } = opts
   const base = gitlabApiBase(host)
-  const useCache = method.toUpperCase() === 'GET' && opts.cache !== false
+  const upperMethod = method.toUpperCase()
+  const useCache = upperMethod === 'GET' && opts.cache !== false
   const ttl = opts.ttl ?? DEFAULT_TTL
-  const key = `${method.toUpperCase()} ${base}${path} ${hashToken(token)}`
+  const key = `${upperMethod} ${base}${path} ${hashToken(token)}`
+  // GET이 아니고 body가 주어졌을 때만 직렬화(쓰기 API). GET은 body 미적용.
+  const hasBody = upperMethod !== 'GET' && body !== undefined
 
   if (useCache) {
     const hit = cache.get(key)
@@ -125,7 +134,9 @@ export async function glRequest<T>(host: string, path: string, opts: GlRequestOp
     headers: {
       'PRIVATE-TOKEN': token,
       Accept: accept,
+      ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
     },
+    ...(hasBody ? { body: JSON.stringify(body) } : {}),
     cache: 'no-store',
     signal,
   })
@@ -320,6 +331,8 @@ export interface GitlabMrApprovals {
   approvals_required: number
   approvals_left: number
   approved?: boolean
+  /** 현재 토큰 사용자가 이미 승인했는지 — 승인/취소 토글 방향 결정에 쓴다. */
+  user_has_approved?: boolean
   approved_by?: Array<{ user: { id: number; username: string; name: string; avatar_url: string | null } }>
 }
 
@@ -505,6 +518,90 @@ export async function getIssues(
   params.set('per_page', String(perPage))
 
   const res = await glRequest<GitlabIssue[]>(host, `/issues?${params.toString()}`, { token, ...reqOpts })
+  return res.data
+}
+
+// ── MR 쓰기 API (GL-write) ──
+//
+// ⚠️ 아래 메서드는 실제 원격 MR을 변이한다(특히 acceptMergeRequest). 클라이언트는
+// 호출만 하고, 확인 UX/에러 안내는 프론트가 담당한다. 에러는 GitlabApiError로
+// status를 보존해 throw한다(403 스코프 `api` 부족/404/405 머지 불가 상태 등).
+// 쓰기(POST/PUT)는 캐시하지 않는다(glRequest의 useCache는 GET 전용).
+
+/**
+ * POST /projects/:id/merge_requests/:iid/approve — MR 승인.
+ * 반환은 승인 현황 MR 객체(approvals 정보 포함).
+ * 에러: 403(스코프 `api` 부족)·404·405(승인 불가 상태)를 GitlabApiError로 throw.
+ */
+export async function approveMergeRequest(
+  host: string,
+  projectId: number | string,
+  iid: number,
+  token: string,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabMrApprovals> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/approve`
+  const res = await glRequest<GitlabMrApprovals>(host, path, { token, method: 'POST', ...opts })
+  return res.data
+}
+
+/**
+ * POST /projects/:id/merge_requests/:iid/unapprove — MR 승인 취소.
+ * 에러: 403·404·405를 GitlabApiError로 throw.
+ */
+export async function unapproveMergeRequest(
+  host: string,
+  projectId: number | string,
+  iid: number,
+  token: string,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabMrApprovals> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/unapprove`
+  const res = await glRequest<GitlabMrApprovals>(host, path, { token, method: 'POST', ...opts })
+  return res.data
+}
+
+/**
+ * PUT /projects/:id/merge_requests/:iid/merge — MR 머지(accept).
+ * @param opts.squash true면 squash 머지. 지정 시에만 body에 포함한다.
+ * 반환은 머지된 MR 객체.
+ * 에러: 403(스코프 부족)·404·405(머지 불가: 충돌/파이프라인 대기/draft 등)·
+ *       406을 GitlabApiError로 status 보존 throw.
+ */
+export async function acceptMergeRequest(
+  host: string,
+  projectId: number | string,
+  iid: number,
+  token: string,
+  opts?: { squash?: boolean } & Partial<GlRequestOptions>,
+): Promise<GitlabMergeRequestDetail> {
+  const { squash, ...reqOpts } = opts ?? {}
+  const body = squash !== undefined ? { squash } : undefined
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/merge`
+  const res = await glRequest<GitlabMergeRequestDetail>(host, path, {
+    token,
+    method: 'PUT',
+    ...(body !== undefined ? { body } : {}),
+    ...reqOpts,
+  })
+  return res.data
+}
+
+/**
+ * POST /projects/:id/merge_requests/:iid/notes — MR에 노트(코멘트).
+ * 반환은 생성된 note.
+ * 에러: 403(스코프 부족)·404를 GitlabApiError로 throw.
+ */
+export async function createMergeRequestNote(
+  host: string,
+  projectId: number | string,
+  iid: number,
+  token: string,
+  body: string,
+  opts?: Partial<GlRequestOptions>,
+): Promise<GitlabMrNote> {
+  const path = `/projects/${encodeURIComponent(String(projectId))}/merge_requests/${iid}/notes`
+  const res = await glRequest<GitlabMrNote>(host, path, { token, method: 'POST', body: { body }, ...opts })
   return res.data
 }
 
